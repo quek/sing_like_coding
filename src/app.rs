@@ -1,11 +1,11 @@
 use crate::device::Device;
 use crate::plugin;
-use crate::plugin::Host;
+use crate::plugin::Plugin;
 use eframe::egui;
 
 pub fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 480.0]),
         ..Default::default()
     };
     let result = eframe::run_native(
@@ -26,16 +26,17 @@ struct MyApp {
     name: String,
     age: u32,
     device: Option<Device>,
-    host: Option<Host>,
+    plugin: Option<Plugin>,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
+        let device = Some(Device::open_default().unwrap());
         Self {
             name: "Arthur".to_owned(),
             age: 42,
-            device: None,
-            host: None,
+            device,
+            plugin: None,
         }
     }
 }
@@ -76,9 +77,17 @@ impl eframe::App for MyApp {
                 self.device.as_mut().unwrap().stop().unwrap();
             }
 
-            if ui.button("Surge XT").clicked() {
+            ui.separator();
+
+            if ui.button("Surge XT load").clicked() {
                 let frames_per_buffer = self.device.as_ref().unwrap().frames_per_buffer.clone();
-                self.host = Some(plugin::foo(frames_per_buffer));
+                self.plugin = Some(plugin::foo(frames_per_buffer));
+            }
+            if ui.button("Surge XT edit").clicked() {
+                self.plugin.as_mut().map(|x| x.gui_open());
+            }
+            if ui.button("Surge XT close").clicked() {
+                self.plugin.as_mut().map(|x| x.gui_close());
             }
         });
     }

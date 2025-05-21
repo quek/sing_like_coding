@@ -3,8 +3,8 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::UpdateWindow;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, RegisterClassW, ShowWindow, CW_USEDEFAULT, SW_SHOWDEFAULT,
-    WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, ShowWindow, CW_USEDEFAULT,
+    SW_SHOWDEFAULT, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 use std::ffi::c_void;
@@ -12,6 +12,10 @@ use std::{ffi::OsStr, os::windows::ffi::OsStrExt};
 
 fn to_wide(string: &str) -> Vec<u16> {
     OsStr::new(string).encode_wide().chain(Some(0)).collect()
+}
+
+pub fn destroy_handler(handler: *mut c_void) {
+    unsafe { DestroyWindow(HWND(handler)).unwrap() };
 }
 
 pub fn create_handler() -> *mut c_void {

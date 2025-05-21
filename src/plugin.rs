@@ -17,15 +17,16 @@ use clap_sys::{
     version::CLAP_VERSION,
 };
 use libloading::{Library, Symbol};
-use window::create_handler;
+use window::{create_handler, destroy_handler};
 
 mod window;
 
-pub struct Host {
+pub struct Plugin {
     clap_host: clap_host,
     lib: Option<Library>,
     plugin: Option<clap_plugin>,
     frames_per_buffer: Arc<Mutex<usize>>,
+    window_handler: Option<*mut c_void>,
 }
 
 macro_rules! cstr {
@@ -39,7 +40,7 @@ pub const VENDER: &CStr = cstr!("sawavi");
 pub const URL: &CStr = cstr!("https://github.com/quek/sawavi");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
-impl Host {
+impl Plugin {
     fn new(frames_per_buffer: Arc<Mutex<usize>>) -> Self {
         let mut clap_host = clap_host {
             clap_version: CLAP_VERSION,
@@ -61,6 +62,7 @@ impl Host {
             lib: None,
             plugin: None,
             frames_per_buffer,
+            window_handler: None,
         }
     }
 
@@ -132,7 +134,7 @@ impl Host {
         }
     }
 
-    fn edit(&self) -> Result<()> {
+    pub fn gui_open(&mut self) -> Result<()> {
         if self.plugin.is_none() {
             return Ok(());
         }
@@ -155,6 +157,7 @@ impl Host {
 
             // ウィンドウハンドルは OS によって異なる。ここでは仮の値。
             let window_handler = create_handler();
+            self.window_handler = Some(window_handler.clone());
             let parent_window = clap_window_handle {
                 win32: window_handler,
             };
@@ -164,26 +167,41 @@ impl Host {
                 panic!("GUI create failed");
             }
 
-            if (gui.set_parent.unwrap())(
+            if !gui.set_parent.unwrap()(
                 plugin,
                 &clap_window {
                     api: CLAP_WINDOW_API_WIN32.as_ptr(),
                     specific: parent_window,
                 },
-            ) == false
-            {
+            ) {
                 panic!("GUI set_parent failed");
             }
 
-            if (gui.show.unwrap())(plugin) == false {
+            if !gui.show.unwrap()(plugin) {
                 panic!("GUI show failed");
             }
         }
         Ok(())
     }
+
+    pub fn gui_close(&mut self) -> Result<()> {
+        if self.plugin.is_none() {
+            return Ok(());
+        }
+        let plugin = self.plugin.as_ref().unwrap();
+        unsafe {
+            let gui = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_GUI.as_ptr())
+                as *const clap_plugin_gui;
+            let gui = &*gui;
+            gui.hide.map(|hide| hide(plugin));
+            gui.destroy.map(|destroy| destroy(plugin));
+            destroy_handler(self.window_handler.take().unwrap());
+        }
+        Ok(())
+    }
 }
 
-impl Drop for Host {
+impl Drop for Plugin {
     fn drop(&mut self) {
         if let Some(plugin) = self.plugin {
             unsafe { plugin.destroy.unwrap()(&plugin) };
@@ -191,10 +209,10 @@ impl Drop for Host {
     }
 }
 
-pub fn foo(frames_per_buffer: Arc<Mutex<usize>>) -> Host {
-    let mut host = Host::new(frames_per_buffer);
+pub fn foo(frames_per_buffer: Arc<Mutex<usize>>) -> Plugin {
+    let mut plugin = Plugin::new(frames_per_buffer);
     let path = Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
-    host.load(path);
-    let _ = host.edit();
-    host
+    plugin.load(path);
+    let _ = plugin.gui_open();
+    plugin
 }
