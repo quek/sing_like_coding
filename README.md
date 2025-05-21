@@ -5,13 +5,10 @@
 ```
 rustup component add rust-analyzer
 rustup component add rust-src
-cargo install cargo-watch --locked
 ```
 
-## 毎回
+## 実行
 
 ```
-cargo watch -x 'run -- --some-arg'
+set RUST_BACKTRACE=1 && cargo run
 ```
-
-
