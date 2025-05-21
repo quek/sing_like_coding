@@ -11,7 +11,7 @@ use clap_sys::{
     ext::gui::{
         clap_plugin_gui, clap_window, clap_window_handle, CLAP_EXT_GUI, CLAP_WINDOW_API_WIN32,
     },
-    factory::plugin_factory::clap_plugin_factory,
+    factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID},
     host::clap_host,
     plugin::clap_plugin,
     version::CLAP_VERSION,
@@ -90,7 +90,8 @@ impl Host {
             let entry = &**entry;
 
             if let Some(init_fn) = entry.init {
-                let success = init_fn(CStr::from_bytes_with_nul_unchecked(b".\0").as_ptr());
+                let c_path = CString::new(path.to_string_lossy().as_bytes()).unwrap();
+                let success = init_fn(c_path.as_ptr());
                 if !success {
                     panic!("CLAP init failed");
                 }
@@ -100,8 +101,7 @@ impl Host {
 
             let get_factory = entry.get_factory.expect("get_factory function is missing");
             let factory_ptr =
-                get_factory(CStr::from_bytes_with_nul_unchecked(b"clap.plugin-factory\0").as_ptr())
-                    as *const clap_plugin_factory;
+                get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) as *const clap_plugin_factory;
             if factory_ptr.is_null() {
                 panic!("No plugin factory found");
             }
@@ -149,7 +149,7 @@ impl Host {
             let gui = &*gui_ptr;
 
             // GUI を作成
-            if !gui.is_api_supported.unwrap()(plugin, CLAP_WINDOW_API_WIN32.as_ptr(), true) {
+            if !gui.is_api_supported.unwrap()(plugin, CLAP_WINDOW_API_WIN32.as_ptr(), false) {
                 panic!("GUI API not supported");
             }
 
