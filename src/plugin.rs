@@ -1,8 +1,8 @@
 use std::{
     ffi::{c_char, c_void, CStr, CString},
     path::Path,
-    pin::Pin,
     ptr::null_mut,
+    sync::{Arc, Mutex},
 };
 
 use anyhow::Result;
@@ -22,29 +22,32 @@ use window::create_handler;
 mod window;
 
 pub struct Host {
-    _name: Pin<CString>,
-    _vender: Pin<CString>,
-    _url: Pin<CString>,
-    _version: Pin<CString>,
     clap_host: clap_host,
     lib: Option<Library>,
     plugin: Option<clap_plugin>,
+    frames_per_buffer: Arc<Mutex<usize>>,
 }
 
-impl Host {
-    fn new() -> Self {
-        let name: Pin<CString> = Pin::new(CString::new("sawavi").unwrap());
-        let vender = Pin::new(CString::new("sawavi").unwrap());
-        let url = Pin::new(CString::new("https://example.com").unwrap());
-        let version = Pin::new(CString::new("0.0.1").unwrap());
+macro_rules! cstr {
+    ($str:literal) => {
+        unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(concat!($str, "\0").as_bytes()) }
+    };
+}
 
+pub const NAME: &CStr = cstr!("sawavi");
+pub const VENDER: &CStr = cstr!("sawavi");
+pub const URL: &CStr = cstr!("https://github.com/quek/sawavi");
+pub const VERSION: &CStr = cstr!("0.0.1");
+
+impl Host {
+    fn new(frames_per_buffer: Arc<Mutex<usize>>) -> Self {
         let mut clap_host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: null_mut::<c_void>(),
-            name: name.as_ptr(),
-            vendor: vender.as_ptr(),
-            url: url.as_ptr(),
-            version: version.as_ptr(),
+            name: NAME.as_ptr(),
+            vendor: VENDER.as_ptr(),
+            url: URL.as_ptr(),
+            version: VERSION.as_ptr(),
             get_extension: Some(Self::get_extension),
             request_restart: None,
             request_process: None,
@@ -54,13 +57,10 @@ impl Host {
         clap_host.host_data = &mut clap_host as *mut _ as *mut c_void;
 
         Self {
-            _name: name,
-            _vender: vender,
-            _url: url,
-            _version: version,
             clap_host,
             lib: None,
             plugin: None,
+            frames_per_buffer,
         }
     }
 
@@ -191,8 +191,8 @@ impl Drop for Host {
     }
 }
 
-pub fn foo() -> Host {
-    let mut host = Host::new();
+pub fn foo(frames_per_buffer: Arc<Mutex<usize>>) -> Host {
+    let mut host = Host::new(frames_per_buffer);
     let path = Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
     host.load(path);
     let _ = host.edit();

@@ -1,11 +1,9 @@
-use crate::device;
+use crate::device::Device;
 use crate::plugin;
 use crate::plugin::Host;
 use eframe::egui;
 
 pub fn main() -> eframe::Result {
-    device::open(false);
-
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
         ..Default::default()
@@ -27,6 +25,7 @@ pub fn main() -> eframe::Result {
 struct MyApp {
     name: String,
     age: u32,
+    device: Option<Device>,
     host: Option<Host>,
 }
 
@@ -35,6 +34,7 @@ impl Default for MyApp {
         Self {
             name: "Arthur".to_owned(),
             age: 42,
+            device: None,
             host: None,
         }
     }
@@ -59,8 +59,26 @@ impl eframe::App for MyApp {
             //     "../../../crates/egui/assets/ferris.png"
             // ));
 
+            ui.label(format!(
+                "Frams per buffer {}",
+                self.device
+                    .as_ref()
+                    .map(|x| x.frames_per_buffer.lock().unwrap().to_string())
+                    .unwrap_or("--".to_string())
+            ));
+            if ui.button("device open").clicked() {
+                self.device = Some(Device::open_default().unwrap());
+            }
+            if ui.button("device start").clicked() {
+                self.device.as_mut().unwrap().start().unwrap();
+            }
+            if ui.button("device stop").clicked() {
+                self.device.as_mut().unwrap().stop().unwrap();
+            }
+
             if ui.button("Surge XT").clicked() {
-                self.host = Some(plugin::foo());
+                let frames_per_buffer = self.device.as_ref().unwrap().frames_per_buffer.clone();
+                self.host = Some(plugin::foo(frames_per_buffer));
             }
         });
     }
