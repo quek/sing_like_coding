@@ -2,12 +2,13 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Sample, SampleFormat, Stream, StreamConfig};
+use cpal::{Sample, SampleFormat, Stream, StreamConfig, SupportedStreamConfig};
 
 pub struct Device {
     device: cpal::Device,
     sample_format: SampleFormat,
     config: StreamConfig,
+    pub supported_stream_config: SupportedStreamConfig,
     stream: Option<Stream>,
     pub frames_per_buffer: Arc<Mutex<usize>>,
 }
@@ -26,19 +27,20 @@ impl Device {
         let mut supported_configs_range = device
             .supported_output_configs()
             .expect("error while querying configs");
-        let supported_config = supported_configs_range
+        let supported_stream_config = supported_configs_range
             .next()
             .expect("no supported config?!")
             .with_max_sample_rate();
-        println!("{:?}", supported_config);
-        let sample_format = supported_config.sample_format();
-        let config: StreamConfig = supported_config.into();
+        println!("{:?}", supported_stream_config);
+        let sample_format = supported_stream_config.sample_format();
+        let config: StreamConfig = supported_stream_config.clone().into();
         log::info!("{:?}", &config);
 
         Ok(Device {
             device,
             sample_format,
             config,
+            supported_stream_config,
             stream: None,
             frames_per_buffer: Arc::new(Mutex::new(512)),
         })

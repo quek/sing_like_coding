@@ -2,7 +2,6 @@ use std::{
     ffi::{c_char, c_void, CStr, CString},
     path::Path,
     ptr::null_mut,
-    sync::{Arc, Mutex},
 };
 
 use anyhow::Result;
@@ -16,6 +15,7 @@ use clap_sys::{
     plugin::clap_plugin,
     version::CLAP_VERSION,
 };
+use cpal::SupportedStreamConfig;
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
 
@@ -25,8 +25,9 @@ pub struct Plugin {
     clap_host: clap_host,
     lib: Option<Library>,
     plugin: Option<clap_plugin>,
-    frames_per_buffer: Arc<Mutex<usize>>,
     window_handler: Option<*mut c_void>,
+    supported_stream_config: SupportedStreamConfig,
+    is_processing: bool,
 }
 
 macro_rules! cstr {
@@ -41,7 +42,7 @@ pub const URL: &CStr = cstr!("https://github.com/quek/sawavi");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
 impl Plugin {
-    fn new(frames_per_buffer: Arc<Mutex<usize>>) -> Self {
+    pub fn new(supported_stream_config: &SupportedStreamConfig) -> Self {
         let mut clap_host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: null_mut::<c_void>(),
@@ -61,8 +62,9 @@ impl Plugin {
             clap_host,
             lib: None,
             plugin: None,
-            frames_per_buffer,
             window_handler: None,
+            supported_stream_config: supported_stream_config.clone(),
+            is_processing: false,
         }
     }
 
@@ -79,7 +81,7 @@ impl Plugin {
         }
     }
 
-    fn load(&mut self, path: &Path) {
+    pub fn load(&mut self, path: &Path) {
         unsafe {
             let lib = Library::new(path).expect("Failed to load plugin");
             self.lib = Some(lib);
@@ -199,6 +201,33 @@ impl Plugin {
         }
         Ok(())
     }
+
+    pub fn start(&mut self) -> Result<()> {
+        let plugin = self.plugin.as_ref().unwrap();
+        let sample_rate = self.supported_stream_config.sample_rate().0 as f64;
+        // min_frames_count が 0 だと activate できないみたい
+        // let (min_frames_count, max_frames_count): (u32, u32) =
+        //     match self.supported_stream_config.buffer_size() {
+        //         cpal::SupportedBufferSize::Range { min, max } => (*min, *max),
+        //         cpal::SupportedBufferSize::Unknown => (64, 4096),
+        //     };
+        unsafe {
+            plugin.activate.unwrap()(plugin, sample_rate, 64, 4096);
+            plugin.start_processing.unwrap()(plugin);
+        };
+        self.is_processing = true;
+        Ok(())
+    }
+
+    pub fn stop(&mut self) -> Result<()> {
+        let plugin = self.plugin.as_ref().unwrap();
+        unsafe {
+            plugin.stop_processing.unwrap()(plugin);
+            plugin.deactivate.unwrap()(plugin);
+        };
+        self.is_processing = false;
+        Ok(())
+    }
 }
 
 impl Drop for Plugin {
@@ -207,12 +236,4 @@ impl Drop for Plugin {
             unsafe { plugin.destroy.unwrap()(&plugin) };
         }
     }
-}
-
-pub fn foo(frames_per_buffer: Arc<Mutex<usize>>) -> Plugin {
-    let mut plugin = Plugin::new(frames_per_buffer);
-    let path = Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
-    plugin.load(path);
-    let _ = plugin.gui_open();
-    plugin
 }

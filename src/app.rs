@@ -1,5 +1,6 @@
+use std::path::Path;
+
 use crate::device::Device;
-use crate::plugin;
 use crate::plugin::Plugin;
 use eframe::egui;
 
@@ -80,14 +81,26 @@ impl eframe::App for MyApp {
             ui.separator();
 
             if ui.button("Surge XT load").clicked() {
-                let frames_per_buffer = self.device.as_ref().unwrap().frames_per_buffer.clone();
-                self.plugin = Some(plugin::foo(frames_per_buffer));
+                let supported_stream_config =
+                    &self.device.as_ref().unwrap().supported_stream_config;
+                let mut plugin = Plugin::new(supported_stream_config);
+                let path =
+                    Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
+                plugin.load(path);
+                let _ = plugin.gui_open();
+                self.plugin = Some(plugin);
             }
             if ui.button("Surge XT edit").clicked() {
                 self.plugin.as_mut().map(|x| x.gui_open());
             }
             if ui.button("Surge XT close").clicked() {
                 self.plugin.as_mut().map(|x| x.gui_close());
+            }
+            if ui.button("Surge XT start").clicked() {
+                self.plugin.as_mut().map(|x| x.start());
+            }
+            if ui.button("Surge XT stop").clicked() {
+                self.plugin.as_mut().map(|x| x.stop());
             }
         });
     }
