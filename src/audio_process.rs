@@ -13,7 +13,8 @@ unsafe impl Sync for AudioProcess {}
 impl AudioProcess {
     pub fn new() -> Self {
         let mut plugin = Plugin::new();
-        let path = Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
+        //let path = Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
+        let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
         plugin.load(path);
         plugin.start().unwrap();
         plugin.gui_open().unwrap();

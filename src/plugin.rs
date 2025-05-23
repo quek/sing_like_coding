@@ -31,6 +31,7 @@ pub struct Plugin {
     clap_host: clap_host,
     lib: Option<Library>,
     plugin: Option<clap_plugin>,
+    gui: Option<clap_plugin_gui>,
     window_handler: Option<*mut c_void>,
     is_processing: bool,
 }
@@ -56,8 +57,8 @@ impl Plugin {
             url: URL.as_ptr(),
             version: VERSION.as_ptr(),
             get_extension: Some(Self::get_extension),
-            request_restart: None,
-            request_process: None,
+            request_restart: Some(Self::request_restart),
+            request_process: Some(Self::request_process),
             request_callback: None,
         };
 
@@ -65,12 +66,24 @@ impl Plugin {
             clap_host,
             lib: None,
             plugin: None,
+            gui: None,
             window_handler: None,
             is_processing: false,
         };
 
         this.clap_host.host_data = &mut this as *mut _ as *mut c_void;
         this
+    }
+
+    unsafe extern "C" fn request_restart(host: *const clap_host) {
+        log::debug!("request_restart");
+        let this = unsafe { &mut *((*host).host_data as *mut Self) };
+        this.stop().unwrap();
+        this.start().unwrap();
+    }
+
+    unsafe extern "C" fn request_process(_host: *const clap_host) {
+        log::debug!("request_process");
     }
 
     unsafe extern "C" fn get_extension(host: *const clap_host, id: *const c_char) -> *const c_void {
@@ -138,42 +151,74 @@ impl Plugin {
                 panic!("Plugin init failed");
             }
 
+            let gui = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_GUI.as_ptr())
+                as *const clap_plugin_gui;
+            if !gui.is_null() {
+                self.gui = Some(*gui);
+            }
+
             self.plugin = Some(*plugin);
         }
     }
 
+    pub fn gui_available(&self) -> bool {
+        if self.gui.is_none() {
+            return false;
+        }
+        let gui = self.gui.as_ref().unwrap();
+        gui.is_api_supported.is_some()
+            && gui.get_preferred_api.is_some()
+            && gui.create.is_some()
+            && gui.destroy.is_some()
+            && gui.set_scale.is_some()
+            && gui.get_size.is_some()
+            && gui.can_resize.is_some()
+            && gui.get_resize_hints.is_some()
+            && gui.adjust_size.is_some()
+            && gui.set_size.is_some()
+            && gui.set_parent.is_some()
+            && gui.set_transient.is_some()
+            && gui.suggest_title.is_some()
+            && gui.show.is_some()
+            && gui.hide.is_some()
+    }
+
     pub fn gui_open(&mut self) -> Result<()> {
-        if self.plugin.is_none() {
+        if !self.gui_available() {
             return Ok(());
         }
         let plugin = self.plugin.as_ref().unwrap();
+        let gui = self.gui.as_ref().unwrap();
         unsafe {
-            // GUI 拡張を取得
-            let gui_ptr = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_GUI.as_ptr())
-                as *const clap_plugin_gui;
-
-            if gui_ptr.is_null() {
-                panic!("Plugin has no GUI extension");
-            }
-
-            let gui = &*gui_ptr;
-
-            // GUI を作成
             if !gui.is_api_supported.unwrap()(plugin, CLAP_WINDOW_API_WIN32.as_ptr(), false) {
-                panic!("GUI API not supported");
+                log::debug!("GUI API not supported");
+                return Ok(());
             }
-
-            // ウィンドウハンドルは OS によって異なる。ここでは仮の値。
-            let window_handler = create_handler();
-            self.window_handler = Some(window_handler.clone());
-            let parent_window = clap_window_handle {
-                win32: window_handler,
-            };
 
             let is_floating = false;
             if gui.create.unwrap()(plugin, CLAP_WINDOW_API_WIN32.as_ptr(), is_floating) == false {
                 panic!("GUI create failed");
             }
+
+            if !gui.set_scale.unwrap()(plugin, 1.0) {
+                // If the plugin prefers to work out the scaling
+                // factor itself by querying the OS directly, then
+                // ignore the call.
+                log::debug!("GUI set_scale failed");
+            }
+
+            let resizable = gui.can_resize.unwrap()(plugin);
+            let mut width = 0;
+            let mut height = 0;
+            if !gui.get_size.unwrap()(plugin, &mut width, &mut height) {
+                panic!("GUI get_size failed");
+            }
+
+            let window_handler = create_handler(resizable, width, height);
+            self.window_handler = Some(window_handler.clone());
+            let parent_window = clap_window_handle {
+                win32: window_handler,
+            };
 
             if !gui.set_parent.unwrap()(
                 plugin,
@@ -186,21 +231,20 @@ impl Plugin {
             }
 
             if !gui.show.unwrap()(plugin) {
-                panic!("GUI show failed");
+                // VCV Rack だと false になる
+                log::debug!("GUI show failed");
             }
         }
         Ok(())
     }
 
     pub fn gui_close(&mut self) -> Result<()> {
-        if self.plugin.is_none() {
+        if !self.gui_available() {
             return Ok(());
         }
         let plugin = self.plugin.as_ref().unwrap();
+        let gui = self.gui.as_ref().unwrap();
         unsafe {
-            let gui = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_GUI.as_ptr())
-                as *const clap_plugin_gui;
-            let gui = &*gui;
             gui.hide.map(|hide| hide(plugin));
             gui.destroy.map(|destroy| destroy(plugin));
             destroy_handler(self.window_handler.take().unwrap());
@@ -210,30 +254,47 @@ impl Plugin {
 
     pub fn process(&mut self, frames_count: u32, steady_time: i64) -> Result<Vec<Vec<f32>>> {
         log::debug!("plugin.process frames_count {frames_count}");
-        let mut buf0 = vec![0.0; frames_count as usize];
-        let mut buf1 = vec![0.0; frames_count as usize];
-        let mut buffer = vec![buf0.as_mut_ptr(), buf1.as_mut_ptr()];
+
+        let mut in_buf0 = vec![0.0; frames_count as usize];
+        let mut in_buf1 = vec![0.0; frames_count as usize];
+        let mut in_buffer = vec![in_buf0.as_mut_ptr(), in_buf1.as_mut_ptr()];
+
+        let audio_input = clap_audio_buffer {
+            data32: in_buffer.as_mut_ptr(),
+            data64: null_mut::<*mut f64>(),
+            channel_count: 2,
+            latency: 0,
+            constant_mask: 0,
+        };
+        let mut audio_inputs = [audio_input];
+
+        let mut out_buf0 = vec![0.0; frames_count as usize];
+        let mut out_buf1 = vec![0.0; frames_count as usize];
+        let mut out_buffer = vec![out_buf0.as_mut_ptr(), out_buf1.as_mut_ptr()];
 
         let audio_output = clap_audio_buffer {
-            data32: buffer.as_mut_ptr(),
+            data32: out_buffer.as_mut_ptr(),
             data64: null_mut::<*mut f64>(),
             channel_count: 2,
             latency: 0,
             constant_mask: 0,
         };
         let mut audio_outputs = [audio_output];
+
         let mut event_list = EventList::new();
         if steady_time == 0 {
             event_list.note_on(60, 0, 100.0, 0);
+            event_list.note_on(64, 0, 100.0, 0);
+            event_list.note_on(67, 0, 100.0, 0);
         }
         let in_events = event_list.as_clap_input_events();
         let prc = clap_process {
             steady_time,
             frames_count,
             transport: null(),
-            audio_inputs: null(),
+            audio_inputs: audio_inputs.as_mut_ptr(),
             audio_outputs: audio_outputs.as_mut_ptr(),
-            audio_inputs_count: 0,
+            audio_inputs_count: 1,
             audio_outputs_count: 1,
             in_events,
             out_events: null(),
@@ -244,7 +305,7 @@ impl Plugin {
             panic!("CLAP_PROCESS_ERROR");
         }
 
-        Ok(vec![buf0, buf1])
+        Ok(vec![out_buf0, out_buf1])
     }
 
     pub fn start(&mut self) -> Result<()> {
@@ -318,7 +379,7 @@ impl EventList {
     }
 
     extern "C" fn get(list: *const clap_input_events, index: u32) -> *const clap_event_header {
-        log::debug!("EventList get");
+        log::debug!("EventList get {index}");
         let this = unsafe { &*((*list).ctx as *const Self) };
         this.events
             .get(index as usize)

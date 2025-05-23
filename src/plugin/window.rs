@@ -18,7 +18,7 @@ pub fn destroy_handler(handler: *mut c_void) {
     unsafe { DestroyWindow(HWND(handler)).unwrap() };
 }
 
-pub fn create_handler() -> *mut c_void {
+pub fn create_handler(_resizable: bool, width: u32, height: u32) -> *mut c_void {
     unsafe {
         let class_name = to_wide("SawaviPluginClass");
         let hinstance = GetModuleHandleW(None).unwrap();
@@ -39,8 +39,8 @@ pub fn create_handler() -> *mut c_void {
             WS_OVERLAPPEDWINDOW,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            800,
-            600,
+            width as i32,
+            height as i32,
             None,
             None,
             Some(hinstance.into()),
