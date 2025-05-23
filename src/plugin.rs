@@ -307,6 +307,7 @@ impl Plugin {
         let plugin = unsafe { &*(self.plugin.unwrap()) };
         log::debug!("before process");
         let status = unsafe { plugin.process.unwrap()(plugin, &prc) };
+        event_list.clear();
         log::debug!("after process {status}");
         if status == CLAP_PROCESS_ERROR {
             panic!("process returns CLAP_PROCESS_ERROR");

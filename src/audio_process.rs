@@ -35,6 +35,8 @@ impl AudioProcess {
             .process(frames_count as u32, self.steady_time)
             .unwrap();
 
+        assert!(buffer.len() == channels);
+        assert!(buffer[0].len() == frames_count);
         for (i, frame) in output.chunks_mut(channels).enumerate() {
             for (channel, sample) in frame.iter_mut().enumerate() {
                 *sample = buffer[channel][i];
