@@ -88,6 +88,7 @@ impl Plugin {
 
     unsafe extern "C" fn get_extension(host: *const clap_host, id: *const c_char) -> *const c_void {
         unsafe {
+            log::debug!("get_extension {:?}", CStr::from_ptr(id).to_str());
             if host.is_null() || (*host).host_data.is_null() || id.is_null() {
                 return std::ptr::null();
             }
@@ -245,8 +246,8 @@ impl Plugin {
         let plugin = self.plugin.as_ref().unwrap();
         let gui = self.gui.as_ref().unwrap();
         unsafe {
-            gui.hide.map(|hide| hide(plugin));
-            gui.destroy.map(|destroy| destroy(plugin));
+            gui.hide.unwrap()(plugin);
+            gui.destroy.unwrap()(plugin);
             destroy_handler(self.window_handler.take().unwrap());
         }
         Ok(())
