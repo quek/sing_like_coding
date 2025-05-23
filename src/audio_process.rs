@@ -26,6 +26,7 @@ impl AudioProcess {
     }
 
     pub fn process(&mut self, output: &mut [f32], channels: usize) {
+        log::debug!("AudioProcess process steady_time {}", self.steady_time);
         let frames_count = output.len() / channels;
         let buffer = self
             .plugin

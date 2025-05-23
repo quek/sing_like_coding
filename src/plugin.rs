@@ -20,7 +20,7 @@ use clap_sys::{
     host::clap_host,
     plugin::clap_plugin,
     process::{clap_process, CLAP_PROCESS_ERROR},
-    version::CLAP_VERSION,
+    version::{clap_version_is_compatible, CLAP_VERSION},
 };
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
@@ -30,8 +30,8 @@ mod window;
 pub struct Plugin {
     clap_host: clap_host,
     lib: Option<Library>,
-    plugin: Option<clap_plugin>,
-    gui: Option<clap_plugin_gui>,
+    plugin: Option<*const clap_plugin>,
+    gui: Option<*const clap_plugin_gui>,
     window_handler: Option<*mut c_void>,
     is_processing: bool,
 }
@@ -137,6 +137,10 @@ impl Plugin {
             }
 
             let descriptor = &*descriptor;
+            if !clap_version_is_compatible(descriptor.clap_version) {
+                panic!("Incompatible clap version {:?}", descriptor.clap_version);
+            }
+            log::debug!("descriptor {:?}", descriptor);
             let plugin_id = CStr::from_ptr(descriptor.id).to_str().unwrap();
             println!("Found plugin: {}", plugin_id);
 
@@ -155,10 +159,10 @@ impl Plugin {
             let gui = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_GUI.as_ptr())
                 as *const clap_plugin_gui;
             if !gui.is_null() {
-                self.gui = Some(*gui);
+                self.gui = Some(gui);
             }
 
-            self.plugin = Some(*plugin);
+            self.plugin = Some(plugin);
         }
     }
 
@@ -166,7 +170,7 @@ impl Plugin {
         if self.gui.is_none() {
             return false;
         }
-        let gui = self.gui.as_ref().unwrap();
+        let gui = unsafe { &*self.gui.unwrap() };
         gui.is_api_supported.is_some()
             && gui.get_preferred_api.is_some()
             && gui.create.is_some()
@@ -188,8 +192,8 @@ impl Plugin {
         if !self.gui_available() {
             return Ok(());
         }
-        let plugin = self.plugin.as_ref().unwrap();
-        let gui = self.gui.as_ref().unwrap();
+        let plugin = unsafe { &*(self.plugin.unwrap()) };
+        let gui = unsafe { &*self.gui.unwrap() };
         unsafe {
             if !gui.is_api_supported.unwrap()(plugin, CLAP_WINDOW_API_WIN32.as_ptr(), false) {
                 log::debug!("GUI API not supported");
@@ -243,8 +247,8 @@ impl Plugin {
         if !self.gui_available() {
             return Ok(());
         }
-        let plugin = self.plugin.as_ref().unwrap();
-        let gui = self.gui.as_ref().unwrap();
+        let plugin = unsafe { &*(self.plugin.unwrap()) };
+        let gui = unsafe { &*self.gui.unwrap() };
         unsafe {
             gui.hide.unwrap()(plugin);
             gui.destroy.unwrap()(plugin);
@@ -300,10 +304,12 @@ impl Plugin {
             in_events,
             out_events: null(),
         };
-        let plugin = self.plugin.as_ref().unwrap();
+        let plugin = unsafe { &*(self.plugin.unwrap()) };
+        log::debug!("before process");
         let status = unsafe { plugin.process.unwrap()(plugin, &prc) };
+        log::debug!("after process {status}");
         if status == CLAP_PROCESS_ERROR {
-            panic!("CLAP_PROCESS_ERROR");
+            panic!("process returns CLAP_PROCESS_ERROR");
         }
 
         Ok(vec![out_buf0, out_buf1])
@@ -313,7 +319,7 @@ impl Plugin {
         if self.is_processing {
             return Ok(());
         }
-        let plugin = self.plugin.as_ref().unwrap();
+        let plugin = unsafe { &*(self.plugin.unwrap()) };
         // let sample_rate = self.supported_stream_config.sample_rate().0 as f64;
         // min_frames_count が 0 だと activate できないみたい
         // let (min_frames_count, max_frames_count): (u32, u32) =
@@ -333,7 +339,7 @@ impl Plugin {
         if !self.is_processing {
             return Ok(());
         }
-        let plugin = self.plugin.as_ref().unwrap();
+        let plugin = unsafe { &*(self.plugin.unwrap()) };
         unsafe {
             plugin.stop_processing.unwrap()(plugin);
             plugin.deactivate.unwrap()(plugin);
@@ -346,7 +352,8 @@ impl Plugin {
 impl Drop for Plugin {
     fn drop(&mut self) {
         if let Some(plugin) = self.plugin {
-            unsafe { plugin.destroy.unwrap()(&plugin) };
+            let plugin = unsafe { &*plugin };
+            unsafe { plugin.destroy.unwrap()(plugin) };
         }
     }
 }
