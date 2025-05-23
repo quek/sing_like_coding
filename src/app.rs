@@ -1,5 +1,7 @@
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
+use crate::audio_process::AudioProcess;
 use crate::device::Device;
 use crate::plugin::Plugin;
 use eframe::egui;
@@ -24,20 +26,25 @@ pub fn main() -> eframe::Result {
 }
 
 struct MyApp {
-    name: String,
-    age: u32,
     device: Option<Device>,
     plugin: Option<Plugin>,
+    audio_process: Arc<Mutex<AudioProcess>>,
+}
+
+pub enum Msg {
+    Process,
+    DidProcess(Vec<Vec<f32>>),
 }
 
 impl Default for MyApp {
     fn default() -> Self {
         let device = Some(Device::open_default().unwrap());
+        let audio_process = AudioProcess::new();
+
         Self {
-            name: "Arthur".to_owned(),
-            age: 42,
             device,
             plugin: None,
+            audio_process: Arc::new(Mutex::new(audio_process)),
         }
     }
 }
@@ -46,33 +53,20 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("My egui Application");
-            ui.horizontal(|ui| {
-                let name_label = ui.label("Your name: ");
-                ui.text_edit_singleline(&mut self.name)
-                    .labelled_by(name_label.id);
-            });
-            ui.add(egui::Slider::new(&mut self.age, 0..=120).text("age"));
-            if ui.button("Increment").clicked() {
-                self.age += 1;
-            }
-            ui.label(format!("Hello '{}', age {}", self.name, self.age));
 
             // ui.image(egui::include_image!(
             //     "../../../crates/egui/assets/ferris.png"
             // ));
 
-            ui.label(format!(
-                "Frams per buffer {}",
-                self.device
-                    .as_ref()
-                    .map(|x| x.frames_per_buffer.lock().unwrap().to_string())
-                    .unwrap_or("--".to_string())
-            ));
             if ui.button("device open").clicked() {
                 self.device = Some(Device::open_default().unwrap());
             }
             if ui.button("device start").clicked() {
-                self.device.as_mut().unwrap().start().unwrap();
+                self.device
+                    .as_mut()
+                    .unwrap()
+                    .start(self.audio_process.clone())
+                    .unwrap();
             }
             if ui.button("device stop").clicked() {
                 self.device.as_mut().unwrap().stop().unwrap();
@@ -81,9 +75,7 @@ impl eframe::App for MyApp {
             ui.separator();
 
             if ui.button("Surge XT load").clicked() {
-                let supported_stream_config =
-                    &self.device.as_ref().unwrap().supported_stream_config;
-                let mut plugin = Plugin::new(supported_stream_config);
+                let mut plugin = Plugin::new();
                 let path =
                     Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
                 plugin.load(path);
