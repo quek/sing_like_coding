@@ -4,6 +4,7 @@ use crate::plugin::Plugin;
 
 pub struct AudioProcess {
     plugin: Option<Plugin>,
+    steady_time: i64,
 }
 
 unsafe impl Send for AudioProcess {}
@@ -19,6 +20,7 @@ impl AudioProcess {
 
         Self {
             plugin: Some(plugin),
+            steady_time: 0,
         }
     }
 
@@ -28,7 +30,7 @@ impl AudioProcess {
             .plugin
             .as_mut()
             .unwrap()
-            .process(frames_count as u32)
+            .process(frames_count as u32, self.steady_time)
             .unwrap();
 
         for (i, frame) in output.chunks_mut(channels).enumerate() {
@@ -36,5 +38,6 @@ impl AudioProcess {
                 *sample = buffer[channel][i];
             }
         }
+        self.steady_time += frames_count as i64;
     }
 }

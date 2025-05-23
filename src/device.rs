@@ -54,20 +54,6 @@ impl Device {
                 move |output: &mut [f32], _| {
                     log::debug!("callback output.len {}", output.len());
                     audio_process.lock().unwrap().process(output, channels);
-
-                    // {
-                    //     let mut x = frames_per_buffer.lock().unwrap();
-                    //     *x = output.len() / channels;
-                    //     log::debug!("frames_per_buffer {}", *x);
-                    // }
-                    // for frame in output.chunks_mut(channels) {
-                    //     sample_clock = (sample_clock + 1.0) % sample_rate;
-                    //     let value =
-                    //         (sample_clock * 440.0 * 2.0 * std::f32::consts::PI / sample_rate).sin();
-                    //     for sample in frame.iter_mut() {
-                    //         *sample = value;
-                    //     }
-                    // }
                 },
                 err_fn,
                 None,

@@ -208,7 +208,7 @@ impl Plugin {
         Ok(())
     }
 
-    pub fn process(&mut self, frames_count: u32) -> Result<Vec<Vec<f32>>> {
+    pub fn process(&mut self, frames_count: u32, steady_time: i64) -> Result<Vec<Vec<f32>>> {
         log::debug!("plugin.process frames_count {frames_count}");
         let mut buf0 = vec![0.0; frames_count as usize];
         let mut buf1 = vec![0.0; frames_count as usize];
@@ -223,17 +223,19 @@ impl Plugin {
         };
         let mut audio_outputs = [audio_output];
         let mut event_list = EventList::new();
-        // event_list.note_on(60, 0, 100.0, 0);
+        if steady_time == 0 {
+            event_list.note_on(60, 0, 100.0, 0);
+        }
         let in_events = event_list.as_clap_input_events();
         let prc = clap_process {
-            steady_time: 0,
+            steady_time,
             frames_count,
             transport: null(),
             audio_inputs: null(),
             audio_outputs: audio_outputs.as_mut_ptr(),
             audio_inputs_count: 0,
             audio_outputs_count: 1,
-            in_events: &in_events,
+            in_events,
             out_events: null(),
         };
         let plugin = self.plugin.as_ref().unwrap();
@@ -289,19 +291,24 @@ impl Drop for Plugin {
 
 struct EventList {
     events: Vec<*const clap_event_header>,
+    clap_input_events: clap_input_events,
 }
 
 impl EventList {
     pub fn new() -> Self {
-        Self { events: vec![] }
+        Self {
+            events: vec![],
+            clap_input_events: clap_input_events {
+                ctx: null_mut(),
+                size: Some(Self::size),
+                get: Some(Self::get),
+            },
+        }
     }
 
-    pub fn as_clap_input_events(&mut self) -> clap_input_events {
-        clap_input_events {
-            ctx: self as *mut _ as *mut c_void,
-            size: Some(Self::size),
-            get: Some(Self::get),
-        }
+    pub fn as_clap_input_events(&mut self) -> &clap_input_events {
+        self.clap_input_events.ctx = self as *mut _ as *mut c_void;
+        &self.clap_input_events
     }
 
     extern "C" fn size(list: *const clap_input_events) -> u32 {
@@ -358,10 +365,8 @@ impl EventList {
         self.events
             .push(Box::into_raw(event) as *const clap_event_header);
     }
-}
 
-impl Drop for EventList {
-    fn drop(&mut self) {
+    fn clear(&mut self) {
         for &ptr in &self.events {
             if !ptr.is_null() {
                 unsafe {
@@ -379,5 +384,12 @@ impl Drop for EventList {
                 }
             }
         }
+        self.events.clear();
+    }
+}
+
+impl Drop for EventList {
+    fn drop(&mut self) {
+        self.clear();
     }
 }
