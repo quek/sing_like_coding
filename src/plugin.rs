@@ -20,9 +20,13 @@ use clap_sys::{
             clap_plugin_gui, clap_window, clap_window_handle, CLAP_EXT_GUI, CLAP_WINDOW_API_WIN32,
         },
         latency::{clap_host_latency, CLAP_EXT_LATENCY},
+        params::{
+            clap_host_params, clap_param_clear_flags, clap_param_rescan_flags, CLAP_EXT_PARAMS,
+        },
     },
     factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID},
     host::clap_host,
+    id::clap_id,
     plugin::clap_plugin,
     process::{clap_process, CLAP_PROCESS_ERROR},
     version::{clap_version_is_compatible, CLAP_VERSION},
@@ -42,6 +46,7 @@ pub struct Plugin {
     callback_request_sender: Sender<*const clap_host>,
     host_audio_ports: clap_host_audio_ports,
     host_latency: clap_host_latency,
+    host_params: clap_host_params,
 }
 
 macro_rules! cstr {
@@ -79,6 +84,12 @@ impl Plugin {
             changed: Some(Self::latency_changed),
         };
 
+        let host_params = clap_host_params {
+            rescan: Some(Self::params_rescan),
+            clear: Some(Self::params_clear),
+            request_flush: Some(Self::params_request_flush),
+        };
+
         let mut this = Self {
             clap_host,
             lib: None,
@@ -89,6 +100,7 @@ impl Plugin {
             callback_request_sender,
             host_audio_ports,
             host_latency,
+            host_params,
         };
 
         this.clap_host.host_data = &mut this as *mut _ as *mut c_void;
@@ -109,6 +121,22 @@ impl Plugin {
 
     unsafe extern "C" fn latency_changed(_host: *const clap_host) {
         log::debug!("latency_changed");
+    }
+
+    unsafe extern "C" fn params_rescan(_host: *const clap_host, _flags: clap_param_rescan_flags) {
+        log::debug!("params_rescan");
+    }
+
+    unsafe extern "C" fn params_clear(
+        _host: *const clap_host,
+        _param_id: clap_id,
+        _flags: clap_param_clear_flags,
+    ) {
+        log::debug!("params_clear");
+    }
+
+    unsafe extern "C" fn params_request_flush(_host: *const clap_host) {
+        log::debug!("params_request_flush");
     }
 
     unsafe extern "C" fn request_callback(host: *const clap_host) {
@@ -143,6 +171,9 @@ impl Plugin {
             }
             if id == CLAP_EXT_LATENCY {
                 return &host.host_latency as *const _ as *const c_void;
+            }
+            if id == CLAP_EXT_PARAMS {
+                return &host.host_params as *const _ as *const c_void;
             }
             std::ptr::null()
         }
