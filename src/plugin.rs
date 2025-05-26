@@ -1,6 +1,7 @@
 use std::{
     ffi::{c_char, c_void, CStr, CString},
     path::Path,
+    pin::Pin,
     ptr::{null, null_mut},
     sync::mpsc::Sender,
 };
@@ -17,7 +18,8 @@ use clap_sys::{
     ext::{
         audio_ports::{clap_host_audio_ports, CLAP_EXT_AUDIO_PORTS},
         gui::{
-            clap_plugin_gui, clap_window, clap_window_handle, CLAP_EXT_GUI, CLAP_WINDOW_API_WIN32,
+            clap_host_gui, clap_plugin_gui, clap_window, clap_window_handle, CLAP_EXT_GUI,
+            CLAP_WINDOW_API_WIN32,
         },
         latency::{clap_host_latency, CLAP_EXT_LATENCY},
         params::{
@@ -45,6 +47,7 @@ pub struct Plugin {
     is_processing: bool,
     callback_request_sender: Sender<*const clap_host>,
     host_audio_ports: clap_host_audio_ports,
+    host_gui: clap_host_gui,
     host_latency: clap_host_latency,
     host_params: clap_host_params,
 }
@@ -61,7 +64,7 @@ pub const URL: &CStr = cstr!("https://github.com/quek/sawavi");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
 impl Plugin {
-    pub fn new(callback_request_sender: Sender<*const clap_host>) -> Self {
+    pub fn new(callback_request_sender: Sender<*const clap_host>) -> Pin<Box<Self>> {
         let clap_host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: null_mut::<c_void>(),
@@ -80,6 +83,14 @@ impl Plugin {
             rescan: Some(Self::audio_ports_rescan),
         };
 
+        let host_gui = clap_host_gui {
+            resize_hints_changed: Some(Self::gui_resize_hints_changed),
+            request_resize: Some(Self::gui_request_resize),
+            request_show: Some(Self::gui_request_show),
+            request_hide: Some(Self::gui_request_hide),
+            closed: Some(Self::gui_closed),
+        };
+
         let host_latency = clap_host_latency {
             changed: Some(Self::latency_changed),
         };
@@ -90,7 +101,7 @@ impl Plugin {
             request_flush: Some(Self::params_request_flush),
         };
 
-        let mut this = Self {
+        let mut this = Box::pin(Self {
             clap_host,
             lib: None,
             plugin: None,
@@ -99,11 +110,14 @@ impl Plugin {
             is_processing: false,
             callback_request_sender,
             host_audio_ports,
+            host_gui,
             host_latency,
             host_params,
-        };
+        });
 
-        this.clap_host.host_data = &mut this as *mut _ as *mut c_void;
+        let ptr = this.as_mut().get_mut() as *mut _ as *mut c_void;
+        this.as_mut().clap_host.host_data = ptr;
+
         this
     }
 
@@ -117,6 +131,33 @@ impl Plugin {
 
     unsafe extern "C" fn audio_ports_rescan(_host: *const clap_host, _flag: u32) {
         log::debug!("audio_ports_rescan");
+    }
+
+    unsafe extern "C" fn gui_resize_hints_changed(_host: *const clap_host) {
+        log::debug!("gui_resize_hints_changed");
+    }
+
+    unsafe extern "C" fn gui_request_resize(
+        _host: *const clap_host,
+        _width: u32,
+        _height: u32,
+    ) -> bool {
+        log::debug!("gui_request_resize");
+        true
+    }
+
+    unsafe extern "C" fn gui_request_show(_host: *const clap_host) -> bool {
+        log::debug!("gui_request_show");
+        true
+    }
+
+    unsafe extern "C" fn gui_request_hide(_host: *const clap_host) -> bool {
+        log::debug!("gui_request_hide");
+        true
+    }
+
+    unsafe extern "C" fn gui_closed(_host: *const clap_host, _was_destroyed: bool) {
+        log::debug!("gui_closed");
     }
 
     unsafe extern "C" fn latency_changed(_host: *const clap_host) {
@@ -168,6 +209,9 @@ impl Plugin {
 
             if id == CLAP_EXT_AUDIO_PORTS {
                 return &host.host_audio_ports as *const _ as *const c_void;
+            }
+            if id == CLAP_EXT_GUI {
+                return &host.host_gui as *const _ as *const c_void;
             }
             if id == CLAP_EXT_LATENCY {
                 return &host.host_latency as *const _ as *const c_void;

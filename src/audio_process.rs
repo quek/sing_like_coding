@@ -1,11 +1,11 @@
-use std::{path::Path, sync::mpsc::Sender};
+use std::{path::Path, pin::Pin, sync::mpsc::Sender};
 
 use clap_sys::host::clap_host;
 
 use crate::plugin::Plugin;
 
 pub struct AudioProcess {
-    plugin: Option<Plugin>,
+    plugin: Option<Pin<Box<Plugin>>>,
     steady_time: i64,
     buffer: Vec<Vec<f32>>,
     _callback_request_sender: Sender<*const clap_host>,
@@ -17,8 +17,8 @@ unsafe impl Sync for AudioProcess {}
 impl AudioProcess {
     pub fn new(callback_request_sender: Sender<*const clap_host>) -> Self {
         let mut plugin = Plugin::new(callback_request_sender.clone());
-        //let path = Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
-        let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
+        let path = Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
+        //let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
         //let path = Path::new("c:/Program Files/Common Files/CLAP/kern64.clap");
         plugin.load(path);
         plugin.start().unwrap();
