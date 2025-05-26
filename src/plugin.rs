@@ -11,8 +11,8 @@ use clap_sys::{
     entry::clap_plugin_entry,
     events::{
         clap_event_header, clap_event_midi, clap_event_note, clap_input_events, clap_output_events,
-        CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_OFF,
-        CLAP_EVENT_NOTE_ON,
+        CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_END,
+        CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON,
     },
     ext::{
         audio_ports::{clap_host_audio_ports, CLAP_EXT_AUDIO_PORTS},
@@ -364,8 +364,8 @@ impl Plugin {
         let plugin = unsafe { &*(self.plugin.unwrap()) };
         log::debug!("before process");
         let status = unsafe { plugin.process.unwrap()(plugin, &prc) };
-        event_list.clear();
         log::debug!("after process {status}");
+        event_list.clear();
         if status == CLAP_PROCESS_ERROR {
             panic!("process returns CLAP_PROCESS_ERROR");
         }
@@ -498,7 +498,10 @@ impl EventList {
             if !ptr.is_null() {
                 unsafe {
                     match (*ptr).type_ {
-                        CLAP_EVENT_NOTE_ON | CLAP_EVENT_NOTE_OFF | CLAP_EVENT_NOTE_CHOKE => {
+                        CLAP_EVENT_NOTE_ON
+                        | CLAP_EVENT_NOTE_OFF
+                        | CLAP_EVENT_NOTE_CHOKE
+                        | CLAP_EVENT_NOTE_END => {
                             drop(Box::from_raw(ptr as *mut clap_event_note));
                         }
                         CLAP_EVENT_MIDI => {
@@ -547,8 +550,8 @@ impl EventListOutput {
         event: *const clap_event_header,
     ) -> bool {
         let this = unsafe { &mut *((*list).ctx as *mut Self) };
-        log::debug!("EventListOutput try_push");
         let copied = unsafe { *event }; // shallow copy of header
+        log::debug!("EventListOutput try_push {:?}", copied);
         this.events.push(Box::into_raw(Box::new(copied)));
         true
     }
@@ -558,7 +561,10 @@ impl EventListOutput {
             if !ptr.is_null() {
                 unsafe {
                     match (*ptr).type_ {
-                        CLAP_EVENT_NOTE_ON | CLAP_EVENT_NOTE_OFF | CLAP_EVENT_NOTE_CHOKE => {
+                        CLAP_EVENT_NOTE_ON
+                        | CLAP_EVENT_NOTE_OFF
+                        | CLAP_EVENT_NOTE_CHOKE
+                        | CLAP_EVENT_NOTE_END => {
                             drop(Box::from_raw(ptr as *mut clap_event_note));
                         }
                         CLAP_EVENT_MIDI => {
