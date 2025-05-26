@@ -1,20 +1,25 @@
-use std::path::Path;
+use std::{path::Path, sync::mpsc::Sender};
+
+use clap_sys::host::clap_host;
 
 use crate::plugin::Plugin;
 
 pub struct AudioProcess {
     plugin: Option<Plugin>,
     steady_time: i64,
+    buffer: Vec<Vec<f32>>,
+    _callback_request_sender: Sender<*const clap_host>,
 }
 
 unsafe impl Send for AudioProcess {}
 unsafe impl Sync for AudioProcess {}
 
 impl AudioProcess {
-    pub fn new() -> Self {
-        let mut plugin = Plugin::new();
-        let path = Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
-        //let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
+    pub fn new(callback_request_sender: Sender<*const clap_host>) -> Self {
+        let mut plugin = Plugin::new(callback_request_sender.clone());
+        //let path = Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
+        let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
+        //let path = Path::new("c:/Program Files/Common Files/CLAP/kern64.clap");
         plugin.load(path);
         plugin.start().unwrap();
         plugin.gui_open().unwrap();
@@ -22,24 +27,30 @@ impl AudioProcess {
         Self {
             plugin: Some(plugin),
             steady_time: 0,
+            buffer: vec![vec![0.0; 256], vec![0.0; 256]],
+            _callback_request_sender: callback_request_sender,
         }
     }
 
     pub fn process(&mut self, output: &mut [f32], channels: usize) {
         log::debug!("AudioProcess process steady_time {}", self.steady_time);
         let frames_count = output.len() / channels;
-        let buffer = self
-            .plugin
+        if self.buffer.len() < channels || self.buffer[0].len() < frames_count {
+            log::debug!("realloc AudioProcess buffer {}", frames_count);
+            self.buffer.clear();
+            for _ in 0..channels {
+                self.buffer.push(vec![0.0; frames_count]);
+            }
+        }
+        self.plugin
             .as_mut()
             .unwrap()
-            .process(frames_count as u32, self.steady_time)
+            .process(&mut self.buffer, frames_count as u32, self.steady_time)
             .unwrap();
 
-        assert!(buffer.len() == channels);
-        assert!(buffer[0].len() == frames_count);
-        for (i, frame) in output.chunks_mut(channels).enumerate() {
-            for (channel, sample) in frame.iter_mut().enumerate() {
-                *sample = buffer[channel][i];
+        for channel in 0..channels {
+            for frame in 0..frames_count {
+                output[channels * frame + channel] = self.buffer[channel][frame];
             }
         }
         self.steady_time += frames_count as i64;

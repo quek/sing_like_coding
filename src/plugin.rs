@@ -2,6 +2,7 @@ use std::{
     ffi::{c_char, c_void, CStr, CString},
     path::Path,
     ptr::{null, null_mut},
+    sync::mpsc::Sender,
 };
 
 use anyhow::Result;
@@ -13,8 +14,12 @@ use clap_sys::{
         CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_OFF,
         CLAP_EVENT_NOTE_ON,
     },
-    ext::gui::{
-        clap_plugin_gui, clap_window, clap_window_handle, CLAP_EXT_GUI, CLAP_WINDOW_API_WIN32,
+    ext::{
+        audio_ports::{clap_host_audio_ports, CLAP_EXT_AUDIO_PORTS},
+        gui::{
+            clap_plugin_gui, clap_window, clap_window_handle, CLAP_EXT_GUI, CLAP_WINDOW_API_WIN32,
+        },
+        latency::{clap_host_latency, CLAP_EXT_LATENCY},
     },
     factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID},
     host::clap_host,
@@ -34,6 +39,9 @@ pub struct Plugin {
     gui: Option<*const clap_plugin_gui>,
     window_handler: Option<*mut c_void>,
     is_processing: bool,
+    callback_request_sender: Sender<*const clap_host>,
+    host_audio_ports: clap_host_audio_ports,
+    host_latency: clap_host_latency,
 }
 
 macro_rules! cstr {
@@ -48,7 +56,7 @@ pub const URL: &CStr = cstr!("https://github.com/quek/sawavi");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
 impl Plugin {
-    pub fn new() -> Self {
+    pub fn new(callback_request_sender: Sender<*const clap_host>) -> Self {
         let clap_host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: null_mut::<c_void>(),
@@ -59,7 +67,16 @@ impl Plugin {
             get_extension: Some(Self::get_extension),
             request_restart: Some(Self::request_restart),
             request_process: Some(Self::request_process),
-            request_callback: None,
+            request_callback: Some(Self::request_callback),
+        };
+
+        let host_audio_ports = clap_host_audio_ports {
+            is_rescan_flag_supported: Some(Self::audio_ports_is_rescan_flag_supported),
+            rescan: Some(Self::audio_ports_rescan),
+        };
+
+        let host_latency = clap_host_latency {
+            changed: Some(Self::latency_changed),
         };
 
         let mut this = Self {
@@ -69,10 +86,39 @@ impl Plugin {
             gui: None,
             window_handler: None,
             is_processing: false,
+            callback_request_sender,
+            host_audio_ports,
+            host_latency,
         };
 
         this.clap_host.host_data = &mut this as *mut _ as *mut c_void;
         this
+    }
+
+    unsafe extern "C" fn audio_ports_is_rescan_flag_supported(
+        _host: *const clap_host,
+        _flag: u32,
+    ) -> bool {
+        log::debug!("audio_ports_is_rescan_flag_supported");
+        false
+    }
+
+    unsafe extern "C" fn audio_ports_rescan(_host: *const clap_host, _flag: u32) {
+        log::debug!("audio_ports_rescan");
+    }
+
+    unsafe extern "C" fn latency_changed(_host: *const clap_host) {
+        log::debug!("latency_changed");
+    }
+
+    unsafe extern "C" fn request_callback(host: *const clap_host) {
+        log::debug!("request_callback");
+        let this = unsafe { &mut *((*host).host_data as *mut Self) };
+        this.callback_request_sender.send(host).unwrap();
+    }
+
+    unsafe extern "C" fn request_process(_host: *const clap_host) {
+        log::debug!("request_process");
     }
 
     unsafe extern "C" fn request_restart(host: *const clap_host) {
@@ -82,10 +128,6 @@ impl Plugin {
         this.start().unwrap();
     }
 
-    unsafe extern "C" fn request_process(_host: *const clap_host) {
-        log::debug!("request_process");
-    }
-
     unsafe extern "C" fn get_extension(host: *const clap_host, id: *const c_char) -> *const c_void {
         unsafe {
             log::debug!("get_extension {:?}", CStr::from_ptr(id).to_str());
@@ -93,9 +135,15 @@ impl Plugin {
                 return std::ptr::null();
             }
 
-            let _host = &*((*host).host_data as *const Self);
-            let _id = CStr::from_ptr(id);
+            let host = &*((*host).host_data as *const Self);
+            let id = CStr::from_ptr(id);
 
+            if id == CLAP_EXT_AUDIO_PORTS {
+                return &host.host_audio_ports as *const _ as *const c_void;
+            }
+            if id == CLAP_EXT_LATENCY {
+                return &host.host_latency as *const _ as *const c_void;
+            }
             std::ptr::null()
         }
     }
@@ -205,12 +253,13 @@ impl Plugin {
                 panic!("GUI create failed");
             }
 
-            if !gui.set_scale.unwrap()(plugin, 1.0) {
-                // If the plugin prefers to work out the scaling
-                // factor itself by querying the OS directly, then
-                // ignore the call.
-                log::debug!("GUI set_scale failed");
-            }
+            // Surge XT で落ちる
+            // if !gui.set_scale.unwrap()(plugin, 1.0) {
+            //     // If the plugin prefers to work out the scaling
+            //     // factor itself by querying the OS directly, then
+            //     // ignore the call.
+            //     log::debug!("GUI set_scale failed");
+            // }
 
             let resizable = gui.can_resize.unwrap()(plugin);
             let mut width = 0;
@@ -257,7 +306,12 @@ impl Plugin {
         Ok(())
     }
 
-    pub fn process(&mut self, frames_count: u32, steady_time: i64) -> Result<Vec<Vec<f32>>> {
+    pub fn process(
+        &mut self,
+        buffer: &mut Vec<Vec<f32>>,
+        frames_count: u32,
+        steady_time: i64,
+    ) -> Result<()> {
         log::debug!("plugin.process frames_count {frames_count}");
 
         let mut in_buf0 = vec![0.0; frames_count as usize];
@@ -273,9 +327,10 @@ impl Plugin {
         };
         let mut audio_inputs = [audio_input];
 
-        let mut out_buf0 = vec![0.0; frames_count as usize];
-        let mut out_buf1 = vec![0.0; frames_count as usize];
-        let mut out_buffer = vec![out_buf0.as_mut_ptr(), out_buf1.as_mut_ptr()];
+        let mut out_buffer = vec![];
+        for channel in buffer.iter_mut() {
+            out_buffer.push(channel.as_mut_ptr());
+        }
 
         let audio_output = clap_audio_buffer {
             data32: out_buffer.as_mut_ptr(),
@@ -313,7 +368,7 @@ impl Plugin {
             panic!("process returns CLAP_PROCESS_ERROR");
         }
 
-        Ok(vec![out_buf0, out_buf1])
+        Ok(())
     }
 
     pub fn start(&mut self) -> Result<()> {

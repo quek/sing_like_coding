@@ -1,9 +1,10 @@
-use std::path::Path;
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 
 use crate::audio_process::AudioProcess;
 use crate::device::Device;
 use crate::plugin::Plugin;
+use clap_sys::host::clap_host;
 use eframe::egui;
 
 pub fn main() -> eframe::Result {
@@ -29,6 +30,7 @@ struct MyApp {
     device: Option<Device>,
     plugin: Option<Plugin>,
     audio_process: Arc<Mutex<AudioProcess>>,
+    _callback_request_receiver: Receiver<*const clap_host>,
 }
 
 pub enum Msg {
@@ -39,12 +41,14 @@ pub enum Msg {
 impl Default for MyApp {
     fn default() -> Self {
         let device = Some(Device::open_default().unwrap());
-        let audio_process = AudioProcess::new();
+        let (sender, receiver) = channel();
+        let audio_process = AudioProcess::new(sender);
 
         Self {
             device,
             plugin: None,
             audio_process: Arc::new(Mutex::new(audio_process)),
+            _callback_request_receiver: receiver,
         }
     }
 }
@@ -74,14 +78,6 @@ impl eframe::App for MyApp {
 
             ui.separator();
 
-            if ui.button("Surge XT load").clicked() {
-                let mut plugin = Plugin::new();
-                let path =
-                    Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
-                plugin.load(path);
-                let _ = plugin.gui_open();
-                self.plugin = Some(plugin);
-            }
             if ui.button("Surge XT edit").clicked() {
                 self.plugin.as_mut().map(|x| x.gui_open());
             }
