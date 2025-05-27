@@ -10,11 +10,6 @@ use anyhow::Result;
 use clap_sys::{
     audio_buffer::clap_audio_buffer,
     entry::clap_plugin_entry,
-    events::{
-        clap_event_header, clap_event_midi, clap_event_note, clap_input_events, clap_output_events,
-        CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_END,
-        CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON,
-    },
     ext::{
         audio_ports::{clap_host_audio_ports, CLAP_EXT_AUDIO_PORTS},
         gui::{
@@ -39,6 +34,9 @@ use clap_sys::{
 };
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
+
+use crate::event_list::EventListInput;
+use crate::event_list::EventListOutput;
 
 mod window;
 
@@ -426,6 +424,8 @@ impl Plugin {
         buffer: &mut Vec<Vec<f32>>,
         frames_count: u32,
         steady_time: i64,
+        event_list_input: &EventListInput,
+        event_list_output: &mut EventListOutput,
     ) -> Result<()> {
         //log::debug!("plugin.process frames_count {frames_count}");
 
@@ -456,14 +456,7 @@ impl Plugin {
         };
         let mut audio_outputs = [audio_output];
 
-        let mut event_list = EventList::new();
-        if steady_time == 0 {
-            event_list.note_on(60, 0, 100.0, 0);
-            event_list.note_on(64, 0, 100.0, 0);
-            event_list.note_on(67, 0, 100.0, 0);
-        }
-        let in_events = event_list.as_clap_input_events();
-        let mut event_list_output = EventListOutput::new();
+        let in_events = event_list_input.as_clap_input_events();
         let out_events = event_list_output.as_clap_output_events();
         let prc = clap_process {
             steady_time,
@@ -480,7 +473,6 @@ impl Plugin {
         // log::debug!("before process");
         let status = unsafe { plugin.process.unwrap()(plugin, &prc) };
         // log::debug!("after process {status}");
-        event_list.clear();
         if status == CLAP_PROCESS_ERROR {
             panic!("process returns CLAP_PROCESS_ERROR");
         }
@@ -530,177 +522,5 @@ impl Drop for Plugin {
             let plugin = unsafe { &*plugin };
             unsafe { plugin.destroy.unwrap()(plugin) };
         }
-    }
-}
-
-struct EventList {
-    events: Vec<*const clap_event_header>,
-    clap_input_events: clap_input_events,
-}
-
-impl EventList {
-    pub fn new() -> Self {
-        Self {
-            events: vec![],
-            clap_input_events: clap_input_events {
-                ctx: null_mut(),
-                size: Some(Self::size),
-                get: Some(Self::get),
-            },
-        }
-    }
-
-    pub fn as_clap_input_events(&mut self) -> &clap_input_events {
-        self.clap_input_events.ctx = self as *mut _ as *mut c_void;
-        &self.clap_input_events
-    }
-
-    extern "C" fn size(list: *const clap_input_events) -> u32 {
-        let this = unsafe { &*((*list).ctx as *const Self) };
-        //log::debug!("EventList size {}", this.events.len() as u32);
-        this.events.len() as u32
-    }
-
-    extern "C" fn get(list: *const clap_input_events, index: u32) -> *const clap_event_header {
-        log::debug!("EventList get {index}");
-        let this = unsafe { &*((*list).ctx as *const Self) };
-        this.events
-            .get(index as usize)
-            .copied()
-            .unwrap_or(std::ptr::null())
-    }
-
-    #[allow(dead_code)]
-    pub fn note_on(&mut self, key: i16, channel: i16, velocity: f64, time: u32) {
-        let event = Box::new(clap_event_note {
-            header: clap_event_header {
-                size: size_of::<clap_event_note>() as u32,
-                time,
-                space_id: CLAP_CORE_EVENT_SPACE_ID,
-                type_: CLAP_EVENT_NOTE_ON,
-                flags: 0,
-            },
-            note_id: -1,
-            port_index: 0,
-            channel,
-            key,
-            velocity,
-        });
-        self.events
-            .push(Box::into_raw(event) as *const clap_event_header);
-    }
-
-    #[allow(dead_code)]
-    pub fn note_off(&mut self, key: i16, channel: i16, velocity: f64, time: u32) {
-        let event = Box::new(clap_event_note {
-            header: clap_event_header {
-                size: size_of::<clap_event_note>() as u32,
-                time,
-                space_id: CLAP_CORE_EVENT_SPACE_ID,
-                type_: CLAP_EVENT_NOTE_OFF,
-                flags: 0,
-            },
-            note_id: -1,
-            port_index: 0,
-            channel,
-            key,
-            velocity,
-        });
-        self.events
-            .push(Box::into_raw(event) as *const clap_event_header);
-    }
-
-    fn clear(&mut self) {
-        for &ptr in &self.events {
-            if !ptr.is_null() {
-                unsafe {
-                    match (*ptr).type_ {
-                        CLAP_EVENT_NOTE_ON
-                        | CLAP_EVENT_NOTE_OFF
-                        | CLAP_EVENT_NOTE_CHOKE
-                        | CLAP_EVENT_NOTE_END => {
-                            drop(Box::from_raw(ptr as *mut clap_event_note));
-                        }
-                        CLAP_EVENT_MIDI => {
-                            drop(Box::from_raw(ptr as *mut clap_event_midi));
-                        }
-                        _ => {
-                            unreachable!();
-                        }
-                    }
-                }
-            }
-        }
-        self.events.clear();
-    }
-}
-
-impl Drop for EventList {
-    fn drop(&mut self) {
-        self.clear();
-    }
-}
-
-struct EventListOutput {
-    events: Vec<*const clap_event_header>,
-    clap_output_events: clap_output_events,
-}
-
-impl EventListOutput {
-    pub fn new() -> Self {
-        Self {
-            events: vec![],
-            clap_output_events: clap_output_events {
-                ctx: null_mut(),
-                try_push: Some(Self::try_push),
-            },
-        }
-    }
-
-    pub fn as_clap_output_events(&mut self) -> &clap_output_events {
-        self.clap_output_events.ctx = self as *mut _ as *mut c_void;
-        &self.clap_output_events
-    }
-
-    extern "C" fn try_push(
-        list: *const clap_output_events,
-        event: *const clap_event_header,
-    ) -> bool {
-        let this = unsafe { &mut *((*list).ctx as *mut Self) };
-        let copied = unsafe { *event }; // shallow copy of header
-        log::debug!("EventListOutput try_push {:?}", copied);
-        this.events.push(Box::into_raw(Box::new(copied)));
-        true
-    }
-
-    fn clear(&mut self) {
-        for &ptr in &self.events {
-            if !ptr.is_null() {
-                unsafe {
-                    match (*ptr).type_ {
-                        CLAP_EVENT_NOTE_ON
-                        | CLAP_EVENT_NOTE_OFF
-                        | CLAP_EVENT_NOTE_CHOKE
-                        | CLAP_EVENT_NOTE_END => {
-                            drop(Box::from_raw(ptr as *mut clap_event_note));
-                        }
-                        CLAP_EVENT_MIDI => {
-                            drop(Box::from_raw(ptr as *mut clap_event_midi));
-                        }
-                        _ => {
-                            log::warn!("EventListOutput clear type {:?}", (*ptr).type_);
-                            drop(Box::from_raw(ptr as *mut clap_event_header));
-                        }
-                    }
-                }
-            }
-        }
-        self.events.clear();
-    }
-}
-
-impl Drop for EventListOutput {
-    fn drop(&mut self) {
-        self.clear();
     }
 }

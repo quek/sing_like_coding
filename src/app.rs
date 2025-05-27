@@ -30,7 +30,6 @@ pub fn main() -> eframe::Result {
 
 struct MyApp {
     device: Option<Device>,
-    plugin: Option<Plugin>,
     audio_process: Arc<Mutex<AudioProcess>>,
     song: Arc<Mutex<Song>>,
     callback_request_sender: Sender<*const clap_plugin>,
@@ -44,15 +43,16 @@ pub enum Msg {
 
 impl Default for MyApp {
     fn default() -> Self {
-        let device = Some(Device::open_default().unwrap());
         let (sender, receiver) = channel();
         let song = Arc::new(Mutex::new(Song::new()));
-        let audio_process = AudioProcess::new(song.clone());
+        let audio_process = Arc::new(Mutex::new(AudioProcess::new(song.clone())));
+        let mut device = Device::open_default().unwrap();
+        device.start(audio_process.clone()).unwrap();
+        let device = Some(device);
 
         Self {
             device,
-            plugin: None,
-            audio_process: Arc::new(Mutex::new(audio_process)),
+            audio_process,
             song,
             callback_request_sender: sender,
             callback_request_receiver: receiver,
@@ -98,29 +98,31 @@ impl eframe::App for MyApp {
                 let mut plugin = Plugin::new(self.callback_request_sender.clone(), ctx.clone());
                 let path =
                     Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
-                //let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
                 plugin.load(path);
                 plugin.start().unwrap();
                 plugin.gui_open().unwrap();
                 self.song.lock().unwrap().tracks[0].modules.push(plugin);
             }
             if ui.button("Load VCV Rack").clicked() {
-                //let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
+                let mut plugin = Plugin::new(self.callback_request_sender.clone(), ctx.clone());
+                let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
+                plugin.load(path);
+                plugin.start().unwrap();
+                plugin.gui_open().unwrap();
+                self.song.lock().unwrap().tracks[0].modules.push(plugin);
             }
 
             ui.separator();
 
-            if ui.button("Surge XT edit").clicked() {
-                self.plugin.as_mut().map(|x| x.gui_open());
+            if ui.button("Note On").clicked() {
+                self.song.lock().unwrap().tracks[0]
+                    .event_list_input
+                    .note_on(63, 0, 100.0, 0);
             }
-            if ui.button("Surge XT close").clicked() {
-                self.plugin.as_mut().map(|x| x.gui_close());
-            }
-            if ui.button("Surge XT start").clicked() {
-                self.plugin.as_mut().map(|x| x.start());
-            }
-            if ui.button("Surge XT stop").clicked() {
-                self.plugin.as_mut().map(|x| x.stop());
+            if ui.button("Note Off").clicked() {
+                self.song.lock().unwrap().tracks[0]
+                    .event_list_input
+                    .note_off(63, 0, 0.0, 0);
             }
         });
     }
