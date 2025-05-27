@@ -47,8 +47,9 @@ pub struct Plugin {
     lib: Option<Library>,
     pub plugin: Option<*const clap_plugin>,
     gui: Option<*const clap_plugin_gui>,
+    gui_open_p: bool,
     window_handler: Option<*mut c_void>,
-    is_processing: bool,
+    process_start_p: bool,
     callback_request_sender: Sender<*const clap_plugin>,
     host_audio_ports: clap_host_audio_ports,
     host_gui: clap_host_gui,
@@ -116,8 +117,9 @@ impl Plugin {
             lib: None,
             plugin: None,
             gui: None,
+            gui_open_p: false,
             window_handler: None,
-            is_processing: false,
+            process_start_p: false,
             callback_request_sender,
             host_audio_ports,
             host_gui,
@@ -345,7 +347,7 @@ impl Plugin {
     }
 
     pub fn gui_open(&mut self) -> Result<()> {
-        if !self.gui_available() {
+        if self.gui_open_p || !self.gui_available() {
             return Ok(());
         }
         let plugin = unsafe { &*(self.plugin.unwrap()) };
@@ -361,13 +363,12 @@ impl Plugin {
                 panic!("GUI create failed");
             }
 
-            // Surge XT で落ちる
-            // if !gui.set_scale.unwrap()(plugin, 1.0) {
-            //     // If the plugin prefers to work out the scaling
-            //     // factor itself by querying the OS directly, then
-            //     // ignore the call.
-            //     log::debug!("GUI set_scale failed");
-            // }
+            if !gui.set_scale.unwrap()(plugin, 1.0) {
+                // If the plugin prefers to work out the scaling
+                // factor itself by querying the OS directly, then
+                // ignore the call.
+                log::debug!("GUI set_scale failed");
+            }
 
             let resizable = gui.can_resize.unwrap()(plugin);
             let mut width = 0;
@@ -396,12 +397,14 @@ impl Plugin {
                 // VCV Rack だと false になる
                 log::debug!("GUI show failed");
             }
+
+            self.gui_open_p = true;
         }
         Ok(())
     }
 
     pub fn gui_close(&mut self) -> Result<()> {
-        if !self.gui_available() {
+        if !self.gui_open_p || !self.gui_available() {
             return Ok(());
         }
         let plugin = unsafe { &*(self.plugin.unwrap()) };
@@ -411,6 +414,7 @@ impl Plugin {
             gui.destroy.unwrap()(plugin);
             destroy_handler(self.window_handler.take().unwrap());
         }
+        self.gui_open_p = false;
         Ok(())
     }
 
@@ -482,7 +486,7 @@ impl Plugin {
     }
 
     pub fn start(&mut self) -> Result<()> {
-        if self.is_processing {
+        if self.process_start_p {
             return Ok(());
         }
         let plugin = unsafe { &*(self.plugin.unwrap()) };
@@ -497,12 +501,12 @@ impl Plugin {
             plugin.activate.unwrap()(plugin, 48000.0, 64, 4096);
             plugin.start_processing.unwrap()(plugin);
         };
-        self.is_processing = true;
+        self.process_start_p = true;
         Ok(())
     }
 
     pub fn stop(&mut self) -> Result<()> {
-        if !self.is_processing {
+        if !self.process_start_p {
             return Ok(());
         }
         let plugin = unsafe { &*(self.plugin.unwrap()) };
@@ -510,13 +514,15 @@ impl Plugin {
             plugin.stop_processing.unwrap()(plugin);
             plugin.deactivate.unwrap()(plugin);
         };
-        self.is_processing = false;
+        self.process_start_p = false;
         Ok(())
     }
 }
 
 impl Drop for Plugin {
     fn drop(&mut self) {
+        let _ = self.gui_close();
+        let _ = self.stop();
         if let Some(plugin) = self.plugin {
             let plugin = unsafe { &*plugin };
             unsafe { plugin.destroy.unwrap()(plugin) };
