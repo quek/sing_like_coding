@@ -6,6 +6,7 @@ use crate::audio_process::AudioProcess;
 use crate::device::Device;
 use crate::plugin::Plugin;
 use crate::song::Song;
+use crate::track_view::TrackView;
 use clap_sys::plugin::clap_plugin;
 use eframe::egui;
 
@@ -124,6 +125,10 @@ impl eframe::App for MyApp {
                     .event_list_input
                     .note_off(63, 0, 0.0, 0);
             }
+
+            ui.separator();
+            let track = &self.song.lock().unwrap().tracks[0];
+            TrackView::view(ui, track);
         });
     }
 }

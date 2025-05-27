@@ -6,3 +6,4 @@ mod note;
 mod plugin;
 mod song;
 mod track;
+mod track_view;

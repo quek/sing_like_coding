@@ -13,6 +13,7 @@ pub struct Track {
     pub modules: Vec<Pin<Box<Plugin>>>,
     pub event_list_input: Pin<Box<EventListInput>>,
     event_list_output: Pin<Box<EventListOutput>>,
+    nlines: usize,
 }
 
 impl Track {
@@ -22,6 +23,7 @@ impl Track {
             modules: vec![],
             event_list_input: EventListInput::new(),
             event_list_output: EventListOutput::new(),
+            nlines: 16,
         }
     }
 
