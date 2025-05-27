@@ -22,6 +22,10 @@ use clap_sys::{
             CLAP_WINDOW_API_WIN32,
         },
         latency::{clap_host_latency, CLAP_EXT_LATENCY},
+        log::{
+            clap_host_log, clap_log_severity, CLAP_EXT_LOG, CLAP_LOG_DEBUG, CLAP_LOG_ERROR,
+            CLAP_LOG_INFO, CLAP_LOG_WARNING,
+        },
         params::{
             clap_host_params, clap_param_clear_flags, clap_param_rescan_flags, CLAP_EXT_PARAMS,
         },
@@ -41,15 +45,17 @@ mod window;
 pub struct Plugin {
     clap_host: clap_host,
     lib: Option<Library>,
-    plugin: Option<*const clap_plugin>,
+    pub plugin: Option<*const clap_plugin>,
     gui: Option<*const clap_plugin_gui>,
     window_handler: Option<*mut c_void>,
     is_processing: bool,
-    callback_request_sender: Sender<*const clap_host>,
+    callback_request_sender: Sender<*const clap_plugin>,
     host_audio_ports: clap_host_audio_ports,
     host_gui: clap_host_gui,
     host_latency: clap_host_latency,
+    host_log: clap_host_log,
     host_params: clap_host_params,
+    pub gui_context: Option<eframe::egui::Context>,
 }
 
 macro_rules! cstr {
@@ -64,7 +70,7 @@ pub const URL: &CStr = cstr!("https://github.com/quek/sawavi");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
 impl Plugin {
-    pub fn new(callback_request_sender: Sender<*const clap_host>) -> Pin<Box<Self>> {
+    pub fn new(callback_request_sender: Sender<*const clap_plugin>) -> Pin<Box<Self>> {
         let clap_host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: null_mut::<c_void>(),
@@ -95,6 +101,10 @@ impl Plugin {
             changed: Some(Self::latency_changed),
         };
 
+        let host_log = clap_host_log {
+            log: Some(Self::log_log),
+        };
+
         let host_params = clap_host_params {
             rescan: Some(Self::params_rescan),
             clear: Some(Self::params_clear),
@@ -112,7 +122,9 @@ impl Plugin {
             host_audio_ports,
             host_gui,
             host_latency,
+            host_log,
             host_params,
+            gui_context: None,
         });
 
         let ptr = this.as_mut().get_mut() as *mut _ as *mut c_void;
@@ -164,6 +176,22 @@ impl Plugin {
         log::debug!("latency_changed");
     }
 
+    unsafe extern "C" fn log_log(
+        _host: *const clap_host,
+        severity: clap_log_severity,
+        msg: *const c_char,
+    ) {
+        let msg = unsafe { CStr::from_ptr(msg) };
+
+        match severity {
+            CLAP_LOG_DEBUG => log::debug!("{:?}", msg),
+            CLAP_LOG_INFO => log::info!("{:?}", msg),
+            CLAP_LOG_WARNING => log::warn!("{:?}", msg),
+            CLAP_LOG_ERROR => log::error!("{:?}", msg),
+            _ => log::debug!("severity {severity} {:?}", msg),
+        }
+    }
+
     unsafe extern "C" fn params_rescan(_host: *const clap_host, _flags: clap_param_rescan_flags) {
         log::debug!("params_rescan");
     }
@@ -183,7 +211,9 @@ impl Plugin {
     unsafe extern "C" fn request_callback(host: *const clap_host) {
         log::debug!("request_callback");
         let this = unsafe { &mut *((*host).host_data as *mut Self) };
-        this.callback_request_sender.send(host).unwrap();
+        let plugin = this.plugin.unwrap();
+        this.callback_request_sender.send(plugin).unwrap();
+        this.gui_context.as_ref().map(|x| x.request_repaint());
     }
 
     unsafe extern "C" fn request_process(_host: *const clap_host) {
@@ -215,6 +245,9 @@ impl Plugin {
             }
             if id == CLAP_EXT_LATENCY {
                 return &host.host_latency as *const _ as *const c_void;
+            }
+            if id == CLAP_EXT_LOG {
+                return &host.host_log as *const _ as *const c_void;
             }
             if id == CLAP_EXT_PARAMS {
                 return &host.host_params as *const _ as *const c_void;

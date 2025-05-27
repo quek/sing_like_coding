@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::audio_process::AudioProcess;
 use crate::device::Device;
 use crate::plugin::Plugin;
-use clap_sys::host::clap_host;
+use clap_sys::plugin::clap_plugin;
 use eframe::egui;
 
 pub fn main() -> eframe::Result {
@@ -30,7 +30,7 @@ struct MyApp {
     device: Option<Device>,
     plugin: Option<Plugin>,
     audio_process: Arc<Mutex<AudioProcess>>,
-    _callback_request_receiver: Receiver<*const clap_host>,
+    callback_request_receiver: Receiver<*const clap_plugin>,
 }
 
 pub enum Msg {
@@ -48,14 +48,25 @@ impl Default for MyApp {
             device,
             plugin: None,
             audio_process: Arc::new(Mutex::new(audio_process)),
-            _callback_request_receiver: receiver,
+            callback_request_receiver: receiver,
         }
     }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.audio_process.lock().unwrap().set_gui_context(ctx);
         egui::CentralPanel::default().show(ctx, |ui| {
+            loop {
+                match self.callback_request_receiver.try_recv() {
+                    Ok(plugin) => {
+                        let plugin = unsafe { &*plugin };
+                        unsafe { plugin.on_main_thread.unwrap()(plugin) };
+                        log::debug!("did on_main_thread");
+                    }
+                    Err(_) => break,
+                }
+            }
             ui.heading("My egui Application");
 
             // ui.image(egui::include_image!(
