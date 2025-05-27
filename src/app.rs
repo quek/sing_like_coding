@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::audio_process::AudioProcess;
 use crate::device::Device;
 use crate::plugin::Plugin;
+use crate::song::Song;
 use clap_sys::plugin::clap_plugin;
 use eframe::egui;
 
@@ -30,6 +31,7 @@ struct MyApp {
     device: Option<Device>,
     plugin: Option<Plugin>,
     audio_process: Arc<Mutex<AudioProcess>>,
+    song: Arc<Mutex<Song>>,
     callback_request_receiver: Receiver<*const clap_plugin>,
 }
 
@@ -42,12 +44,14 @@ impl Default for MyApp {
     fn default() -> Self {
         let device = Some(Device::open_default().unwrap());
         let (sender, receiver) = channel();
-        let audio_process = AudioProcess::new(sender);
+        let song = Arc::new(Mutex::new(Song::new()));
+        let audio_process = AudioProcess::new(sender, song.clone());
 
         Self {
             device,
             plugin: None,
             audio_process: Arc::new(Mutex::new(audio_process)),
+            song,
             callback_request_receiver: receiver,
         }
     }
