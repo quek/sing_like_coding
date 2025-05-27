@@ -52,7 +52,7 @@ impl Device {
             SampleFormat::U8 => self.device.build_output_stream(
                 &self.config,
                 move |output: &mut [f32], _| {
-                    log::debug!("callback output.len {}", output.len());
+                    //log::debug!("callback output.len {}", output.len());
                     audio_process.lock().unwrap().process(output, channels);
                 },
                 err_fn,

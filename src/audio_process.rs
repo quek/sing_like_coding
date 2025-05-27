@@ -33,10 +33,10 @@ impl AudioProcess {
     }
 
     pub fn process(&mut self, output: &mut [f32], channels: usize) {
-        log::debug!("AudioProcess process steady_time {}", self.steady_time);
+        //log::debug!("AudioProcess process steady_time {}", self.steady_time);
         let frames_count = output.len() / channels;
         if self.buffer.len() < channels || self.buffer[0].len() < frames_count {
-            log::debug!("realloc AudioProcess buffer {}", frames_count);
+            //log::debug!("realloc AudioProcess buffer {}", frames_count);
             self.buffer.clear();
             for _ in 0..channels {
                 self.buffer.push(vec![0.0; frames_count]);

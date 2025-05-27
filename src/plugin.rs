@@ -387,7 +387,7 @@ impl Plugin {
         frames_count: u32,
         steady_time: i64,
     ) -> Result<()> {
-        log::debug!("plugin.process frames_count {frames_count}");
+        //log::debug!("plugin.process frames_count {frames_count}");
 
         let mut in_buf0 = vec![0.0; frames_count as usize];
         let mut in_buf1 = vec![0.0; frames_count as usize];
@@ -437,9 +437,9 @@ impl Plugin {
             out_events,
         };
         let plugin = unsafe { &*(self.plugin.unwrap()) };
-        log::debug!("before process");
+        // log::debug!("before process");
         let status = unsafe { plugin.process.unwrap()(plugin, &prc) };
-        log::debug!("after process {status}");
+        // log::debug!("after process {status}");
         event_list.clear();
         if status == CLAP_PROCESS_ERROR {
             panic!("process returns CLAP_PROCESS_ERROR");
@@ -515,7 +515,7 @@ impl EventList {
 
     extern "C" fn size(list: *const clap_input_events) -> u32 {
         let this = unsafe { &*((*list).ctx as *const Self) };
-        log::debug!("EventList size {}", this.events.len() as u32);
+        //log::debug!("EventList size {}", this.events.len() as u32);
         this.events.len() as u32
     }
 
