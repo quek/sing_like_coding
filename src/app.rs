@@ -1,4 +1,5 @@
-use std::sync::mpsc::{channel, Receiver};
+use std::path::Path;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 use crate::audio_process::AudioProcess;
@@ -32,6 +33,7 @@ struct MyApp {
     plugin: Option<Plugin>,
     audio_process: Arc<Mutex<AudioProcess>>,
     song: Arc<Mutex<Song>>,
+    callback_request_sender: Sender<*const clap_plugin>,
     callback_request_receiver: Receiver<*const clap_plugin>,
 }
 
@@ -45,13 +47,14 @@ impl Default for MyApp {
         let device = Some(Device::open_default().unwrap());
         let (sender, receiver) = channel();
         let song = Arc::new(Mutex::new(Song::new()));
-        let audio_process = AudioProcess::new(sender, song.clone());
+        let audio_process = AudioProcess::new(song.clone());
 
         Self {
             device,
             plugin: None,
             audio_process: Arc::new(Mutex::new(audio_process)),
             song,
+            callback_request_sender: sender,
             callback_request_receiver: receiver,
         }
     }
@@ -59,7 +62,6 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.audio_process.lock().unwrap().set_gui_context(ctx);
         egui::CentralPanel::default().show(ctx, |ui| {
             loop {
                 match self.callback_request_receiver.try_recv() {
@@ -77,9 +79,8 @@ impl eframe::App for MyApp {
             //     "../../../crates/egui/assets/ferris.png"
             // ));
 
-            if ui.button("device open").clicked() {
-                self.device = Some(Device::open_default().unwrap());
-            }
+            ui.separator();
+
             if ui.button("device start").clicked() {
                 self.device
                     .as_mut()
@@ -89,6 +90,22 @@ impl eframe::App for MyApp {
             }
             if ui.button("device stop").clicked() {
                 self.device.as_mut().unwrap().stop().unwrap();
+            }
+
+            ui.separator();
+
+            if ui.button("Load Surge XT").clicked() {
+                let mut plugin = Plugin::new(self.callback_request_sender.clone(), ctx.clone());
+                let path =
+                    Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
+                //let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
+                plugin.load(path);
+                plugin.start().unwrap();
+                plugin.gui_open().unwrap();
+                self.song.lock().unwrap().tracks[0].modules.push(plugin);
+            }
+            if ui.button("Load VCV Rack").clicked() {
+                //let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
             }
 
             ui.separator();

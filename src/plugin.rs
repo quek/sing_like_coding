@@ -56,7 +56,7 @@ pub struct Plugin {
     host_latency: clap_host_latency,
     host_log: clap_host_log,
     host_params: clap_host_params,
-    pub gui_context: Option<eframe::egui::Context>,
+    pub gui_context: eframe::egui::Context,
 }
 
 macro_rules! cstr {
@@ -71,7 +71,10 @@ pub const URL: &CStr = cstr!("https://github.com/quek/sawavi");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
 impl Plugin {
-    pub fn new(callback_request_sender: Sender<*const clap_plugin>) -> Pin<Box<Self>> {
+    pub fn new(
+        callback_request_sender: Sender<*const clap_plugin>,
+        gui_context: eframe::egui::Context,
+    ) -> Pin<Box<Self>> {
         let clap_host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: null_mut::<c_void>(),
@@ -126,7 +129,7 @@ impl Plugin {
             host_latency,
             host_log,
             host_params,
-            gui_context: None,
+            gui_context,
         });
 
         let ptr = this.as_mut().get_mut() as *mut _ as *mut c_void;
@@ -215,7 +218,7 @@ impl Plugin {
         let this = unsafe { &mut *((*host).host_data as *mut Self) };
         let plugin = this.plugin.unwrap();
         this.callback_request_sender.send(plugin).unwrap();
-        this.gui_context.as_ref().map(|x| x.request_repaint());
+        this.gui_context.request_repaint();
     }
 
     unsafe extern "C" fn request_process(_host: *const clap_host) {

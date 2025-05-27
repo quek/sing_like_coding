@@ -1,15 +1,13 @@
 use crate::track::Track;
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Song {
     bpm: f32,
     lpb: u16,
     play_p: bool,
     play_position: i64,
-    tracks: Vec<Track>,
+    pub tracks: Vec<Track>,
 }
 
 impl Song {
@@ -23,7 +21,13 @@ impl Song {
         }
     }
 
-    pub fn process(&mut self) -> Result<()> {
+    pub fn process(
+        &mut self,
+        buffer: &mut Vec<Vec<f32>>,
+        frames_count: u32,
+        steady_time: i64,
+    ) -> Result<()> {
+        self.tracks[0].process(buffer, frames_count, steady_time)?;
         Ok(())
     }
 
