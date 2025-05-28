@@ -35,7 +35,7 @@ struct MyApp {
     song: Arc<Mutex<Song>>,
     callback_request_sender: Sender<*const clap_plugin>,
     callback_request_receiver: Receiver<*const clap_plugin>,
-    track_view: TrackView,
+    track_view: Arc<Mutex<TrackView>>,
 }
 
 pub enum Msg {
@@ -54,7 +54,9 @@ impl Default for MyApp {
         device.start(audio_process.clone()).unwrap();
         let device = Some(device);
         view_sender.send(ViewCommand::StateTrack(0)).unwrap();
-        let track_view = TrackView::new(view_sender, song_receiver);
+        let track_view = Arc::new(Mutex::new(TrackView::new(view_sender)));
+        TrackView::start_listener(track_view.clone(), song_receiver);
+
         let (sender, receiver) = channel();
 
         Self {
@@ -135,7 +137,7 @@ impl eframe::App for MyApp {
 
             ui.separator();
 
-            self.track_view.view(ui);
+            self.track_view.lock().unwrap().view(ui, ctx);
         });
     }
 }

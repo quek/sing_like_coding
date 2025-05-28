@@ -69,7 +69,7 @@ impl Song {
                     ViewCommand::Play => song.lock().unwrap().play(),
                     ViewCommand::Stop => song.lock().unwrap().stop(),
                     ViewCommand::StateTrack(index) => {
-                        song.lock().unwrap().state_track(index);
+                        song.lock().unwrap().send_state_track(index);
                     }
                     ViewCommand::Note(line, key) => {
                         log::debug!("ViewCommand::Note({line}, {key})");
@@ -86,14 +86,14 @@ impl Song {
                                 velocity: 100.0,
                             });
                         }
-                        song.state_track(0);
+                        song.send_state_track(0);
                     }
                 }
             }
         });
     }
 
-    pub fn state_track(&self, index: usize) {
+    pub fn send_state_track(&self, index: usize) {
         let track = &self.tracks[index];
         let notes = track.notes.clone();
         self.song_sender
