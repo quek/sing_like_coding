@@ -31,7 +31,7 @@ pub struct Singer {
     pub song: model::Song,
     song_sender: Sender<SongCommand>,
     callback_request_sender: Sender<*const clap_plugin>,
-    plugins: Vec<Vec<Pin<Box<Plugin>>>>,
+    pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
     event_list_inputs: Vec<Pin<Box<EventListInput>>>,
     event_list_outputs: Vec<Pin<Box<EventListOutput>>>,
     pub gui_context: Option<eframe::egui::Context>,
@@ -168,7 +168,7 @@ impl Singer {
                         // }
                         // song.send_state_track(0);
                     }
-                    ViewCommand::LoadPlugin(track_index, path) => {
+                    ViewCommand::PluginLoad(track_index, path) => {
                         let mut singer = singer.lock().unwrap();
                         let mut plugin = Plugin::new(
                             singer.callback_request_sender.clone(),
@@ -176,7 +176,6 @@ impl Singer {
                         );
                         plugin.load(Path::new(&path));
                         plugin.start().unwrap();
-                        plugin.gui_open().unwrap();
                         singer.song.tracks[track_index]
                             .modules
                             .push(model::Module::new(path));

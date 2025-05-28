@@ -8,7 +8,10 @@ use std::{
 
 use eframe::egui::Ui;
 
-use crate::{model::note::note_name_to_midi, singer::SongCommand};
+use crate::{
+    model::note::note_name_to_midi,
+    singer::{Singer, SongCommand},
+};
 
 #[derive(Debug)]
 pub enum ViewCommand {
@@ -20,7 +23,7 @@ pub enum ViewCommand {
     Note(usize, i16),
     NoteOn(usize, i16, i16, f64, u32),
     NoteOff(usize, i16, i16, f64, u32),
-    LoadPlugin(usize, String),
+    PluginLoad(usize, String),
 }
 
 pub struct TrackView {
@@ -65,7 +68,12 @@ impl TrackView {
         });
     }
 
-    pub fn view(&mut self, ui: &mut Ui, gui_context: &eframe::egui::Context) {
+    pub fn view(
+        &mut self,
+        ui: &mut Ui,
+        gui_context: &eframe::egui::Context,
+        singer: &Arc<Mutex<Singer>>,
+    ) {
         if self.gui_context.is_none() {
             self.gui_context = Some(gui_context.clone());
         }
@@ -75,7 +83,7 @@ impl TrackView {
                 "c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap".to_string();
             let track_index = 0;
             self.view_sender
-                .send(ViewCommand::LoadPlugin(track_index, path))
+                .send(ViewCommand::PluginLoad(track_index, path))
                 .unwrap();
         }
 
@@ -83,8 +91,14 @@ impl TrackView {
             let path = "c:/Program Files/Common Files/CLAP/VCV Rack 2.clap".to_string();
             let track_index = 0;
             self.view_sender
-                .send(ViewCommand::LoadPlugin(track_index, path))
+                .send(ViewCommand::PluginLoad(track_index, path))
                 .unwrap();
+        }
+
+        if ui.button("Open").clicked() {
+            // main thread で処理しないといけないので、とりあず send せずに実装
+            let mut singer = singer.lock().unwrap();
+            singer.plugins[0][0].gui_open().unwrap();
         }
 
         ui.separator();

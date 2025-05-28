@@ -109,7 +109,7 @@ impl eframe::App for MyApp {
 
             ui.separator();
 
-            self.track_view.lock().unwrap().view(ui, ctx);
+            self.track_view.lock().unwrap().view(ui, ctx, &self.singer);
         });
     }
 }
