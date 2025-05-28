@@ -34,6 +34,10 @@ pub fn midi_to_note_name(midi: i16) -> Option<String> {
 }
 
 pub fn note_name_to_midi(note: &str) -> Option<i16> {
+    if note.len() < 2 {
+        return None;
+    }
+
     let note_map = [
         ("C", 0),
         ("C#", 1),
@@ -49,18 +53,17 @@ pub fn note_name_to_midi(note: &str) -> Option<i16> {
         ("B", 11),
     ];
 
+    let note = note.to_uppercase();
     let (note_str, octave_str) = note.trim().split_at(note.len() - 1);
     let (base, octave_offset) = if let Ok(octave) = octave_str.parse::<i16>() {
         (note_str, octave)
-    } else if note.len() >= 2 {
+    } else {
         let (note_str, rest) = note.split_at(note.len() - 2);
         if let Ok(octave) = rest.parse::<i16>() {
             (note_str, octave)
         } else {
             return None;
         }
-    } else {
-        return None;
     };
 
     let semitone = note_map.iter().find(|(n, _)| *n == base)?.1;

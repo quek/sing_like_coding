@@ -6,7 +6,7 @@ use crate::audio_process::AudioProcess;
 use crate::device::Device;
 use crate::plugin::Plugin;
 use crate::song::Song;
-use crate::track_view::TrackView;
+use crate::track_view::{TrackView, ViewCommand};
 use clap_sys::plugin::clap_plugin;
 use eframe::egui;
 
@@ -45,13 +45,17 @@ pub enum Msg {
 
 impl Default for MyApp {
     fn default() -> Self {
-        let (sender, receiver) = channel();
-        let song = Arc::new(Mutex::new(Song::new()));
+        let (song_sender, song_receiver) = channel();
+        let (view_sender, view_receiver) = channel();
+        let song = Arc::new(Mutex::new(Song::new(song_sender)));
+        Song::start_listener(song.clone(), view_receiver);
         let audio_process = Arc::new(Mutex::new(AudioProcess::new(song.clone())));
         let mut device = Device::open_default().unwrap();
         device.start(audio_process.clone()).unwrap();
         let device = Some(device);
-        let track_view = TrackView::new(song.clone());
+        view_sender.send(ViewCommand::StateTrack(0)).unwrap();
+        let track_view = TrackView::new(view_sender, song_receiver);
+        let (sender, receiver) = channel();
 
         Self {
             device,
