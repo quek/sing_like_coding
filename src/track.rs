@@ -1,6 +1,7 @@
 use std::pin::Pin;
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     event_list::{EventListInput, EventListOutput},
@@ -9,24 +10,37 @@ use crate::{
     song::{self},
 };
 
-pub struct Track {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct State {
     pub name: String,
+    pub nlines: usize,
+}
+
+impl State {
+    pub fn new() -> Self {
+        Self {
+            name: "T01".to_string(),
+            nlines: 16,
+        }
+    }
+}
+
+pub struct Track {
+    pub state: State,
     pub notes: Vec<Note>,
     pub modules: Vec<Pin<Box<Plugin>>>,
     pub event_list_input: Pin<Box<EventListInput>>,
     event_list_output: Pin<Box<EventListOutput>>,
-    pub nlines: usize,
 }
 
 impl Track {
     pub fn new() -> Self {
         Self {
-            name: "T01".to_string(),
+            state: State::new(),
             notes: vec![],
             modules: vec![],
             event_list_input: EventListInput::new(),
             event_list_output: EventListOutput::new(),
-            nlines: 16,
         }
     }
 

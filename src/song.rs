@@ -7,7 +7,11 @@ use std::{
     thread,
 };
 
-use crate::{note::Note, track::Track, track_view::ViewCommand};
+use crate::{
+    note::Note,
+    track::{self, Track},
+    track_view::ViewCommand,
+};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -26,6 +30,7 @@ pub struct State {
     pub lpb: u16,
     pub play_p: bool,
     pub play_position: Range<i64>,
+    pub tracks: Vec<track::State>,
 }
 
 impl State {
@@ -36,6 +41,7 @@ impl State {
             lpb: 4,
             play_p: false,
             play_position: (0..0),
+            tracks: vec![],
         }
     }
 }
@@ -129,8 +135,8 @@ impl Song {
         let notes = track.notes.clone();
         self.song_sender
             .send(SongCommand::StateTrack(
-                track.name.clone(),
-                track.nlines,
+                track.state.name.clone(),
+                track.state.nlines,
                 notes,
             ))
             .unwrap();
