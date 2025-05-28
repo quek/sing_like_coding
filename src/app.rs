@@ -82,6 +82,7 @@ impl eframe::App for MyApp {
                 match self.callback_request_receiver.try_recv() {
                     Ok(plugin) => {
                         let plugin = unsafe { &*plugin };
+                        log::debug!("will on_main_thread");
                         unsafe { plugin.on_main_thread.unwrap()(plugin) };
                         log::debug!("did on_main_thread");
                     }

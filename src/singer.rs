@@ -84,6 +84,7 @@ impl Singer {
         frames_count: u32,
         steady_time: i64,
     ) -> Result<()> {
+        log::debug!("start singer process");
         self.compute_play_position(frames_count);
 
         self.process_track(0, buffer, frames_count, steady_time)?;

@@ -31,11 +31,13 @@ impl AudioProcess {
             }
         }
 
+        log::debug!("will singer lock process");
         self.singer
             .lock()
             .unwrap()
             .process(&mut self.buffer, frames_count as u32, self.steady_time)
             .unwrap();
+        log::debug!("did singer lock process");
 
         for channel in 0..channels {
             for frame in 0..frames_count {

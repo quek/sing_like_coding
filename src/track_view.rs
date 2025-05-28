@@ -95,8 +95,16 @@ impl TrackView {
                 .unwrap();
         }
 
+        if ui.button("Load TyrellN6.clap").clicked() {
+            let path = "c:/Program Files/Common Files/CLAP/u-he/TyrellN6.clap".to_string();
+            let track_index = 0;
+            self.view_sender
+                .send(ViewCommand::PluginLoad(track_index, path))
+                .unwrap();
+        }
+
         if ui.button("Open").clicked() {
-            // main thread で処理しないといけないので、とりあず send せずに実装
+            // main thread で処理しないといけないので、send せずに実装
             log::debug!("Open before lock");
             let mut singer = singer.lock().unwrap();
             log::debug!("Open after lock");
