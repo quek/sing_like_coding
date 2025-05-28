@@ -55,6 +55,7 @@ impl Track {
         self.notes.iter().find(|note| note.line == line)
     }
 
+    #[allow(dead_code)]
     pub fn note_mut(&mut self, line: usize) -> Option<&mut Note> {
         self.notes.iter_mut().find(|note| note.line == line)
     }

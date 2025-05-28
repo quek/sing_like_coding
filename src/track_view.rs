@@ -97,8 +97,13 @@ impl TrackView {
 
         if ui.button("Open").clicked() {
             // main thread で処理しないといけないので、とりあず send せずに実装
+            log::debug!("Open before lock");
             let mut singer = singer.lock().unwrap();
-            singer.plugins[0][0].gui_open().unwrap();
+            log::debug!("Open after lock");
+            let plugin = &mut singer.plugins[0][0];
+            log::debug!("Open plugin");
+            plugin.gui_open().unwrap();
+            log::debug!("did gui_open");
         }
 
         ui.separator();

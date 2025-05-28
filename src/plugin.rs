@@ -352,9 +352,12 @@ impl Plugin {
     }
 
     pub fn gui_open(&mut self) -> Result<()> {
+        log::debug!("gui_open");
         if self.gui_open_p || !self.gui_available() {
+            log::debug!("gui_open not gui_available");
             return Ok(());
         }
+        log::debug!("gui_open did gui_available");
         let plugin = unsafe { &*(self.plugin.unwrap()) };
         let gui = unsafe { &*self.gui.unwrap() };
         unsafe {
@@ -364,9 +367,11 @@ impl Plugin {
             }
 
             let is_floating = false;
+            log::debug!("GUI API before create");
             if gui.create.unwrap()(plugin, CLAP_WINDOW_API_WIN32.as_ptr(), is_floating) == false {
                 panic!("GUI create failed");
             }
+            log::debug!("gui_open did create");
 
             if !gui.set_scale.unwrap()(plugin, 1.0) {
                 // If the plugin prefers to work out the scaling

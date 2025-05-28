@@ -24,11 +24,13 @@ pub enum SongCommand {
     Track,
     #[allow(dead_code)]
     Note,
+    #[allow(dead_code)]
     Song(Song),
 }
 
 pub struct Singer {
     pub song: model::Song,
+    #[allow(dead_code)]
     song_sender: Sender<SongCommand>,
     callback_request_sender: Sender<*const clap_plugin>,
     pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
