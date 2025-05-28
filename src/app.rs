@@ -12,7 +12,7 @@ use eframe::egui;
 
 pub fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 480.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 640.0]),
         ..Default::default()
     };
     let result = eframe::run_native(
@@ -35,6 +35,7 @@ struct MyApp {
     song: Arc<Mutex<Song>>,
     callback_request_sender: Sender<*const clap_plugin>,
     callback_request_receiver: Receiver<*const clap_plugin>,
+    track_view: TrackView,
 }
 
 pub enum Msg {
@@ -50,6 +51,7 @@ impl Default for MyApp {
         let mut device = Device::open_default().unwrap();
         device.start(audio_process.clone()).unwrap();
         let device = Some(device);
+        let track_view = TrackView::new(song.clone());
 
         Self {
             device,
@@ -57,6 +59,7 @@ impl Default for MyApp {
             song,
             callback_request_sender: sender,
             callback_request_receiver: receiver,
+            track_view,
         }
     }
 }
@@ -127,8 +130,8 @@ impl eframe::App for MyApp {
             }
 
             ui.separator();
-            let track = &self.song.lock().unwrap().tracks[0];
-            TrackView::view(ui, track);
+
+            self.track_view.view(ui);
         });
     }
 }

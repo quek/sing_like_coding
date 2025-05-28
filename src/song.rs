@@ -3,20 +3,20 @@ use crate::track::Track;
 use anyhow::Result;
 
 pub struct Song {
-    bpm: f32,
-    lpb: u16,
+    _bpm: f32,
+    _lpb: u16,
     play_p: bool,
-    play_position: i64,
+    _play_position: i64,
     pub tracks: Vec<Track>,
 }
 
 impl Song {
     pub fn new() -> Self {
         Self {
-            bpm: 128.0,
-            lpb: 4,
+            _bpm: 128.0,
+            _lpb: 4,
             play_p: false,
-            play_position: 0,
+            _play_position: 0,
             tracks: vec![Track::new()],
         }
     }
@@ -32,7 +32,7 @@ impl Song {
     }
 
     #[allow(dead_code)]
-    pub fn start(&mut self) {
+    pub fn play(&mut self) {
         if self.play_p {
             return;
         }
