@@ -1,4 +1,5 @@
 use std::{
+    ops::Range,
     sync::{
         mpsc::{Receiver, Sender},
         Arc, Mutex,
@@ -9,6 +10,7 @@ use std::{
 use crate::{note::Note, track::Track, track_view::ViewCommand};
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum SongCommand {
@@ -17,11 +19,29 @@ pub enum SongCommand {
     StateTrack(String, usize, Vec<Note>),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct State {
+    pub bpm: f64,
+    pub sample_rate: f64,
+    pub lpb: u16,
+    pub play_p: bool,
+    pub play_position: Range<i64>,
+}
+
+impl State {
+    pub fn new() -> Self {
+        Self {
+            bpm: 128.0,
+            sample_rate: 48000.0,
+            lpb: 4,
+            play_p: false,
+            play_position: (0..0),
+        }
+    }
+}
+
 pub struct Song {
-    _bpm: f32,
-    _lpb: u16,
-    play_p: bool,
-    _play_position: i64,
+    pub state: State,
     pub tracks: Vec<Track>,
     song_sender: Sender<SongCommand>,
 }
@@ -32,13 +52,21 @@ unsafe impl Sync for Song {}
 impl Song {
     pub fn new(song_sender: Sender<SongCommand>) -> Self {
         Self {
-            _bpm: 128.0,
-            _lpb: 4,
-            play_p: false,
-            _play_position: 0,
+            state: State::new(),
             tracks: vec![Track::new()],
             song_sender,
         }
+    }
+
+    fn compute_play_position(&mut self, frames_count: u32) {
+        self.state.play_position.start = self.state.play_position.end;
+        if !self.state.play_p {
+            return;
+        }
+        let sec_per_frame = frames_count as f64 / self.state.sample_rate;
+        let sec_per_delay = 60.0 / (self.state.bpm * self.state.lpb as f64 * 256.0);
+        self.state.play_position.end =
+            self.state.play_position.start + (sec_per_frame / sec_per_delay).round() as i64;
     }
 
     pub fn process(
@@ -47,16 +75,19 @@ impl Song {
         frames_count: u32,
         steady_time: i64,
     ) -> Result<()> {
-        self.tracks[0].process(buffer, frames_count, steady_time)?;
+        self.compute_play_position(frames_count);
+
+        let track = &mut self.tracks[0];
+        track.process(&self.state, buffer, frames_count, steady_time)?;
         Ok(())
     }
 
     #[allow(dead_code)]
     pub fn play(&mut self) {
-        if self.play_p {
+        if self.state.play_p {
             return;
         }
-        self.play_p = true;
+        self.state.play_p = true;
     }
 
     pub fn start_listener(song: Arc<Mutex<Self>>, receiver: Receiver<ViewCommand>) {
@@ -107,9 +138,9 @@ impl Song {
 
     #[allow(dead_code)]
     pub fn stop(&mut self) {
-        if !self.play_p {
+        if !self.state.play_p {
             return;
         }
-        self.play_p = false;
+        self.state.play_p = false;
     }
 }

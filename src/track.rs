@@ -6,6 +6,7 @@ use crate::{
     event_list::{EventListInput, EventListOutput},
     note::Note,
     plugin::Plugin,
+    song::{self},
 };
 
 pub struct Track {
@@ -39,12 +40,14 @@ impl Track {
 
     pub fn process(
         &mut self,
+        state: &song::State,
         buffer: &mut Vec<Vec<f32>>,
         frames_count: u32,
         steady_time: i64,
     ) -> Result<()> {
         if let Some(module) = self.modules.first_mut() {
             module.process(
+                state,
                 buffer,
                 frames_count,
                 steady_time,

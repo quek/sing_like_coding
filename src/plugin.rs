@@ -10,6 +10,10 @@ use anyhow::Result;
 use clap_sys::{
     audio_buffer::clap_audio_buffer,
     entry::clap_plugin_entry,
+    events::{
+        clap_event_header, clap_event_transport, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_TRANSPORT,
+        CLAP_TRANSPORT_HAS_TEMPO, CLAP_TRANSPORT_IS_PLAYING,
+    },
     ext::{
         audio_ports::{clap_host_audio_ports, CLAP_EXT_AUDIO_PORTS},
         gui::{
@@ -36,7 +40,7 @@ use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
 
 use crate::event_list::EventListInput;
-use crate::event_list::EventListOutput;
+use crate::{event_list::EventListOutput, song};
 
 mod window;
 
@@ -421,6 +425,7 @@ impl Plugin {
 
     pub fn process(
         &mut self,
+        state: &song::State,
         buffer: &mut Vec<Vec<f32>>,
         frames_count: u32,
         steady_time: i64,
@@ -456,12 +461,39 @@ impl Plugin {
         };
         let mut audio_outputs = [audio_output];
 
+        let transport = if state.play_p {
+            Some(clap_event_transport {
+                header: clap_event_header {
+                    size: size_of::<clap_event_transport>() as u32,
+                    time: 0,
+                    space_id: CLAP_CORE_EVENT_SPACE_ID,
+                    type_: CLAP_EVENT_TRANSPORT,
+                    flags: 0,
+                },
+                flags: CLAP_TRANSPORT_HAS_TEMPO | CLAP_TRANSPORT_IS_PLAYING,
+                song_pos_beats: 0,
+                song_pos_seconds: 0,
+                tempo: state.bpm,
+                tempo_inc: 0.0,
+                loop_start_beats: 0,
+                loop_end_beats: 0,
+                loop_start_seconds: 0,
+                loop_end_seconds: 0,
+                bar_start: 0,
+                bar_number: 0,
+                tsig_num: 4,
+                tsig_denom: 4,
+            })
+        } else {
+            None
+        };
+
         let in_events = event_list_input.as_clap_input_events();
         let out_events = event_list_output.as_clap_output_events();
         let prc = clap_process {
             steady_time,
             frames_count,
-            transport: null(),
+            transport: transport.map(|x| &x as *const _).unwrap_or(null()),
             audio_inputs: audio_inputs.as_mut_ptr(),
             audio_outputs: audio_outputs.as_mut_ptr(),
             audio_inputs_count: 1,
