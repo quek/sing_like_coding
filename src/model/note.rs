@@ -16,6 +16,7 @@ impl Note {
         midi_to_note_name(self.key).unwrap()
     }
 
+    #[allow(dead_code)]
     pub fn set_note_name(&mut self, note_name: &str) {
         note_name_to_midi(note_name).map(|key| self.key = key);
     }

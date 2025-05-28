@@ -1,27 +1,27 @@
 use std::sync::{Arc, Mutex};
 
-use crate::song::Song;
+use crate::singer::Singer;
 
 pub struct AudioProcess {
     steady_time: i64,
     buffer: Vec<Vec<f32>>,
-    song: Arc<Mutex<Song>>,
+    singer: Arc<Mutex<Singer>>,
 }
 
 unsafe impl Send for AudioProcess {}
 unsafe impl Sync for AudioProcess {}
 
 impl AudioProcess {
-    pub fn new(song: Arc<Mutex<Song>>) -> Self {
+    pub fn new(song: Arc<Mutex<Singer>>) -> Self {
         Self {
             steady_time: 0,
             buffer: vec![vec![0.0; 256], vec![0.0; 256]],
-            song,
+            singer: song,
         }
     }
 
     pub fn process(&mut self, output: &mut [f32], channels: usize) {
-        //log::debug!("AudioProcess process steady_time {}", self.steady_time);
+        log::debug!("AudioProcess process steady_time {}", self.steady_time);
         let frames_count = output.len() / channels;
         if self.buffer.len() < channels || self.buffer[0].len() < frames_count {
             //log::debug!("realloc AudioProcess buffer {}", frames_count);
@@ -31,7 +31,7 @@ impl AudioProcess {
             }
         }
 
-        self.song
+        self.singer
             .lock()
             .unwrap()
             .process(&mut self.buffer, frames_count as u32, self.steady_time)

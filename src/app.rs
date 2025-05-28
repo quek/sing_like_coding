@@ -1,11 +1,9 @@
-use std::path::Path;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 
 use crate::audio_process::AudioProcess;
 use crate::device::Device;
-use crate::plugin::Plugin;
-use crate::song::Song;
+use crate::singer::Singer;
 use crate::track_view::{TrackView, ViewCommand};
 use clap_sys::plugin::clap_plugin;
 use eframe::egui;
@@ -32,8 +30,7 @@ pub fn main() -> eframe::Result {
 struct MyApp {
     device: Option<Device>,
     audio_process: Arc<Mutex<AudioProcess>>,
-    song: Arc<Mutex<Song>>,
-    callback_request_sender: Sender<*const clap_plugin>,
+    singer: Arc<Mutex<Singer>>,
     callback_request_receiver: Receiver<*const clap_plugin>,
     track_view: Arc<Mutex<TrackView>>,
 }
@@ -47,9 +44,13 @@ impl Default for MyApp {
     fn default() -> Self {
         let (song_sender, song_receiver) = channel();
         let (view_sender, view_receiver) = channel();
-        let song = Arc::new(Mutex::new(Song::new(song_sender)));
-        Song::start_listener(song.clone(), view_receiver);
-        let audio_process = Arc::new(Mutex::new(AudioProcess::new(song.clone())));
+        let (callback_request_sender, callback_request_receiver) = channel();
+        let singer = Arc::new(Mutex::new(Singer::new(
+            song_sender,
+            callback_request_sender,
+        )));
+        Singer::start_listener(singer.clone(), view_receiver);
+        let audio_process = Arc::new(Mutex::new(AudioProcess::new(singer.clone())));
         let mut device = Device::open_default().unwrap();
         device.start(audio_process.clone()).unwrap();
         let device = Some(device);
@@ -57,14 +58,11 @@ impl Default for MyApp {
         let track_view = Arc::new(Mutex::new(TrackView::new(view_sender)));
         TrackView::start_listener(track_view.clone(), song_receiver);
 
-        let (sender, receiver) = channel();
-
         Self {
             device,
             audio_process,
-            song,
-            callback_request_sender: sender,
-            callback_request_receiver: receiver,
+            singer,
+            callback_request_receiver,
             track_view,
         }
     }
@@ -72,6 +70,13 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        {
+            let mut singer = self.singer.lock().unwrap();
+            if singer.gui_context.is_none() {
+                singer.gui_context = Some(ctx.clone());
+            }
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             loop {
                 match self.callback_request_receiver.try_recv() {
@@ -100,39 +105,6 @@ impl eframe::App for MyApp {
             }
             if ui.button("device stop").clicked() {
                 self.device.as_mut().unwrap().stop().unwrap();
-            }
-
-            ui.separator();
-
-            if ui.button("Load Surge XT").clicked() {
-                let mut plugin = Plugin::new(self.callback_request_sender.clone(), ctx.clone());
-                let path =
-                    Path::new("c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap");
-                plugin.load(path);
-                plugin.start().unwrap();
-                plugin.gui_open().unwrap();
-                self.song.lock().unwrap().tracks[0].modules.push(plugin);
-            }
-            if ui.button("Load VCV Rack").clicked() {
-                let mut plugin = Plugin::new(self.callback_request_sender.clone(), ctx.clone());
-                let path = Path::new("c:/Program Files/Common Files/CLAP/VCV Rack 2.clap");
-                plugin.load(path);
-                plugin.start().unwrap();
-                plugin.gui_open().unwrap();
-                self.song.lock().unwrap().tracks[0].modules.push(plugin);
-            }
-
-            ui.separator();
-
-            if ui.button("Note On").clicked() {
-                self.song.lock().unwrap().tracks[0]
-                    .event_list_input
-                    .note_on(63, 0, 100.0, 0);
-            }
-            if ui.button("Note Off").clicked() {
-                self.song.lock().unwrap().tracks[0]
-                    .event_list_input
-                    .note_off(63, 0, 0.0, 0);
             }
 
             ui.separator();

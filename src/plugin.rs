@@ -39,8 +39,8 @@ use clap_sys::{
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
 
-use crate::event_list::EventListInput;
-use crate::{event_list::EventListOutput, song};
+use crate::event_list::EventListOutput;
+use crate::{event_list::EventListInput, model};
 
 mod window;
 
@@ -425,7 +425,7 @@ impl Plugin {
 
     pub fn process(
         &mut self,
-        state: &song::State,
+        song: &model::Song,
         buffer: &mut Vec<Vec<f32>>,
         frames_count: u32,
         steady_time: i64,
@@ -461,7 +461,7 @@ impl Plugin {
         };
         let mut audio_outputs = [audio_output];
 
-        let transport = if state.play_p {
+        let transport = if song.play_p {
             Some(clap_event_transport {
                 header: clap_event_header {
                     size: size_of::<clap_event_transport>() as u32,
@@ -473,7 +473,7 @@ impl Plugin {
                 flags: CLAP_TRANSPORT_HAS_TEMPO | CLAP_TRANSPORT_IS_PLAYING,
                 song_pos_beats: 0,
                 song_pos_seconds: 0,
-                tempo: state.bpm,
+                tempo: song.bpm,
                 tempo_inc: 0.0,
                 loop_start_beats: 0,
                 loop_end_beats: 0,
