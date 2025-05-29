@@ -1,7 +1,6 @@
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 
-use crate::audio_process::AudioProcess;
 use crate::device::Device;
 use crate::singer::Singer;
 use crate::track_view::{TrackView, ViewCommand};
@@ -27,7 +26,6 @@ pub fn main() -> eframe::Result {
 
 struct MyApp {
     device: Option<Device>,
-    audio_process: Arc<Mutex<AudioProcess>>,
     singer: Arc<Mutex<Singer>>,
     track_view: Arc<Mutex<TrackView>>,
 }
@@ -43,9 +41,8 @@ impl Default for MyApp {
         let (view_sender, view_receiver) = channel();
         let singer = Arc::new(Mutex::new(Singer::new(song_sender)));
         Singer::start_listener(singer.clone(), view_receiver);
-        let audio_process = Arc::new(Mutex::new(AudioProcess::new(singer.clone())));
         let mut device = Device::open_default().unwrap();
-        device.start(audio_process.clone()).unwrap();
+        device.start(singer.clone()).unwrap();
         let device = Some(device);
         view_sender.send(ViewCommand::Song).unwrap();
         let track_view = Arc::new(Mutex::new(TrackView::new(view_sender)));
@@ -53,7 +50,6 @@ impl Default for MyApp {
 
         Self {
             device,
-            audio_process,
             singer,
             track_view,
         }
@@ -82,7 +78,7 @@ impl eframe::App for MyApp {
                 self.device
                     .as_mut()
                     .unwrap()
-                    .start(self.audio_process.clone())
+                    .start(self.singer.clone())
                     .unwrap();
             }
             if ui.button("device stop").clicked() {

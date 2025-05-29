@@ -39,8 +39,8 @@ use clap_sys::{
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
 
-use crate::{event_list::EventListInput, model, singer::ClapPluginPtr};
-use crate::{event_list::EventListOutput, singer::SongCommand};
+use crate::singer::SongCommand;
+use crate::{model, process_context::ProcessContext, singer::ClapPluginPtr};
 
 mod window;
 
@@ -427,16 +427,14 @@ impl Plugin {
     pub fn process(
         &mut self,
         song: &model::Song,
-        buffer: &mut Vec<Vec<f32>>,
-        frames_count: u32,
-        steady_time: i64,
-        event_list_input: &EventListInput,
-        event_list_output: &mut EventListOutput,
+        process_context: &mut ProcessContext,
+        //        event_list_input: &EventListInput,
+        //        event_list_output: &mut EventListOutput,
     ) -> Result<()> {
         //log::debug!("plugin.process frames_count {frames_count}");
 
-        let mut in_buf0 = vec![0.0; frames_count as usize];
-        let mut in_buf1 = vec![0.0; frames_count as usize];
+        let mut in_buf0 = vec![0.0; process_context.nframes];
+        let mut in_buf1 = vec![0.0; process_context.nframes];
         let mut in_buffer = vec![in_buf0.as_mut_ptr(), in_buf1.as_mut_ptr()];
 
         let audio_input = clap_audio_buffer {
@@ -449,7 +447,7 @@ impl Plugin {
         let mut audio_inputs = [audio_input];
 
         let mut out_buffer = vec![];
-        for channel in buffer.iter_mut() {
+        for channel in process_context.buffer.iter_mut() {
             out_buffer.push(channel.as_mut_ptr());
         }
 
@@ -489,11 +487,12 @@ impl Plugin {
             None
         };
 
-        let in_events = event_list_input.as_clap_input_events();
-        let out_events = event_list_output.as_clap_output_events();
+        let track_index = process_context.track_index;
+        let in_events = process_context.event_list_inputs[track_index].as_clap_input_events();
+        let out_events = process_context.event_list_outputs[track_index].as_clap_output_events();
         let prc = clap_process {
-            steady_time,
-            frames_count,
+            steady_time: process_context.steady_time,
+            frames_count: process_context.nframes as u32,
             transport: transport.map(|x| &x as *const _).unwrap_or(null()),
             audio_inputs: audio_inputs.as_mut_ptr(),
             audio_outputs: audio_outputs.as_mut_ptr(),

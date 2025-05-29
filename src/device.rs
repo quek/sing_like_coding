@@ -4,7 +4,7 @@ use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Sample, SampleFormat, Stream, StreamConfig};
 
-use crate::audio_process::AudioProcess;
+use crate::singer::Singer;
 
 pub struct Device {
     device: cpal::Device,
@@ -40,7 +40,7 @@ impl Device {
         })
     }
 
-    pub fn start(&mut self, audio_process: Arc<Mutex<AudioProcess>>) -> Result<()> {
+    pub fn start(&mut self, singer: Arc<Mutex<Singer>>) -> Result<()> {
         let err_fn = |err| eprintln!("an error occurred on the output audio stream: {}", err);
 
         // let mut sample_clock = 0f32;
@@ -53,7 +53,7 @@ impl Device {
                 &self.config,
                 move |output: &mut [f32], _| {
                     //log::debug!("callback output.len {}", output.len());
-                    audio_process.lock().unwrap().process(output, channels);
+                    singer.lock().unwrap().process(output, channels).unwrap();
                 },
                 err_fn,
                 None,

@@ -12,6 +12,7 @@ use crate::{
     event_list::{EventListInput, EventListOutput},
     model::{self, note::Note, Song},
     plugin::Plugin,
+    process_context::ProcessContext,
     track_view::ViewCommand,
 };
 
@@ -41,11 +42,10 @@ pub struct Singer {
     pub song: model::Song,
     song_sender: Sender<SongCommand>,
     pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
-    event_list_inputs: Vec<Pin<Box<EventListInput>>>,
-    event_list_outputs: Vec<Pin<Box<EventListOutput>>>,
     pub gui_context: Option<eframe::egui::Context>,
     line_play: usize,
     on_keys: Vec<Option<i16>>,
+    process_context: ProcessContext,
 }
 
 unsafe impl Send for Singer {}
@@ -58,11 +58,10 @@ impl Singer {
             song,
             song_sender,
             plugins: Default::default(),
-            event_list_inputs: vec![],
-            event_list_outputs: vec![],
             gui_context: None,
             line_play: 0,
             on_keys: vec![],
+            process_context: ProcessContext::default(),
         };
         this.add_track();
         this
@@ -70,12 +69,16 @@ impl Singer {
 
     fn add_track(&mut self) {
         self.song.add_track();
-        self.event_list_inputs.push(EventListInput::new());
-        self.event_list_outputs.push(EventListOutput::new());
         self.on_keys.push(None);
+        self.process_context
+            .event_list_inputs
+            .push(EventListInput::new());
+        self.process_context
+            .event_list_outputs
+            .push(EventListOutput::new());
     }
 
-    fn compute_play_position(&mut self, frames_count: u32) {
+    fn compute_play_position(&mut self, frames_count: usize) {
         self.song.play_position.start = self.song.play_position.end;
 
         let line = (self.song.play_position.start / 0x100) as usize;
@@ -104,67 +107,49 @@ impl Singer {
         }
     }
 
-    pub fn process(
-        &mut self,
-        buffer: &mut Vec<Vec<f32>>,
-        frames_count: u32,
-        steady_time: i64,
-    ) -> Result<()> {
-        //log::debug!("start singer process");
-        self.compute_play_position(frames_count);
+    pub fn process(&mut self, output: &mut [f32], channels: usize) -> Result<()> {
+        //log::debug!("AudioProcess process steady_time {}", self.steady_time);
+        self.process_context.nframes = output.len() / channels;
+        self.process_context.channels = channels;
+        self.process_context.ensure_buffer();
 
-        self.process_track(0, buffer, frames_count, steady_time)?;
+        self.compute_play_position(self.process_context.nframes);
 
-        for x in self.event_list_inputs.iter_mut() {
-            x.clear();
+        self.process_context.play_p = self.song.play_p;
+        self.process_context.play_position = self.song.play_position.clone();
+
+        self.process_context.track_index = 0;
+        self.process_track()?;
+
+        for channel in 0..channels {
+            for frame in 0..self.process_context.nframes {
+                output[channels * frame + channel] = self.process_context.buffer[channel][frame];
+            }
         }
-        for x in self.event_list_outputs.iter_mut() {
-            x.clear();
-        }
+        self.process_context.steady_time += self.process_context.nframes as i64;
 
         Ok(())
     }
 
-    fn process_track(
-        &mut self,
-        track_index: usize,
-        buffer: &mut Vec<Vec<f32>>,
-        frames_count: u32,
-        steady_time: i64,
-    ) -> Result<()> {
+    fn process_track(&mut self) -> Result<()> {
+        let track_index = self.process_context.track_index;
         let track = &self.song.tracks[track_index];
         let on_keys = &mut self.on_keys[track_index];
-        track.compute_midi(
-            &self.song.play_position,
-            &mut self.event_list_inputs[track_index],
-            on_keys,
-        );
+        track.compute_midi(&mut self.process_context, on_keys);
         let module_len = self.song.tracks[track_index].modules.len();
         for i in 0..module_len {
-            self.process_module(track_index, i, buffer, frames_count, steady_time)?;
+            self.process_module(i)?;
         }
+
+        self.process_context.clear_event_lists();
+
         Ok(())
     }
 
-    fn process_module(
-        &mut self,
-        track_index: usize,
-        module_index: usize,
-        buffer: &mut Vec<Vec<f32>>,
-        frames_count: u32,
-        steady_time: i64,
-    ) -> Result<()> {
-        let plugin = &mut self.plugins[track_index][module_index];
-        let event_list_input = &mut self.event_list_inputs[track_index];
-        let event_list_output = &mut self.event_list_outputs[track_index];
-        plugin.process(
-            &self.song,
-            buffer,
-            frames_count,
-            steady_time,
-            event_list_input,
-            event_list_output,
-        )?;
+    fn process_module(&mut self, module_index: usize) -> Result<()> {
+        let plugin = &mut self.plugins[self.process_context.track_index][module_index];
+        let ctx = &mut self.process_context;
+        plugin.process(&self.song, ctx)?;
         Ok(())
     }
 
@@ -221,11 +206,12 @@ impl Singer {
                     }
                     ViewCommand::NoteOn(track_index, key, channel, velocity, time) => {
                         let mut singer = singer.lock().unwrap();
-                        singer.event_list_inputs[track_index].note_on(key, channel, velocity, time);
+                        singer.process_context.event_list_inputs[track_index]
+                            .note_on(key, channel, velocity, time);
                     }
                     ViewCommand::NoteOff(track_index, key, channel, velocity, time) => {
                         let mut singer = singer.lock().unwrap();
-                        singer.event_list_inputs[track_index]
+                        singer.process_context.event_list_inputs[track_index]
                             .note_off(key, channel, velocity, time);
                     }
                 }
