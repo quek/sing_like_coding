@@ -87,7 +87,11 @@ impl eframe::App for MyApp {
 
             ui.separator();
 
-            self.track_view.lock().unwrap().view(ui, ctx, &self.singer);
+            self.track_view
+                .lock()
+                .unwrap()
+                .view(ui, ctx, &self.singer)
+                .unwrap();
         });
     }
 }

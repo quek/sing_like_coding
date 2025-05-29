@@ -6,10 +6,11 @@ use std::{
     thread,
 };
 
+use anyhow::Result;
 use eframe::egui::{Color32, TextEdit, Ui};
 
 use crate::{
-    model::note::note_name_to_midi,
+    model::{note::note_name_to_midi, Song},
     singer::{ClapPluginPtr, Singer, SongCommand, SongState},
 };
 
@@ -20,19 +21,20 @@ pub enum ViewCommand {
     #[allow(dead_code)]
     Stop,
     Song,
-    Note(usize, i16),
+    Note(usize, usize, i16),
     NoteOn(usize, i16, i16, f64, u32),
     NoteOff(usize, i16, i16, f64, u32),
     PluginLoad(usize, String),
+    TrackAdd,
 }
 
 pub struct TrackView {
-    line_buffers: Vec<String>,
+    line_buffers: Vec<Vec<String>>,
     view_sender: Sender<ViewCommand>,
-    track_name: String,
     gui_context: Option<eframe::egui::Context>,
     song_state: SongState,
     callback_plugins: Vec<ClapPluginPtr>,
+    song: Song,
 }
 
 impl TrackView {
@@ -40,10 +42,10 @@ impl TrackView {
         Self {
             line_buffers: vec![],
             view_sender,
-            track_name: "".to_string(),
             gui_context: None,
             song_state: SongState::default(),
             callback_plugins: vec![],
+            song: Song::new(),
         }
     }
 
@@ -55,16 +57,21 @@ impl TrackView {
                     SongCommand::Track => (),
                     SongCommand::Song(song) => {
                         let mut view = view.lock().unwrap();
-                        let track = &song.tracks[0];
-                        view.track_name = track.name.clone();
                         view.line_buffers.clear();
-                        for line in 0..track.nlines {
-                            if let Some(note) = track.notes.iter().find(|note| note.line == line) {
-                                view.line_buffers.push(note.note_name());
-                            } else {
-                                view.line_buffers.push("".to_string());
+                        for track in song.tracks.iter() {
+                            let mut xs = vec![];
+                            for line in 0..track.nlines {
+                                if let Some(note) =
+                                    track.notes.iter().find(|note| note.line == line)
+                                {
+                                    xs.push(note.note_name());
+                                } else {
+                                    xs.push("".to_string());
+                                }
                             }
+                            view.line_buffers.push(xs);
                         }
+                        view.song = song;
                         view.gui_context.as_ref().map(|x| x.request_repaint());
                     }
                     SongCommand::State(song_state) => {
@@ -87,7 +94,7 @@ impl TrackView {
         ui: &mut Ui,
         gui_context: &eframe::egui::Context,
         singer: &Arc<Mutex<Singer>>,
-    ) {
+    ) -> Result<()> {
         if self.gui_context.is_none() {
             self.gui_context = Some(gui_context.clone());
         }
@@ -127,6 +134,14 @@ impl TrackView {
 
         if ui.button("Load TyrellN6").clicked() {
             let path = "c:/Program Files/Common Files/CLAP/u-he/TyrellN6.clap".to_string();
+            let track_index = 0;
+            self.view_sender
+                .send(ViewCommand::PluginLoad(track_index, path))
+                .unwrap();
+        }
+
+        if ui.button("Load Zebralette3").clicked() {
+            let path = "c:/Program Files/Common Files/CLAP/u-he/Zebralette3.clap".to_string();
             let track_index = 0;
             self.view_sender
                 .send(ViewCommand::PluginLoad(track_index, path))
@@ -182,24 +197,47 @@ impl TrackView {
 
         ui.separator();
 
-        ui.heading(&self.track_name);
-        let nlines = self.line_buffers.len();
-        for line in 0..nlines {
-            ui.horizontal(|ui| {
-                ui.label(format!("{:02X}", line));
+        if ui.button("Add Track").clicked() {
+            self.view_sender.send(ViewCommand::TrackAdd)?;
+        }
 
-                let text_edit = TextEdit::singleline(&mut self.line_buffers[line]);
-                let text_edit = if line == self.song_state.line_play % 0x0f {
-                    text_edit.background_color(Color32::GREEN)
-                } else {
-                    text_edit
-                };
-                if ui.add(text_edit).changed() {
-                    note_name_to_midi(&self.line_buffers[line]).map(|key| {
-                        self.view_sender.send(ViewCommand::Note(line, key)).unwrap();
-                    });
+        let nlines = self.song.tracks.first().map(|x| x.nlines).unwrap_or(0);
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label(format!("{:02X}", nlines));
+                for line in 0..nlines {
+                    ui.label(format!("{:02X}", line));
                 }
             });
-        }
+            for (track_index, (track, line_buffer)) in self
+                .song
+                .tracks
+                .iter()
+                .zip(self.line_buffers.iter_mut())
+                .enumerate()
+            {
+                ui.vertical(|ui| {
+                    ui.heading(&track.name);
+                    for line in 0..track.nlines {
+                        let text_edit = TextEdit::singleline(&mut line_buffer[line]);
+                        let text_edit = text_edit.desired_width(30.0);
+                        let text_edit = if line == self.song_state.line_play % 0x0f {
+                            text_edit.background_color(Color32::GREEN)
+                        } else {
+                            text_edit
+                        };
+                        if ui.add(text_edit).changed() {
+                            note_name_to_midi(&line_buffer[line]).map(|key| {
+                                self.view_sender
+                                    .send(ViewCommand::Note(track_index, line, key))
+                                    .unwrap();
+                            });
+                        }
+                    }
+                });
+            }
+        });
+
+        Ok(())
     }
 }

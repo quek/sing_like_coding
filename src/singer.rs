@@ -169,24 +169,25 @@ impl Singer {
                 match msg {
                     ViewCommand::Play => singer.lock().unwrap().play(),
                     ViewCommand::Stop => singer.lock().unwrap().stop(),
-                    ViewCommand::Song => singer.lock().unwrap().send_sond(),
-                    ViewCommand::Note(line, key) => {
+                    ViewCommand::Song => singer.lock().unwrap().send_song(),
+                    ViewCommand::Note(track_index, line, key) => {
                         log::debug!("ViewCommand::Note({line}, {key})");
                         let mut singer = singer.lock().unwrap();
                         let song = &mut singer.song;
-                        let track = &mut song.tracks[0];
-                        if let Some(note) = track.note_mut(line) {
-                            note.key = key;
-                        } else {
-                            track.notes.push(Note {
-                                line,
-                                delay: 0,
-                                channel: 0,
-                                key,
-                                velocity: 100.0,
-                            });
+                        if let Some(track) = song.tracks.get_mut(track_index) {
+                            if let Some(note) = track.note_mut(line) {
+                                note.key = key;
+                            } else {
+                                track.notes.push(Note {
+                                    line,
+                                    delay: 0,
+                                    channel: 0,
+                                    key,
+                                    velocity: 100.0,
+                                });
+                            }
+                            singer.send_song();
                         }
-                        singer.send_sond();
                     }
                     ViewCommand::PluginLoad(track_index, path) => {
                         let mut singer = singer.lock().unwrap();
@@ -214,12 +215,17 @@ impl Singer {
                         singer.process_context.event_list_inputs[track_index]
                             .note_off(key, channel, velocity, time);
                     }
+                    ViewCommand::TrackAdd => {
+                        let mut singer = singer.lock().unwrap();
+                        singer.add_track();
+                        singer.send_song();
+                    }
                 }
             }
         });
     }
 
-    fn send_sond(&self) {
+    fn send_song(&self) {
         self.song_sender
             .send(SongCommand::Song(self.song.clone()))
             .unwrap();

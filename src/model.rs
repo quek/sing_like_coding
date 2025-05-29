@@ -28,7 +28,9 @@ impl Song {
     }
 
     pub fn add_track(&mut self) {
-        self.tracks.push(Track::new());
+        let mut track = Track::new();
+        track.name = format!("T{:02X}", self.tracks.len() + 1);
+        self.tracks.push(track);
     }
 }
 
