@@ -54,7 +54,7 @@ impl Default for MyApp {
         let mut device = Device::open_default().unwrap();
         device.start(audio_process.clone()).unwrap();
         let device = Some(device);
-        view_sender.send(ViewCommand::StateTrack(0)).unwrap();
+        view_sender.send(ViewCommand::Song).unwrap();
         let track_view = Arc::new(Mutex::new(TrackView::new(view_sender)));
         TrackView::start_listener(track_view.clone(), song_receiver);
 

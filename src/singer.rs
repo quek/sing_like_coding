@@ -10,7 +10,7 @@ use std::{
 
 use crate::{
     event_list::{EventListInput, EventListOutput},
-    model::{self, Song},
+    model::{self, note::Note, Song},
     plugin::Plugin,
     track_view::ViewCommand,
 };
@@ -22,8 +22,6 @@ use clap_sys::plugin::clap_plugin;
 pub enum SongCommand {
     #[allow(dead_code)]
     Track,
-    #[allow(dead_code)]
-    Note,
     #[allow(dead_code)]
     Song(Song),
 }
@@ -151,25 +149,24 @@ impl Singer {
                 match msg {
                     ViewCommand::Play => singer.lock().unwrap().play(),
                     ViewCommand::Stop => singer.lock().unwrap().stop(),
-                    ViewCommand::StateTrack(index) => {
-                        singer.lock().unwrap().send_state_track(index);
-                    }
+                    ViewCommand::Song => singer.lock().unwrap().send_sond(),
                     ViewCommand::Note(line, key) => {
                         log::debug!("ViewCommand::Note({line}, {key})");
-                        // let mut song = song.lock().unwrap();
-                        // let track = &mut song.tracks[0];
-                        // if let Some(note) = track.note_mut(line) {
-                        //     note.key = key;
-                        // } else {
-                        //     track.notes.push(Note {
-                        //         line,
-                        //         delay: 0,
-                        //         channel: 0,
-                        //         key,
-                        //         velocity: 100.0,
-                        //     });
-                        // }
-                        // song.send_state_track(0);
+                        let mut singer = singer.lock().unwrap();
+                        let song = &mut singer.song;
+                        let track = &mut song.tracks[0];
+                        if let Some(note) = track.note_mut(line) {
+                            note.key = key;
+                        } else {
+                            track.notes.push(Note {
+                                line,
+                                delay: 0,
+                                channel: 0,
+                                key,
+                                velocity: 100.0,
+                            });
+                        }
+                        singer.send_sond();
                     }
                     ViewCommand::PluginLoad(track_index, path) => {
                         let mut singer = singer.lock().unwrap();
@@ -204,16 +201,10 @@ impl Singer {
         });
     }
 
-    pub fn send_state_track(&self, _index: usize) {
-        // let track = &self.tracks[index];
-        // let notes = track.notes.clone();
-        // self.song_sender
-        //     .send(SongCommand::StateTrack(
-        //         track.model.name.clone(),
-        //         track.model.nlines,
-        //         notes,
-        //     ))
-        //     .unwrap();
+    fn send_sond(&self) {
+        self.song_sender
+            .send(SongCommand::Song(self.song.clone()))
+            .unwrap();
     }
 
     #[allow(dead_code)]

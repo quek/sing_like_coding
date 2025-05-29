@@ -19,7 +19,7 @@ pub enum ViewCommand {
     Play,
     #[allow(dead_code)]
     Stop,
-    StateTrack(usize),
+    Song,
     Note(usize, i16),
     NoteOn(usize, i16, i16, f64, u32),
     NoteOff(usize, i16, i16, f64, u32),
@@ -49,7 +49,6 @@ impl TrackView {
             while let Ok(command) = receiver.recv() {
                 match command {
                     SongCommand::Track => (),
-                    SongCommand::Note => (),
                     SongCommand::Song(song) => {
                         let mut view = view.lock().unwrap();
                         let track = &song.tracks[0];
