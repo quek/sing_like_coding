@@ -24,7 +24,11 @@ pub enum SongCommand {
     Track,
     Song(Song),
     State(SongState),
+    PluginCallback(*const clap_plugin),
 }
+
+unsafe impl Send for SongCommand {}
+unsafe impl Sync for SongCommand {}
 
 #[derive(Debug, Default)]
 pub struct SongState {
@@ -188,10 +192,7 @@ impl Singer {
                     }
                     ViewCommand::PluginLoad(track_index, path) => {
                         let mut singer = singer.lock().unwrap();
-                        let mut plugin = Plugin::new(
-                            singer.callback_request_sender.clone(),
-                            singer.gui_context.clone().unwrap(),
-                        );
+                        let mut plugin = Plugin::new(singer.song_sender.clone());
                         plugin.load(Path::new(&path));
                         plugin.start().unwrap();
                         singer.song.tracks[track_index]

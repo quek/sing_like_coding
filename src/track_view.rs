@@ -70,6 +70,14 @@ impl TrackView {
                         view.song_state = song_state;
                         view.gui_context.as_ref().map(|x| x.request_repaint());
                     }
+                    SongCommand::PluginCallback(plugin) => {
+                        let plugin = unsafe { &*plugin };
+                        log::debug!("will on_main_thread");
+                        unsafe { plugin.on_main_thread.unwrap()(plugin) };
+                        log::debug!("did on_main_thread");
+                        let mut view = view.lock().unwrap();
+                        view.gui_context.as_ref().map(|x| x.request_repaint());
+                    }
                 }
             }
         });

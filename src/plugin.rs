@@ -39,8 +39,8 @@ use clap_sys::{
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
 
-use crate::event_list::EventListOutput;
 use crate::{event_list::EventListInput, model};
+use crate::{event_list::EventListOutput, singer::SongCommand};
 
 mod window;
 
@@ -52,13 +52,12 @@ pub struct Plugin {
     gui_open_p: bool,
     window_handler: Option<*mut c_void>,
     process_start_p: bool,
-    callback_request_sender: Sender<*const clap_plugin>,
+    sender_to_view: Sender<SongCommand>,
     host_audio_ports: clap_host_audio_ports,
     host_gui: clap_host_gui,
     host_latency: clap_host_latency,
     host_log: clap_host_log,
     host_params: clap_host_params,
-    pub gui_context: eframe::egui::Context,
 }
 
 macro_rules! cstr {
@@ -73,10 +72,7 @@ pub const URL: &CStr = cstr!("https://github.com/quek/sawavi");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
 impl Plugin {
-    pub fn new(
-        callback_request_sender: Sender<*const clap_plugin>,
-        gui_context: eframe::egui::Context,
-    ) -> Pin<Box<Self>> {
+    pub fn new(sender_to_view: Sender<SongCommand>) -> Pin<Box<Self>> {
         let clap_host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: null_mut::<c_void>(),
@@ -125,13 +121,12 @@ impl Plugin {
             gui_open_p: false,
             window_handler: None,
             process_start_p: false,
-            callback_request_sender,
+            sender_to_view,
             host_audio_ports,
             host_gui,
             host_latency,
             host_log,
             host_params,
-            gui_context,
         });
 
         let ptr = this.as_mut().get_mut() as *mut _ as *mut c_void;
@@ -219,8 +214,9 @@ impl Plugin {
         log::debug!("request_callback");
         let this = unsafe { &mut *((*host).host_data as *mut Self) };
         let plugin = this.plugin.unwrap();
-        this.callback_request_sender.send(plugin).unwrap();
-        this.gui_context.request_repaint();
+        this.sender_to_view
+            .send(SongCommand::PluginCallback(plugin))
+            .unwrap();
     }
 
     unsafe extern "C" fn request_process(_host: *const clap_host) {
