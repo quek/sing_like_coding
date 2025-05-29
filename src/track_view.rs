@@ -63,9 +63,12 @@ impl TrackView {
                                 view.line_buffers.push("".to_string());
                             }
                         }
+                        view.gui_context.as_ref().map(|x| x.request_repaint());
                     }
                     SongCommand::State(song_state) => {
-                        view.lock().unwrap().song_state = song_state;
+                        let mut view = view.lock().unwrap();
+                        view.song_state = song_state;
+                        view.gui_context.as_ref().map(|x| x.request_repaint());
                     }
                 }
             }
