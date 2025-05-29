@@ -383,7 +383,7 @@ impl Plugin {
                 panic!("GUI get_size failed");
             }
 
-            let window_handler = create_handler(resizable, width, height);
+            let window_handler = create_handler(resizable, width, height, self.clap_host.host_data);
             self.window_handler = Some(window_handler.clone());
             let parent_window = clap_window_handle {
                 win32: window_handler,
@@ -413,6 +413,7 @@ impl Plugin {
         if !self.gui_open_p || !self.gui_available() {
             return Ok(());
         }
+        self.gui_open_p = false;
         let plugin = unsafe { &*(self.plugin.unwrap()) };
         let gui = unsafe { &*self.gui.unwrap() };
         unsafe {
@@ -420,7 +421,6 @@ impl Plugin {
             gui.destroy.unwrap()(plugin);
             destroy_handler(self.window_handler.take().unwrap());
         }
-        self.gui_open_p = false;
         Ok(())
     }
 
