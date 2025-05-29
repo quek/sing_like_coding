@@ -1,11 +1,10 @@
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 
 use crate::audio_process::AudioProcess;
 use crate::device::Device;
 use crate::singer::Singer;
 use crate::track_view::{TrackView, ViewCommand};
-use clap_sys::plugin::clap_plugin;
 use eframe::egui;
 
 pub fn main() -> eframe::Result {
@@ -31,7 +30,6 @@ struct MyApp {
     device: Option<Device>,
     audio_process: Arc<Mutex<AudioProcess>>,
     singer: Arc<Mutex<Singer>>,
-    callback_request_receiver: Receiver<*const clap_plugin>,
     track_view: Arc<Mutex<TrackView>>,
 }
 
@@ -44,11 +42,7 @@ impl Default for MyApp {
     fn default() -> Self {
         let (song_sender, song_receiver) = channel();
         let (view_sender, view_receiver) = channel();
-        let (callback_request_sender, callback_request_receiver) = channel();
-        let singer = Arc::new(Mutex::new(Singer::new(
-            song_sender,
-            callback_request_sender,
-        )));
+        let singer = Arc::new(Mutex::new(Singer::new(song_sender)));
         Singer::start_listener(singer.clone(), view_receiver);
         let audio_process = Arc::new(Mutex::new(AudioProcess::new(singer.clone())));
         let mut device = Device::open_default().unwrap();
@@ -62,7 +56,6 @@ impl Default for MyApp {
             device,
             audio_process,
             singer,
-            callback_request_receiver,
             track_view,
         }
     }
@@ -78,18 +71,7 @@ impl eframe::App for MyApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            loop {
-                match self.callback_request_receiver.try_recv() {
-                    Ok(plugin) => {
-                        let plugin = unsafe { &*plugin };
-                        log::debug!("will on_main_thread");
-                        unsafe { plugin.on_main_thread.unwrap()(plugin) };
-                        log::debug!("did on_main_thread");
-                    }
-                    Err(_) => break,
-                }
-            }
-            ui.heading("My egui Application");
+            ui.heading("TODO Song Title?");
 
             // ui.image(egui::include_image!(
             //     "../../../crates/egui/assets/ferris.png"

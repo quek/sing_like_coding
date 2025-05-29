@@ -19,16 +19,19 @@ use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
 
 #[derive(Debug)]
+pub struct ClapPluginPtr(pub *const clap_plugin);
+
+unsafe impl Send for ClapPluginPtr {}
+unsafe impl Sync for ClapPluginPtr {}
+
+#[derive(Debug)]
 pub enum SongCommand {
     #[allow(dead_code)]
     Track,
     Song(Song),
     State(SongState),
-    PluginCallback(*const clap_plugin),
+    PluginCallback(ClapPluginPtr),
 }
-
-unsafe impl Send for SongCommand {}
-unsafe impl Sync for SongCommand {}
 
 #[derive(Debug, Default)]
 pub struct SongState {
@@ -39,7 +42,6 @@ pub struct Singer {
     pub song: model::Song,
     #[allow(dead_code)]
     song_sender: Sender<SongCommand>,
-    callback_request_sender: Sender<*const clap_plugin>,
     pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
     event_list_inputs: Vec<Pin<Box<EventListInput>>>,
     event_list_outputs: Vec<Pin<Box<EventListOutput>>>,
@@ -51,15 +53,11 @@ unsafe impl Send for Singer {}
 unsafe impl Sync for Singer {}
 
 impl Singer {
-    pub fn new(
-        song_sender: Sender<SongCommand>,
-        callback_request_sender: Sender<*const clap_plugin>,
-    ) -> Self {
+    pub fn new(song_sender: Sender<SongCommand>) -> Self {
         let song = model::Song::new();
         let mut this = Self {
             song,
             song_sender,
-            callback_request_sender,
             plugins: Default::default(),
             event_list_inputs: vec![],
             event_list_outputs: vec![],

@@ -39,7 +39,7 @@ use clap_sys::{
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
 
-use crate::{event_list::EventListInput, model};
+use crate::{event_list::EventListInput, model, singer::ClapPluginPtr};
 use crate::{event_list::EventListOutput, singer::SongCommand};
 
 mod window;
@@ -215,7 +215,7 @@ impl Plugin {
         let this = unsafe { &mut *((*host).host_data as *mut Self) };
         let plugin = this.plugin.unwrap();
         this.sender_to_view
-            .send(SongCommand::PluginCallback(plugin))
+            .send(SongCommand::PluginCallback(ClapPluginPtr(plugin)))
             .unwrap();
     }
 

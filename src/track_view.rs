@@ -10,7 +10,7 @@ use eframe::egui::{Color32, TextEdit, Ui};
 
 use crate::{
     model::note::note_name_to_midi,
-    singer::{Singer, SongCommand, SongState},
+    singer::{ClapPluginPtr, Singer, SongCommand, SongState},
 };
 
 #[derive(Debug)]
@@ -32,6 +32,7 @@ pub struct TrackView {
     track_name: String,
     gui_context: Option<eframe::egui::Context>,
     song_state: SongState,
+    callback_plugins: Vec<ClapPluginPtr>,
 }
 
 impl TrackView {
@@ -42,6 +43,7 @@ impl TrackView {
             track_name: "".to_string(),
             gui_context: None,
             song_state: SongState::default(),
+            callback_plugins: vec![],
         }
     }
 
@@ -71,11 +73,8 @@ impl TrackView {
                         view.gui_context.as_ref().map(|x| x.request_repaint());
                     }
                     SongCommand::PluginCallback(plugin) => {
-                        let plugin = unsafe { &*plugin };
-                        log::debug!("will on_main_thread");
-                        unsafe { plugin.on_main_thread.unwrap()(plugin) };
-                        log::debug!("did on_main_thread");
                         let mut view = view.lock().unwrap();
+                        view.callback_plugins.push(plugin);
                         view.gui_context.as_ref().map(|x| x.request_repaint());
                     }
                 }
@@ -92,6 +91,14 @@ impl TrackView {
         if self.gui_context.is_none() {
             self.gui_context = Some(gui_context.clone());
         }
+
+        for plugin in self.callback_plugins.iter() {
+            let plugin = unsafe { &*plugin.0 };
+            log::debug!("will on_main_thread");
+            unsafe { plugin.on_main_thread.unwrap()(plugin) };
+            log::debug!("did on_main_thread");
+        }
+        self.callback_plugins.clear();
 
         ui.label(format!("line {}", self.song_state.line_play));
         if ui.button("Play").clicked() {
