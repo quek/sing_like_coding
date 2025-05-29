@@ -22,8 +22,13 @@ use clap_sys::plugin::clap_plugin;
 pub enum SongCommand {
     #[allow(dead_code)]
     Track,
-    #[allow(dead_code)]
     Song(Song),
+    State(SongState),
+}
+
+#[derive(Debug, Default)]
+pub struct SongState {
+    pub line_play: usize,
 }
 
 pub struct Singer {
@@ -35,6 +40,7 @@ pub struct Singer {
     event_list_inputs: Vec<Pin<Box<EventListInput>>>,
     event_list_outputs: Vec<Pin<Box<EventListOutput>>>,
     pub gui_context: Option<eframe::egui::Context>,
+    line_play: usize,
 }
 
 unsafe impl Send for Singer {}
@@ -54,6 +60,7 @@ impl Singer {
             event_list_inputs: vec![],
             event_list_outputs: vec![],
             gui_context: None,
+            line_play: 0,
         };
         this.add_track();
         this
@@ -67,6 +74,17 @@ impl Singer {
 
     fn compute_play_position(&mut self, frames_count: u32) {
         self.song.play_position.start = self.song.play_position.end;
+
+        let line = (self.song.play_position.start / 0x100) as usize;
+        if self.line_play != line {
+            self.song_sender
+                .send(SongCommand::State(SongState {
+                    line_play: self.line_play,
+                }))
+                .unwrap();
+        }
+        self.line_play = line;
+
         if !self.song.play_p {
             return;
         }

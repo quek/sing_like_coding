@@ -6,11 +6,11 @@ use std::{
     thread,
 };
 
-use eframe::egui::Ui;
+use eframe::egui::{Color32, TextEdit, Ui};
 
 use crate::{
     model::note::note_name_to_midi,
-    singer::{Singer, SongCommand},
+    singer::{Singer, SongCommand, SongState},
 };
 
 #[derive(Debug)]
@@ -31,6 +31,7 @@ pub struct TrackView {
     view_sender: Sender<ViewCommand>,
     track_name: String,
     gui_context: Option<eframe::egui::Context>,
+    song_state: SongState,
 }
 
 impl TrackView {
@@ -40,6 +41,7 @@ impl TrackView {
             view_sender,
             track_name: "".to_string(),
             gui_context: None,
+            song_state: SongState::default(),
         }
     }
 
@@ -62,6 +64,9 @@ impl TrackView {
                             }
                         }
                     }
+                    SongCommand::State(song_state) => {
+                        view.lock().unwrap().song_state = song_state;
+                    }
                 }
             }
         });
@@ -75,6 +80,14 @@ impl TrackView {
     ) {
         if self.gui_context.is_none() {
             self.gui_context = Some(gui_context.clone());
+        }
+
+        ui.label(format!("line {}", self.song_state.line_play));
+        if ui.button("Play").clicked() {
+            self.view_sender.send(ViewCommand::Play).unwrap();
+        }
+        if ui.button("Stop").clicked() {
+            self.view_sender.send(ViewCommand::Stop).unwrap();
         }
 
         if ui.button("Load Surge XT").clicked() {
@@ -94,7 +107,7 @@ impl TrackView {
                 .unwrap();
         }
 
-        if ui.button("Load TyrellN6.clap").clicked() {
+        if ui.button("Load TyrellN6").clicked() {
             let path = "c:/Program Files/Common Files/CLAP/u-he/TyrellN6.clap".to_string();
             let track_index = 0;
             self.view_sender
@@ -152,13 +165,18 @@ impl TrackView {
         ui.separator();
 
         ui.heading(&self.track_name);
-        for line in 0..self.line_buffers.len() {
+        let nlines = self.line_buffers.len();
+        for line in 0..nlines {
             ui.horizontal(|ui| {
                 ui.label(format!("{:02X}", line));
-                if ui
-                    .text_edit_singleline(&mut self.line_buffers[line])
-                    .changed()
-                {
+
+                let text_edit = TextEdit::singleline(&mut self.line_buffers[line]);
+                let text_edit = if line == self.song_state.line_play % 0x0f {
+                    text_edit.background_color(Color32::GREEN)
+                } else {
+                    text_edit
+                };
+                if ui.add(text_edit).changed() {
                     note_name_to_midi(&self.line_buffers[line]).map(|key| {
                         self.view_sender.send(ViewCommand::Note(line, key)).unwrap();
                     });
