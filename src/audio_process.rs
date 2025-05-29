@@ -21,7 +21,7 @@ impl AudioProcess {
     }
 
     pub fn process(&mut self, output: &mut [f32], channels: usize) {
-        log::debug!("AudioProcess process steady_time {}", self.steady_time);
+        //log::debug!("AudioProcess process steady_time {}", self.steady_time);
         let frames_count = output.len() / channels;
         if self.buffer.len() < channels || self.buffer[0].len() < frames_count {
             //log::debug!("realloc AudioProcess buffer {}", frames_count);
@@ -31,13 +31,13 @@ impl AudioProcess {
             }
         }
 
-        log::debug!("will singer lock process");
+        //log::debug!("will singer lock process");
         self.singer
             .lock()
             .unwrap()
             .process(&mut self.buffer, frames_count as u32, self.steady_time)
             .unwrap();
-        log::debug!("did singer lock process");
+        //log::debug!("did singer lock process");
 
         for channel in 0..channels {
             for frame in 0..frames_count {
