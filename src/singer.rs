@@ -20,7 +20,6 @@ use clap_sys::plugin::clap_plugin;
 
 #[derive(Debug)]
 pub struct ClapPluginPtr(pub *const clap_plugin);
-
 unsafe impl Send for ClapPluginPtr {}
 unsafe impl Sync for ClapPluginPtr {}
 
@@ -40,13 +39,13 @@ pub struct SongState {
 
 pub struct Singer {
     pub song: model::Song,
-    #[allow(dead_code)]
     song_sender: Sender<SongCommand>,
     pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
     event_list_inputs: Vec<Pin<Box<EventListInput>>>,
     event_list_outputs: Vec<Pin<Box<EventListOutput>>>,
     pub gui_context: Option<eframe::egui::Context>,
     line_play: usize,
+    on_keys: Vec<Option<i16>>,
 }
 
 unsafe impl Send for Singer {}
@@ -63,6 +62,7 @@ impl Singer {
             event_list_outputs: vec![],
             gui_context: None,
             line_play: 0,
+            on_keys: vec![],
         };
         this.add_track();
         this
@@ -72,6 +72,7 @@ impl Singer {
         self.song.add_track();
         self.event_list_inputs.push(EventListInput::new());
         self.event_list_outputs.push(EventListOutput::new());
+        self.on_keys.push(None);
     }
 
     fn compute_play_position(&mut self, frames_count: u32) {
@@ -119,14 +120,21 @@ impl Singer {
 
     fn process_track(
         &mut self,
-        index: usize,
+        track_index: usize,
         buffer: &mut Vec<Vec<f32>>,
         frames_count: u32,
         steady_time: i64,
     ) -> Result<()> {
-        let module_len = self.song.tracks[index].modules.len();
+        let track = &self.song.tracks[track_index];
+        let on_keys = &mut self.on_keys[track_index];
+        track.compute_midi(
+            &self.song.play_position,
+            &mut self.event_list_inputs[track_index],
+            on_keys,
+        );
+        let module_len = self.song.tracks[track_index].modules.len();
         for i in 0..module_len {
-            self.process_module(index, i, buffer, frames_count, steady_time)?;
+            self.process_module(track_index, i, buffer, frames_count, steady_time)?;
         }
         Ok(())
     }

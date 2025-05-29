@@ -59,6 +59,26 @@ impl Track {
     pub fn note_mut(&mut self, line: usize) -> Option<&mut Note> {
         self.notes.iter_mut().find(|note| note.line == line)
     }
+
+    pub fn compute_midi(
+        &self,
+        play_position: &Range<i64>,
+        event_list: &mut std::pin::Pin<Box<crate::event_list::EventListInput>>,
+        on_key: &mut Option<i16>,
+    ) {
+        for note in self.notes.iter() {
+            let time = note.line * 0x100 + note.delay as usize;
+            if play_position.contains(&(time as i64)) {
+                if let Some(key) = on_key {
+                    // TODO time
+                    event_list.note_off(*key, note.channel, note.velocity, 0);
+                }
+                // TODO time
+                event_list.note_on(note.key, note.channel, note.velocity, 0);
+                *on_key = Some(note.key);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
