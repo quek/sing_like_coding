@@ -95,6 +95,13 @@ impl Singer {
         let sec_per_delay = 60.0 / (self.song.bpm * self.song.lpb as f64 * 256.0);
         self.song.play_position.end =
             self.song.play_position.start + (sec_per_frame / sec_per_delay).round() as i64;
+
+        // TODO DELET THIS BLOC
+        {
+            if self.song.play_position.start > 0x0e * 0x100 {
+                self.song.play_position = 0..0;
+            }
+        }
     }
 
     pub fn process(
