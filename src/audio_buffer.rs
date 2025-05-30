@@ -1,5 +1,6 @@
 pub struct AudioBuffer {
     pub buffer: Vec<Vec<f32>>,
+    #[allow(dead_code)]
     pub constant_mask: u64,
 }
 
