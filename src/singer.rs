@@ -11,7 +11,11 @@ use std::{
 use crate::{
     model::{self, note::Note, Song},
     plugin::Plugin,
-    process_context::ProcessContext,
+    process_context::{
+        Event::{NoteOff, NoteOn},
+        ProcessContext,
+    },
+    process_track_context::ProcessTrackContext,
     track_view::ViewCommand,
 };
 
@@ -113,50 +117,41 @@ impl Singer {
         self.process_context.play_p = self.song.play_p;
         self.process_context.play_position = self.song.play_position.clone();
 
-        for track_index in 0..self.song.tracks.len() {
-            self.process_track(track_index)?;
+        let mut process_track_contexts = vec![];
+        for (((track, on_key), event_list_input), plugins) in self
+            .song
+            .tracks
+            .iter()
+            .zip(self.on_keys.iter_mut())
+            .zip(self.process_context.event_list_inputs.iter_mut())
+            .zip(self.plugins.iter_mut())
+        {
+            process_track_contexts.push(ProcessTrackContext::new(
+                &self.song,
+                self.process_context.nchannels,
+                self.process_context.nframes,
+                self.process_context.steady_time,
+                track,
+                on_key,
+                event_list_input,
+                plugins,
+            ));
         }
-        // self.song
-        //     .tracks
-        //     .par_iter()
-        //     .enumerate()
-        //     .try_for_each(|(track_index, _track)| {
-        //         self.process_track();
-        //     });
+        let _ = process_track_contexts
+            .par_iter_mut()
+            .try_for_each(|process_track_context| process_track(process_track_context));
 
         for channel in 0..channels {
             for frame in 0..self.process_context.nframes {
-                output[channels * frame + channel] = self
-                    .process_context
-                    .buffers
+                output[channels * frame + channel] = process_track_contexts
                     .iter()
-                    .map(|x| x.buffer[channel][frame])
+                    .map(|x| x.buffer.buffer[channel][frame])
                     .sum();
             }
         }
+        self.process_context.clear_event_lists();
         self.process_context.steady_time += self.process_context.nframes as i64;
 
-        Ok(())
-    }
-
-    fn process_track(&mut self, track_index: usize) -> Result<()> {
-        let track = &self.song.tracks[track_index];
-        let on_keys = &mut self.on_keys[track_index];
-        track.compute_midi(track_index, &mut self.process_context, on_keys);
-        let module_len = self.song.tracks[track_index].modules.len();
-        for module_index in 0..module_len {
-            self.process_module(track_index, module_index)?;
-        }
-
-        self.process_context.clear_event_lists();
-
-        Ok(())
-    }
-
-    fn process_module(&mut self, track_index: usize, module_index: usize) -> Result<()> {
-        let plugin = &mut self.plugins[track_index][module_index];
-        let ctx = &mut self.process_context;
-        plugin.process(&self.song, track_index, ctx)?;
         Ok(())
     }
 
@@ -212,15 +207,14 @@ impl Singer {
                         }
                         singer.plugins[track_index].push(plugin);
                     }
-                    ViewCommand::NoteOn(track_index, key, channel, velocity, time) => {
+                    ViewCommand::NoteOn(track_index, key, _channel, velocity, _time) => {
                         let mut singer = singer.lock().unwrap();
                         singer.process_context.event_list_inputs[track_index]
-                            .note_on(key, channel, velocity, time);
+                            .push(NoteOn(key, velocity));
                     }
-                    ViewCommand::NoteOff(track_index, key, channel, velocity, time) => {
+                    ViewCommand::NoteOff(track_index, key, _channel, _velocity, _time) => {
                         let mut singer = singer.lock().unwrap();
-                        singer.process_context.event_list_inputs[track_index]
-                            .note_off(key, channel, velocity, time);
+                        singer.process_context.event_list_inputs[track_index].push(NoteOff(key));
                     }
                     ViewCommand::TrackAdd => {
                         let mut singer = singer.lock().unwrap();
@@ -245,4 +239,20 @@ impl Singer {
         }
         self.song.play_p = false;
     }
+}
+
+fn process_track(context: &mut ProcessTrackContext) -> Result<()> {
+    context.track.compute_midi(context);
+    let module_len = context.track.modules.len();
+    for module_index in 0..module_len {
+        process_module(context, module_index)?;
+    }
+
+    Ok(())
+}
+
+fn process_module(context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
+    let plugin = unsafe { &mut *(context.plugins[module_index].0 as *mut Plugin) };
+    plugin.process(context)?;
+    Ok(())
 }

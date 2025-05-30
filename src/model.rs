@@ -2,7 +2,10 @@ use std::ops::Range;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{model::note::Note, process_context::ProcessContext};
+use crate::{
+    model::note::Note, process_context::Event::NoteOff, process_context::Event::NoteOn,
+    process_track_context::ProcessTrackContext,
+};
 pub mod note;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,32 +65,18 @@ impl Track {
         self.notes.iter_mut().find(|note| note.line == line)
     }
 
-    pub fn compute_midi(
-        &self,
-        track_index: usize,
-        process_context: &mut ProcessContext,
-        on_key: &mut Option<i16>,
-    ) {
+    pub fn compute_midi(&self, context: &mut ProcessTrackContext) {
         for note in self.notes.iter() {
             let time = note.line * 0x100 + note.delay as usize;
-            if process_context.play_position.contains(&(time as i64)) {
-                if let Some(key) = on_key {
-                    // TODO time
-                    process_context.event_list_inputs[track_index].note_off(
-                        *key,
-                        note.channel,
-                        note.velocity,
-                        0,
-                    );
+            if context.play_position.contains(&(time as i64)) {
+                if let Some(key) = context.on_key {
+                    context.event_list_input.push(NoteOff(*key));
                 }
                 // TODO time
-                process_context.event_list_inputs[track_index].note_on(
-                    note.key,
-                    note.channel,
-                    note.velocity,
-                    0,
-                );
-                *on_key = Some(note.key);
+                context
+                    .event_list_input
+                    .push(NoteOn(note.key, note.velocity));
+                *context.on_key = Some(note.key);
             }
         }
     }

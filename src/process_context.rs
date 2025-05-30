@@ -1,19 +1,24 @@
-use std::{ops::Range, pin::Pin};
+use std::ops::Range;
 
-use crate::{
-    audio_buffer::AudioBuffer,
-    event_list::{EventListInput, EventListOutput},
-};
+use crate::audio_buffer::AudioBuffer;
+
+pub enum Event {
+    NoteOn(i16, f64),
+    NoteOff(i16),
+}
 
 pub struct ProcessContext {
     pub steady_time: i64,
     pub play_p: bool,
     pub play_position: Range<i64>,
     pub nchannels: usize,
+
     pub nframes: usize,
     pub buffers: Vec<AudioBuffer>,
-    pub event_list_inputs: Vec<Pin<Box<EventListInput>>>,
-    pub event_list_outputs: Vec<Pin<Box<EventListOutput>>>,
+    // pub event_list_inputs: Vec<Pin<Box<EventListInput>>>,
+    // pub event_list_outputs: Vec<Pin<Box<EventListOutput>>>,
+    pub event_list_inputs: Vec<Vec<Event>>,
+    pub event_list_outputs: Vec<Vec<Event>>,
 }
 
 impl Default for ProcessContext {
@@ -34,8 +39,8 @@ impl Default for ProcessContext {
 impl ProcessContext {
     pub fn add_track(&mut self) {
         self.buffers.push(AudioBuffer::new());
-        self.event_list_inputs.push(EventListInput::new());
-        self.event_list_outputs.push(EventListOutput::new());
+        self.event_list_inputs.push(vec![]);
+        self.event_list_outputs.push(vec![]);
     }
 
     pub fn clear_event_lists(&mut self) {
