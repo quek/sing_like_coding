@@ -427,6 +427,7 @@ impl Plugin {
     pub fn process(
         &mut self,
         song: &model::Song,
+        track_index: usize,
         process_context: &mut ProcessContext,
         //        event_list_input: &EventListInput,
         //        event_list_output: &mut EventListOutput,
@@ -447,7 +448,7 @@ impl Plugin {
         let mut audio_inputs = [audio_input];
 
         let mut out_buffer = vec![];
-        for channel in process_context.buffer().buffer.iter_mut() {
+        for channel in process_context.buffers[track_index].buffer.iter_mut() {
             out_buffer.push(channel.as_mut_ptr());
         }
 
@@ -487,7 +488,6 @@ impl Plugin {
             None
         };
 
-        let track_index = process_context.track_index;
         let in_events = process_context.event_list_inputs[track_index].as_clap_input_events();
         let out_events = process_context.event_list_outputs[track_index].as_clap_output_events();
         let prc = clap_process {

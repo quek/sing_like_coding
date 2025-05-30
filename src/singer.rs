@@ -17,6 +17,7 @@ use crate::{
 
 use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
+use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct ClapPluginPtr(pub *const clap_plugin);
@@ -113,9 +114,15 @@ impl Singer {
         self.process_context.play_position = self.song.play_position.clone();
 
         for track_index in 0..self.song.tracks.len() {
-            self.process_context.track_index = track_index;
-            self.process_track()?;
+            self.process_track(track_index)?;
         }
+        // self.song
+        //     .tracks
+        //     .par_iter()
+        //     .enumerate()
+        //     .try_for_each(|(track_index, _track)| {
+        //         self.process_track();
+        //     });
 
         for channel in 0..channels {
             for frame in 0..self.process_context.nframes {
@@ -132,14 +139,13 @@ impl Singer {
         Ok(())
     }
 
-    fn process_track(&mut self) -> Result<()> {
-        let track_index = self.process_context.track_index;
+    fn process_track(&mut self, track_index: usize) -> Result<()> {
         let track = &self.song.tracks[track_index];
         let on_keys = &mut self.on_keys[track_index];
-        track.compute_midi(&mut self.process_context, on_keys);
+        track.compute_midi(track_index, &mut self.process_context, on_keys);
         let module_len = self.song.tracks[track_index].modules.len();
-        for i in 0..module_len {
-            self.process_module(i)?;
+        for module_index in 0..module_len {
+            self.process_module(track_index, module_index)?;
         }
 
         self.process_context.clear_event_lists();
@@ -147,10 +153,10 @@ impl Singer {
         Ok(())
     }
 
-    fn process_module(&mut self, module_index: usize) -> Result<()> {
-        let plugin = &mut self.plugins[self.process_context.track_index][module_index];
+    fn process_module(&mut self, track_index: usize, module_index: usize) -> Result<()> {
+        let plugin = &mut self.plugins[track_index][module_index];
         let ctx = &mut self.process_context;
-        plugin.process(&self.song, ctx)?;
+        plugin.process(&self.song, track_index, ctx)?;
         Ok(())
     }
 

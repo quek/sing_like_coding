@@ -11,7 +11,6 @@ pub struct ProcessContext {
     pub play_position: Range<i64>,
     pub nchannels: usize,
     pub nframes: usize,
-    pub track_index: usize,
     pub buffers: Vec<AudioBuffer>,
     pub event_list_inputs: Vec<Pin<Box<EventListInput>>>,
     pub event_list_outputs: Vec<Pin<Box<EventListOutput>>>,
@@ -25,7 +24,6 @@ impl Default for ProcessContext {
             play_position: 0..0,
             nchannels: 2,
             nframes: 512,
-            track_index: 0,
             buffers: vec![],
             event_list_inputs: vec![],
             event_list_outputs: vec![],
@@ -38,10 +36,6 @@ impl ProcessContext {
         self.buffers.push(AudioBuffer::new());
         self.event_list_inputs.push(EventListInput::new());
         self.event_list_outputs.push(EventListOutput::new());
-    }
-
-    pub fn buffer(&mut self) -> &mut AudioBuffer {
-        &mut self.buffers[self.track_index]
     }
 
     pub fn clear_event_lists(&mut self) {
@@ -57,14 +51,5 @@ impl ProcessContext {
         for buffer in self.buffers.iter_mut() {
             buffer.ensure_buffer(self.nchannels, self.nframes);
         }
-    }
-
-    pub fn event_list_input(&mut self) -> &mut EventListInput {
-        &mut self.event_list_inputs[self.track_index]
-    }
-
-    #[allow(dead_code)]
-    pub fn event_list_output(&mut self) -> &mut EventListOutput {
-        &mut self.event_list_outputs[self.track_index]
     }
 }

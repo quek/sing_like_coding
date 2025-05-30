@@ -62,13 +62,18 @@ impl Track {
         self.notes.iter_mut().find(|note| note.line == line)
     }
 
-    pub fn compute_midi(&self, process_context: &mut ProcessContext, on_key: &mut Option<i16>) {
+    pub fn compute_midi(
+        &self,
+        track_index: usize,
+        process_context: &mut ProcessContext,
+        on_key: &mut Option<i16>,
+    ) {
         for note in self.notes.iter() {
             let time = note.line * 0x100 + note.delay as usize;
             if process_context.play_position.contains(&(time as i64)) {
                 if let Some(key) = on_key {
                     // TODO time
-                    process_context.event_list_input().note_off(
+                    process_context.event_list_inputs[track_index].note_off(
                         *key,
                         note.channel,
                         note.velocity,
@@ -76,7 +81,7 @@ impl Track {
                     );
                 }
                 // TODO time
-                process_context.event_list_input().note_on(
+                process_context.event_list_inputs[track_index].note_on(
                     note.key,
                     note.channel,
                     note.velocity,
