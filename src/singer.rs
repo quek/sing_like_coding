@@ -9,7 +9,6 @@ use std::{
 };
 
 use crate::{
-    event_list::{EventListInput, EventListOutput},
     model::{self, note::Note, Song},
     plugin::Plugin,
     process_context::ProcessContext,
@@ -70,12 +69,7 @@ impl Singer {
     fn add_track(&mut self) {
         self.song.add_track();
         self.on_keys.push(None);
-        self.process_context
-            .event_list_inputs
-            .push(EventListInput::new());
-        self.process_context
-            .event_list_outputs
-            .push(EventListOutput::new());
+        self.process_context.add_track();
     }
 
     fn compute_play_position(&mut self, frames_count: usize) {
@@ -110,7 +104,7 @@ impl Singer {
     pub fn process(&mut self, output: &mut [f32], channels: usize) -> Result<()> {
         //log::debug!("AudioProcess process steady_time {}", self.steady_time);
         self.process_context.nframes = output.len() / channels;
-        self.process_context.channels = channels;
+        self.process_context.nchannels = channels;
         self.process_context.ensure_buffer();
 
         self.compute_play_position(self.process_context.nframes);
@@ -123,7 +117,12 @@ impl Singer {
 
         for channel in 0..channels {
             for frame in 0..self.process_context.nframes {
-                output[channels * frame + channel] = self.process_context.buffer[channel][frame];
+                output[channels * frame + channel] = self
+                    .process_context
+                    .buffers
+                    .iter()
+                    .map(|x| x.buffer[channel][frame])
+                    .sum();
             }
         }
         self.process_context.steady_time += self.process_context.nframes as i64;

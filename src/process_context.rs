@@ -1,15 +1,18 @@
 use std::{ops::Range, pin::Pin};
 
-use crate::event_list::{EventListInput, EventListOutput};
+use crate::{
+    audio_buffer::AudioBuffer,
+    event_list::{EventListInput, EventListOutput},
+};
 
 pub struct ProcessContext {
     pub steady_time: i64,
     pub play_p: bool,
     pub play_position: Range<i64>,
-    pub channels: usize,
+    pub nchannels: usize,
     pub nframes: usize,
-    pub buffer: Vec<Vec<f32>>,
     pub track_index: usize,
+    pub buffers: Vec<AudioBuffer>,
     pub event_list_inputs: Vec<Pin<Box<EventListInput>>>,
     pub event_list_outputs: Vec<Pin<Box<EventListOutput>>>,
 }
@@ -20,10 +23,10 @@ impl Default for ProcessContext {
             steady_time: 0,
             play_p: false,
             play_position: 0..0,
-            channels: 2,
+            nchannels: 2,
             nframes: 512,
-            buffer: vec![],
             track_index: 0,
+            buffers: vec![],
             event_list_inputs: vec![],
             event_list_outputs: vec![],
         }
@@ -31,6 +34,16 @@ impl Default for ProcessContext {
 }
 
 impl ProcessContext {
+    pub fn add_track(&mut self) {
+        self.buffers.push(AudioBuffer::new());
+        self.event_list_inputs.push(EventListInput::new());
+        self.event_list_outputs.push(EventListOutput::new());
+    }
+
+    pub fn buffer(&mut self) -> &mut AudioBuffer {
+        &mut self.buffers[self.track_index]
+    }
+
     pub fn clear_event_lists(&mut self) {
         for event_list in self.event_list_inputs.iter_mut() {
             event_list.clear();
@@ -41,12 +54,8 @@ impl ProcessContext {
     }
 
     pub fn ensure_buffer(&mut self) {
-        if self.buffer.len() < self.channels || self.buffer[0].len() < self.nframes {
-            //log::debug!("realloc AudioProcess buffer {}", frames_count);
-            self.buffer.clear();
-            for _ in 0..self.channels {
-                self.buffer.push(vec![0.0; self.nframes]);
-            }
+        for buffer in self.buffers.iter_mut() {
+            buffer.ensure_buffer(self.nchannels, self.nframes);
         }
     }
 

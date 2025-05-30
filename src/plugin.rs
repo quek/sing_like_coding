@@ -447,7 +447,7 @@ impl Plugin {
         let mut audio_inputs = [audio_input];
 
         let mut out_buffer = vec![];
-        for channel in process_context.buffer.iter_mut() {
+        for channel in process_context.buffer().buffer.iter_mut() {
             out_buffer.push(channel.as_mut_ptr());
         }
 

@@ -1,4 +1,5 @@
 pub mod app;
+mod audio_buffer;
 mod device;
 mod event_list;
 mod model;
