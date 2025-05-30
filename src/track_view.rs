@@ -118,7 +118,7 @@ impl TrackView {
         if ui.button("Load Surge XT").clicked() {
             let path =
                 "c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap".to_string();
-            let track_index = 0;
+            let track_index = self.song.tracks.len() - 1;
             self.view_sender
                 .send(ViewCommand::PluginLoad(track_index, path))
                 .unwrap();
@@ -126,7 +126,7 @@ impl TrackView {
 
         if ui.button("Load VCV Rack 2").clicked() {
             let path = "c:/Program Files/Common Files/CLAP/VCV Rack 2.clap".to_string();
-            let track_index = 0;
+            let track_index = self.song.tracks.len() - 1;
             self.view_sender
                 .send(ViewCommand::PluginLoad(track_index, path))
                 .unwrap();
@@ -134,7 +134,7 @@ impl TrackView {
 
         if ui.button("Load TyrellN6").clicked() {
             let path = "c:/Program Files/Common Files/CLAP/u-he/TyrellN6.clap".to_string();
-            let track_index = 0;
+            let track_index = self.song.tracks.len() - 1;
             self.view_sender
                 .send(ViewCommand::PluginLoad(track_index, path))
                 .unwrap();
@@ -142,7 +142,7 @@ impl TrackView {
 
         if ui.button("Load Zebralette3").clicked() {
             let path = "c:/Program Files/Common Files/CLAP/u-he/Zebralette3.clap".to_string();
-            let track_index = 0;
+            let track_index = self.song.tracks.len() - 1;
             self.view_sender
                 .send(ViewCommand::PluginLoad(track_index, path))
                 .unwrap();
@@ -153,7 +153,8 @@ impl TrackView {
             log::debug!("Open before lock");
             let mut singer = singer.lock().unwrap();
             log::debug!("Open after lock");
-            let plugin = &mut singer.plugins[0][0];
+            let track_index = self.song.tracks.len() - 1;
+            let plugin = &mut singer.plugins[track_index][0];
             log::debug!("Open plugin");
             plugin.gui_open().unwrap();
             log::debug!("did gui_open");

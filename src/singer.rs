@@ -112,8 +112,10 @@ impl Singer {
         self.process_context.play_p = self.song.play_p;
         self.process_context.play_position = self.song.play_position.clone();
 
-        self.process_context.track_index = 0;
-        self.process_track()?;
+        for track_index in 0..self.song.tracks.len() {
+            self.process_context.track_index = track_index;
+            self.process_track()?;
+        }
 
         for channel in 0..channels {
             for frame in 0..self.process_context.nframes {
