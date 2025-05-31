@@ -462,7 +462,7 @@ impl Plugin {
         };
         let mut audio_outputs = [audio_output];
 
-        let transport = if context.song.play_p {
+        let transport = if context.play_p {
             Some(clap_event_transport {
                 header: clap_event_header {
                     size: size_of::<clap_event_transport>() as u32,
@@ -474,7 +474,7 @@ impl Plugin {
                 flags: CLAP_TRANSPORT_HAS_TEMPO | CLAP_TRANSPORT_IS_PLAYING,
                 song_pos_beats: 0,
                 song_pos_seconds: 0,
-                tempo: context.song.bpm,
+                tempo: context.bpm,
                 tempo_inc: 0.0,
                 loop_start_beats: 0,
                 loop_end_beats: 0,

@@ -1,58 +1,29 @@
-use std::{ffi::c_void, ops::Range, pin::Pin};
+use std::{ffi::c_void, ops::Range};
 
-use crate::{
-    audio_buffer::AudioBuffer,
-    model::{Song, Track},
-    plugin::Plugin,
-    process_context::Event,
-};
+use crate::{audio_buffer::AudioBuffer, process_context::Event};
 
 #[derive(Debug)]
 pub struct PluginPtr(pub *mut c_void);
 unsafe impl Send for PluginPtr {}
 unsafe impl Sync for PluginPtr {}
 
-pub struct ProcessTrackContext<'a> {
-    pub song: &'a Song,
-    pub track: &'a Track,
+#[derive(Default)]
+pub struct ProcessTrackContext {
     #[allow(dead_code)]
     pub nchannels: usize,
     pub nframes: usize,
     pub buffer: AudioBuffer,
+    pub play_p: bool,
+    pub bpm: f64,
     pub steady_time: i64,
-    pub play_position: &'a Range<i64>,
-    pub on_key: &'a mut Option<i16>,
-    pub event_list_input: &'a mut Vec<Event>,
+    pub play_position: Range<i64>,
+    pub on_key: Option<i16>,
+    pub event_list_input: Vec<Event>,
     pub plugins: Vec<PluginPtr>,
 }
 
-impl<'a> ProcessTrackContext<'a> {
-    pub fn new(
-        song: &'a Song,
-        nchannels: usize,
-        nframes: usize,
-        steady_time: i64,
-        track: &'a Track,
-        on_key: &'a mut Option<i16>,
-        event_list_input: &'a mut Vec<Event>,
-        plugins: &'a mut Vec<Pin<Box<Plugin>>>,
-    ) -> Self {
-        let mut buffer = AudioBuffer::new();
-        buffer.ensure_buffer(nchannels, nframes);
-        Self {
-            song,
-            track,
-            nchannels,
-            nframes,
-            buffer,
-            steady_time,
-            play_position: &song.play_position,
-            on_key,
-            event_list_input,
-            plugins: plugins
-                .iter_mut()
-                .map(|x| PluginPtr(x.as_mut().get_mut() as *mut _ as *mut c_void))
-                .collect::<Vec<_>>(),
-        }
+impl ProcessTrackContext {
+    pub fn ensure_buffer(&mut self) {
+        self.buffer.ensure_buffer(self.nchannels, self.nframes);
     }
 }

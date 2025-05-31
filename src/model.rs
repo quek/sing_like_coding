@@ -70,13 +70,13 @@ impl Track {
             let time = note.line * 0x100 + note.delay as usize;
             if context.play_position.contains(&(time as i64)) {
                 if let Some(key) = context.on_key {
-                    context.event_list_input.push(NoteOff(*key));
+                    context.event_list_input.push(NoteOff(key));
                 }
                 // TODO time
                 context
                     .event_list_input
                     .push(NoteOn(note.key, note.velocity));
-                *context.on_key = Some(note.key);
+                context.on_key = Some(note.key);
             }
         }
     }

@@ -1,3 +1,4 @@
+#[derive(Default)]
 pub struct AudioBuffer {
     pub buffer: Vec<Vec<f32>>,
     #[allow(dead_code)]

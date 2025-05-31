@@ -1,4 +1,5 @@
 use std::{
+    ffi::c_void,
     path::Path,
     pin::Pin,
     sync::{
@@ -9,13 +10,13 @@ use std::{
 };
 
 use crate::{
-    model::{self, note::Note, Song},
+    model::{self, note::Note, Song, Track},
     plugin::Plugin,
     process_context::{
         Event::{NoteOff, NoteOn},
         ProcessContext,
     },
-    process_track_context::ProcessTrackContext,
+    process_track_context::{PluginPtr, ProcessTrackContext},
     track_view::ViewCommand,
 };
 
@@ -50,6 +51,7 @@ pub struct Singer {
     line_play: usize,
     on_keys: Vec<Option<i16>>,
     process_context: ProcessContext,
+    process_track_context: Vec<ProcessTrackContext>,
 }
 
 unsafe impl Send for Singer {}
@@ -66,6 +68,7 @@ impl Singer {
             line_play: 0,
             on_keys: vec![],
             process_context: ProcessContext::default(),
+            process_track_context: vec![],
         };
         this.add_track();
         this
@@ -75,6 +78,9 @@ impl Singer {
         self.song.add_track();
         self.on_keys.push(None);
         self.process_context.add_track();
+        self.plugins.push(vec![]);
+        self.process_track_context
+            .push(ProcessTrackContext::default());
     }
 
     fn compute_play_position(&mut self, frames_count: usize) {
@@ -106,44 +112,49 @@ impl Singer {
         }
     }
 
-    pub fn process(&mut self, output: &mut [f32], channels: usize) -> Result<()> {
+    pub fn process(&mut self, output: &mut [f32], nchannels: usize) -> Result<()> {
         //log::debug!("AudioProcess process steady_time {}", self.steady_time);
-        self.process_context.nframes = output.len() / channels;
-        self.process_context.nchannels = channels;
+        let nframes = output.len() / nchannels;
+        self.process_context.nframes = nframes;
+        self.process_context.nchannels = nchannels;
         self.process_context.ensure_buffer();
 
-        self.compute_play_position(self.process_context.nframes);
+        self.compute_play_position(nframes);
 
         self.process_context.play_p = self.song.play_p;
         self.process_context.play_position = self.song.play_position.clone();
 
-        let mut process_track_contexts = vec![];
-        for (((track, on_key), event_list_input), plugins) in self
-            .song
-            .tracks
-            .iter()
-            .zip(self.on_keys.iter_mut())
-            .zip(self.process_context.event_list_inputs.iter_mut())
+        for (context, plugins) in self
+            .process_track_context
+            .iter_mut()
             .zip(self.plugins.iter_mut())
         {
-            process_track_contexts.push(ProcessTrackContext::new(
-                &self.song,
-                self.process_context.nchannels,
-                self.process_context.nframes,
-                self.process_context.steady_time,
-                track,
-                on_key,
-                event_list_input,
-                plugins,
-            ));
+            context.nchannels = nchannels;
+            context.nframes = nframes;
+            context.play_p = self.song.play_p;
+            context.bpm = self.song.bpm;
+            context.steady_time = self.process_context.steady_time;
+            context.play_position = self.song.play_position.clone();
+            context.plugins = plugins
+                .iter_mut()
+                .map(|x| PluginPtr(x.as_mut().get_mut() as *mut _ as *mut c_void))
+                .collect::<Vec<_>>();
+            context.ensure_buffer();
         }
-        let _ = process_track_contexts
-            .par_iter_mut()
-            .try_for_each(|process_track_context| process_track(process_track_context));
 
-        for channel in 0..channels {
+        let _ = self
+            .song
+            .tracks
+            .par_iter()
+            .zip(self.process_track_context.par_iter_mut())
+            .try_for_each(|(track, process_track_context)| {
+                process_track(track, process_track_context)
+            });
+
+        for channel in 0..nchannels {
             for frame in 0..self.process_context.nframes {
-                output[channels * frame + channel] = process_track_contexts
+                output[nchannels * frame + channel] = self
+                    .process_track_context
                     .iter()
                     .map(|x| x.buffer.buffer[channel][frame])
                     .sum();
@@ -241,9 +252,9 @@ impl Singer {
     }
 }
 
-fn process_track(context: &mut ProcessTrackContext) -> Result<()> {
-    context.track.compute_midi(context);
-    let module_len = context.track.modules.len();
+fn process_track(track: &Track, context: &mut ProcessTrackContext) -> Result<()> {
+    track.compute_midi(context);
+    let module_len = track.modules.len();
     for module_index in 0..module_len {
         process_module(context, module_index)?;
     }
