@@ -2,8 +2,8 @@ use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 
 use crate::device::Device;
-use crate::singer::Singer;
-use crate::track_view::{TrackView, ViewCommand};
+use crate::singer::{Singer, SingerMsg};
+use crate::track_view::TrackView;
 use eframe::egui;
 
 pub fn main() -> eframe::Result {
@@ -44,7 +44,7 @@ impl Default for MyApp {
         let mut device = Device::open_default().unwrap();
         device.start(singer.clone()).unwrap();
         let device = Some(device);
-        view_sender.send(ViewCommand::Song).unwrap();
+        view_sender.send(SingerMsg::Song).unwrap();
         let track_view = Arc::new(Mutex::new(TrackView::new(view_sender)));
         TrackView::start_listener(track_view.clone(), song_receiver);
 

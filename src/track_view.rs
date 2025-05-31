@@ -11,26 +11,21 @@ use eframe::egui::{Color32, TextEdit, Ui};
 
 use crate::{
     model::{note::note_name_to_midi, song::Song},
-    singer::{ClapPluginPtr, Singer, SongCommand, SongState},
+    singer::{ClapPluginPtr, Singer, SingerMsg, SongState},
 };
 
 #[derive(Debug)]
-pub enum ViewCommand {
+pub enum ViewMsg {
     #[allow(dead_code)]
-    Play,
-    #[allow(dead_code)]
-    Stop,
-    Song,
-    Note(usize, usize, i16),
-    NoteOn(usize, i16, i16, f64, u32),
-    NoteOff(usize, i16, i16, f64, u32),
-    PluginLoad(usize, String),
-    TrackAdd,
+    Track,
+    Song(Song),
+    State(SongState),
+    PluginCallback(ClapPluginPtr),
 }
 
 pub struct TrackView {
     line_buffers: Vec<Vec<String>>,
-    view_sender: Sender<ViewCommand>,
+    view_sender: Sender<SingerMsg>,
     gui_context: Option<eframe::egui::Context>,
     song_state: SongState,
     callback_plugins: Vec<ClapPluginPtr>,
@@ -38,7 +33,7 @@ pub struct TrackView {
 }
 
 impl TrackView {
-    pub fn new(view_sender: Sender<ViewCommand>) -> Self {
+    pub fn new(view_sender: Sender<SingerMsg>) -> Self {
         Self {
             line_buffers: vec![],
             view_sender,
@@ -49,13 +44,13 @@ impl TrackView {
         }
     }
 
-    pub fn start_listener(view: Arc<Mutex<Self>>, receiver: Receiver<SongCommand>) {
+    pub fn start_listener(view: Arc<Mutex<Self>>, receiver: Receiver<ViewMsg>) {
         log::debug!("TrackView::start_listener");
         thread::spawn(move || {
             while let Ok(command) = receiver.recv() {
                 match command {
-                    SongCommand::Track => (),
-                    SongCommand::Song(song) => {
+                    ViewMsg::Track => (),
+                    ViewMsg::Song(song) => {
                         let mut view = view.lock().unwrap();
                         view.line_buffers.clear();
                         for track in song.tracks.iter() {
@@ -74,12 +69,12 @@ impl TrackView {
                         view.song = song;
                         view.gui_context.as_ref().map(|x| x.request_repaint());
                     }
-                    SongCommand::State(song_state) => {
+                    ViewMsg::State(song_state) => {
                         let mut view = view.lock().unwrap();
                         view.song_state = song_state;
                         view.gui_context.as_ref().map(|x| x.request_repaint());
                     }
-                    SongCommand::PluginCallback(plugin) => {
+                    ViewMsg::PluginCallback(plugin) => {
                         let mut view = view.lock().unwrap();
                         view.callback_plugins.push(plugin);
                         view.gui_context.as_ref().map(|x| x.request_repaint());
@@ -109,10 +104,10 @@ impl TrackView {
 
         ui.label(format!("line {}", self.song_state.line_play));
         if ui.button("Play").clicked() {
-            self.view_sender.send(ViewCommand::Play).unwrap();
+            self.view_sender.send(SingerMsg::Play).unwrap();
         }
         if ui.button("Stop").clicked() {
-            self.view_sender.send(ViewCommand::Stop).unwrap();
+            self.view_sender.send(SingerMsg::Stop).unwrap();
         }
 
         if ui.button("Load Surge XT").clicked() {
@@ -120,7 +115,7 @@ impl TrackView {
                 "c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap".to_string();
             let track_index = self.song.tracks.len() - 1;
             self.view_sender
-                .send(ViewCommand::PluginLoad(track_index, path))
+                .send(SingerMsg::PluginLoad(track_index, path))
                 .unwrap();
         }
 
@@ -128,7 +123,7 @@ impl TrackView {
             let path = "c:/Program Files/Common Files/CLAP/VCV Rack 2.clap".to_string();
             let track_index = self.song.tracks.len() - 1;
             self.view_sender
-                .send(ViewCommand::PluginLoad(track_index, path))
+                .send(SingerMsg::PluginLoad(track_index, path))
                 .unwrap();
         }
 
@@ -136,7 +131,7 @@ impl TrackView {
             let path = "c:/Program Files/Common Files/CLAP/u-he/TyrellN6.clap".to_string();
             let track_index = self.song.tracks.len() - 1;
             self.view_sender
-                .send(ViewCommand::PluginLoad(track_index, path))
+                .send(SingerMsg::PluginLoad(track_index, path))
                 .unwrap();
         }
 
@@ -144,7 +139,7 @@ impl TrackView {
             let path = "c:/Program Files/Common Files/CLAP/u-he/Zebralette3.clap".to_string();
             let track_index = self.song.tracks.len() - 1;
             self.view_sender
-                .send(ViewCommand::PluginLoad(track_index, path))
+                .send(SingerMsg::PluginLoad(track_index, path))
                 .unwrap();
         }
 
@@ -169,13 +164,7 @@ impl TrackView {
             let velocity = 100.0;
             let time = 0;
             self.view_sender
-                .send(ViewCommand::NoteOn(
-                    track_index,
-                    key,
-                    channel,
-                    velocity,
-                    time,
-                ))
+                .send(SingerMsg::NoteOn(track_index, key, channel, velocity, time))
                 .unwrap();
         }
 
@@ -186,7 +175,7 @@ impl TrackView {
             let velocity = 0.0;
             let time = 0;
             self.view_sender
-                .send(ViewCommand::NoteOff(
+                .send(SingerMsg::NoteOff(
                     track_index,
                     key,
                     channel,
@@ -199,7 +188,7 @@ impl TrackView {
         ui.separator();
 
         if ui.button("Add Track").clicked() {
-            self.view_sender.send(ViewCommand::TrackAdd)?;
+            self.view_sender.send(SingerMsg::TrackAdd)?;
         }
 
         let nlines = self.song.tracks.first().map(|x| x.nlines).unwrap_or(0);
@@ -230,7 +219,7 @@ impl TrackView {
                         if ui.add(text_edit).changed() {
                             note_name_to_midi(&line_buffer[line]).map(|key| {
                                 self.view_sender
-                                    .send(ViewCommand::Note(track_index, line, key))
+                                    .send(SingerMsg::Note(track_index, line, key))
                                     .unwrap();
                             });
                         }

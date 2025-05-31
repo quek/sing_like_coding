@@ -39,11 +39,10 @@ use clap_sys::{
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
 
-use crate::{event::Event, singer::ClapPluginPtr};
+use crate::{event::Event, singer::ClapPluginPtr, track_view::ViewMsg};
 use crate::{
     event_list::{EventListInput, EventListOutput},
     process_track_context::ProcessTrackContext,
-    singer::SongCommand,
 };
 
 mod window;
@@ -56,7 +55,7 @@ pub struct Plugin {
     gui_open_p: bool,
     window_handler: Option<*mut c_void>,
     process_start_p: bool,
-    sender_to_view: Sender<SongCommand>,
+    sender_to_view: Sender<ViewMsg>,
     event_list_input: Pin<Box<EventListInput>>,
     event_list_output: Pin<Box<EventListOutput>>,
     host_audio_ports: clap_host_audio_ports,
@@ -78,7 +77,7 @@ pub const URL: &CStr = cstr!("https://github.com/quek/sawavi");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
 impl Plugin {
-    pub fn new(sender_to_view: Sender<SongCommand>) -> Pin<Box<Self>> {
+    pub fn new(sender_to_view: Sender<ViewMsg>) -> Pin<Box<Self>> {
         let clap_host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: null_mut::<c_void>(),
@@ -223,7 +222,7 @@ impl Plugin {
         let this = unsafe { &mut *((*host).host_data as *mut Self) };
         let plugin = this.plugin.unwrap();
         this.sender_to_view
-            .send(SongCommand::PluginCallback(ClapPluginPtr(plugin)))
+            .send(ViewMsg::PluginCallback(ClapPluginPtr(plugin)))
             .unwrap();
     }
 

@@ -14,7 +14,7 @@ use crate::{
     model::{module::Module, note::Note, song::Song},
     plugin::Plugin,
     process_track_context::{PluginPtr, ProcessTrackContext},
-    track_view::ViewCommand,
+    track_view::ViewMsg,
 };
 
 use anyhow::Result;
@@ -27,12 +27,17 @@ unsafe impl Send for ClapPluginPtr {}
 unsafe impl Sync for ClapPluginPtr {}
 
 #[derive(Debug)]
-pub enum SongCommand {
+pub enum SingerMsg {
     #[allow(dead_code)]
-    Track,
-    Song(Song),
-    State(SongState),
-    PluginCallback(ClapPluginPtr),
+    Play,
+    #[allow(dead_code)]
+    Stop,
+    Song,
+    Note(usize, usize, i16),
+    NoteOn(usize, i16, i16, f64, u32),
+    NoteOff(usize, i16, i16, f64, u32),
+    PluginLoad(usize, String),
+    TrackAdd,
 }
 
 #[derive(Debug, Default)]
@@ -43,7 +48,7 @@ pub struct SongState {
 pub struct Singer {
     pub steady_time: i64,
     pub song: Song,
-    song_sender: Sender<SongCommand>,
+    song_sender: Sender<ViewMsg>,
     pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
     pub gui_context: Option<eframe::egui::Context>,
     line_play: usize,
@@ -54,7 +59,7 @@ unsafe impl Send for Singer {}
 unsafe impl Sync for Singer {}
 
 impl Singer {
-    pub fn new(song_sender: Sender<SongCommand>) -> Self {
+    pub fn new(song_sender: Sender<ViewMsg>) -> Self {
         let song = Song::new();
         let mut this = Self {
             steady_time: 0,
@@ -82,7 +87,7 @@ impl Singer {
         let line = (self.song.play_position.start / 0x100) as usize;
         if self.line_play != line {
             self.song_sender
-                .send(SongCommand::State(SongState {
+                .send(ViewMsg::State(SongState {
                     line_play: self.line_play,
                 }))
                 .unwrap();
@@ -159,16 +164,16 @@ impl Singer {
         self.song.play_p = true;
     }
 
-    pub fn start_listener(singer: Arc<Mutex<Self>>, receiver: Receiver<ViewCommand>) {
+    pub fn start_listener(singer: Arc<Mutex<Self>>, receiver: Receiver<SingerMsg>) {
         log::debug!("Song::start_listener");
         thread::spawn(move || {
             while let Ok(msg) = receiver.recv() {
                 log::debug!("Song 受信 {:?}", msg);
                 match msg {
-                    ViewCommand::Play => singer.lock().unwrap().play(),
-                    ViewCommand::Stop => singer.lock().unwrap().stop(),
-                    ViewCommand::Song => singer.lock().unwrap().send_song(),
-                    ViewCommand::Note(track_index, line, key) => {
+                    SingerMsg::Play => singer.lock().unwrap().play(),
+                    SingerMsg::Stop => singer.lock().unwrap().stop(),
+                    SingerMsg::Song => singer.lock().unwrap().send_song(),
+                    SingerMsg::Note(track_index, line, key) => {
                         log::debug!("ViewCommand::Note({line}, {key})");
                         let mut singer = singer.lock().unwrap();
                         let song = &mut singer.song;
@@ -187,7 +192,7 @@ impl Singer {
                             singer.send_song();
                         }
                     }
-                    ViewCommand::PluginLoad(track_index, path) => {
+                    SingerMsg::PluginLoad(track_index, path) => {
                         let mut singer = singer.lock().unwrap();
                         let mut plugin = Plugin::new(singer.song_sender.clone());
                         plugin.load(Path::new(&path));
@@ -203,19 +208,19 @@ impl Singer {
                         }
                         singer.plugins[track_index].push(plugin);
                     }
-                    ViewCommand::NoteOn(track_index, key, _channel, velocity, _time) => {
+                    SingerMsg::NoteOn(track_index, key, _channel, velocity, _time) => {
                         let mut singer = singer.lock().unwrap();
                         singer.process_track_contexts[track_index]
                             .event_list_input
                             .push(Event::NoteOn(key, velocity));
                     }
-                    ViewCommand::NoteOff(track_index, key, _channel, _velocity, _time) => {
+                    SingerMsg::NoteOff(track_index, key, _channel, _velocity, _time) => {
                         let mut singer = singer.lock().unwrap();
                         singer.process_track_contexts[track_index]
                             .event_list_input
                             .push(Event::NoteOff(key));
                     }
-                    ViewCommand::TrackAdd => {
+                    SingerMsg::TrackAdd => {
                         let mut singer = singer.lock().unwrap();
                         singer.add_track();
                         singer.send_song();
@@ -227,7 +232,7 @@ impl Singer {
 
     fn send_song(&self) {
         self.song_sender
-            .send(SongCommand::Song(self.song.clone()))
+            .send(ViewMsg::Song(self.song.clone()))
             .unwrap();
     }
 
