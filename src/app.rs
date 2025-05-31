@@ -12,7 +12,7 @@ pub fn main() -> eframe::Result {
         ..Default::default()
     };
     let result = eframe::run_native(
-        "Sawavi",
+        "Sing Like Coding",
         options,
         Box::new(|cc| {
             // This gives us image support:
@@ -66,9 +66,9 @@ impl eframe::App for MyApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("TODO Song Title?");
+            ui.heading("Sing Like Coding");
 
-            // ui.image(egui::include_image!(
+            // Ui.image(egui::include_image!(
             //     "../../../crates/egui/assets/ferris.png"
             // ));
 
