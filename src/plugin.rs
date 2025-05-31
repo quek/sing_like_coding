@@ -493,12 +493,16 @@ impl Plugin {
             let channel = 0;
             let time = 0;
             match event {
-                crate::process_context::Event::NoteOn(key, velocity) => self
-                    .event_list_input
-                    .note_on(*key, channel, *velocity, time),
-
+                crate::process_context::Event::NoteOn(key, velocity) => {
+                    if let Some(key) = context.on_key {
+                        self.event_list_input.note_off(key, channel, 0.0, time)
+                    }
+                    self.event_list_input
+                        .note_on(*key, channel, *velocity, time);
+                    context.on_key = Some(*key);
+                }
                 crate::process_context::Event::NoteOff(key) => {
-                    self.event_list_input.note_on(*key, channel, 0.0, time)
+                    self.event_list_input.note_off(*key, channel, 0.0, time);
                 }
             }
         }

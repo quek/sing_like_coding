@@ -49,7 +49,6 @@ pub struct Singer {
     pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
     pub gui_context: Option<eframe::egui::Context>,
     line_play: usize,
-    on_keys: Vec<Option<i16>>,
     process_context: ProcessContext,
     process_track_context: Vec<ProcessTrackContext>,
 }
@@ -66,7 +65,6 @@ impl Singer {
             plugins: Default::default(),
             gui_context: None,
             line_play: 0,
-            on_keys: vec![],
             process_context: ProcessContext::default(),
             process_track_context: vec![],
         };
@@ -76,7 +74,6 @@ impl Singer {
 
     fn add_track(&mut self) {
         self.song.add_track();
-        self.on_keys.push(None);
         self.process_context.add_track();
         self.plugins.push(vec![]);
         self.process_track_context
@@ -139,7 +136,7 @@ impl Singer {
                 .iter_mut()
                 .map(|x| PluginPtr(x.as_mut().get_mut() as *mut _ as *mut c_void))
                 .collect::<Vec<_>>();
-            context.ensure_buffer();
+            context.prepare();
         }
 
         let _ = self

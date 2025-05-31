@@ -23,7 +23,8 @@ pub struct ProcessTrackContext {
 }
 
 impl ProcessTrackContext {
-    pub fn ensure_buffer(&mut self) {
+    pub fn prepare(&mut self) {
+        self.event_list_input.clear();
         self.buffer.ensure_buffer(self.nchannels, self.nframes);
     }
 }
