@@ -11,7 +11,7 @@ use std::{
 
 use crate::{
     event::Event,
-    model::{self, note::Note, Song, Track},
+    model::{module::Module, note::Note, song::Song},
     plugin::Plugin,
     process_track_context::{PluginPtr, ProcessTrackContext},
     track_view::ViewCommand,
@@ -42,7 +42,7 @@ pub struct SongState {
 
 pub struct Singer {
     pub steady_time: i64,
-    pub song: model::Song,
+    pub song: Song,
     song_sender: Sender<SongCommand>,
     pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
     pub gui_context: Option<eframe::egui::Context>,
@@ -55,7 +55,7 @@ unsafe impl Sync for Singer {}
 
 impl Singer {
     pub fn new(song_sender: Sender<SongCommand>) -> Self {
-        let song = model::Song::new();
+        let song = Song::new();
         let mut this = Self {
             steady_time: 0,
             song,
@@ -134,9 +134,7 @@ impl Singer {
             .tracks
             .par_iter()
             .zip(self.process_track_contexts.par_iter_mut())
-            .try_for_each(|(track, process_track_context)| {
-                process_track(track, process_track_context)
-            });
+            .try_for_each(|(track, process_track_context)| track.process(process_track_context));
 
         for channel in 0..nchannels {
             for frame in 0..nframes {
@@ -196,7 +194,7 @@ impl Singer {
                         plugin.start().unwrap();
                         singer.song.tracks[track_index]
                             .modules
-                            .push(model::Module::new(path));
+                            .push(Module::new(path));
                         loop {
                             if singer.plugins.len() > track_index {
                                 break;
@@ -240,20 +238,4 @@ impl Singer {
         }
         self.song.play_p = false;
     }
-}
-
-fn process_track(track: &Track, context: &mut ProcessTrackContext) -> Result<()> {
-    track.compute_midi(context);
-    let module_len = track.modules.len();
-    for module_index in 0..module_len {
-        process_module(context, module_index)?;
-    }
-
-    Ok(())
-}
-
-fn process_module(context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
-    let plugin = unsafe { &mut *(context.plugins[module_index].0 as *mut Plugin) };
-    plugin.process(context)?;
-    Ok(())
 }

@@ -10,7 +10,7 @@ use anyhow::Result;
 use eframe::egui::{Color32, TextEdit, Ui};
 
 use crate::{
-    model::{note::note_name_to_midi, Song},
+    model::{note::note_name_to_midi, song::Song},
     singer::{ClapPluginPtr, Singer, SongCommand, SongState},
 };
 
