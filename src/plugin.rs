@@ -575,5 +575,15 @@ impl Drop for Plugin {
             let plugin = unsafe { &*plugin };
             unsafe { plugin.destroy.unwrap()(plugin) };
         }
+
+        let entry: Symbol<*const clap_plugin_entry> = unsafe {
+            self.lib
+                .as_ref()
+                .unwrap()
+                .get(b"clap_entry\0")
+                .expect("Missing symbol")
+        };
+        let entry = unsafe { &**entry };
+        unsafe { entry.deinit.unwrap()() };
     }
 }

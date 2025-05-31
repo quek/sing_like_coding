@@ -1,5 +1,6 @@
 pub mod app;
 mod audio_buffer;
+mod clap_manager;
 mod device;
 mod event;
 mod event_list;
