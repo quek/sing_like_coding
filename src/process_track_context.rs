@@ -1,6 +1,6 @@
 use std::{ffi::c_void, ops::Range};
 
-use crate::{audio_buffer::AudioBuffer, process_context::Event};
+use crate::{audio_buffer::AudioBuffer, event::Event};
 
 #[derive(Debug)]
 pub struct PluginPtr(pub *mut c_void);

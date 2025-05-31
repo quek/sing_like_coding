@@ -10,12 +10,9 @@ use std::{
 };
 
 use crate::{
+    event::Event,
     model::{self, note::Note, Song, Track},
     plugin::Plugin,
-    process_context::{
-        Event::{NoteOff, NoteOn},
-        ProcessContext,
-    },
     process_track_context::{PluginPtr, ProcessTrackContext},
     track_view::ViewCommand,
 };
@@ -44,13 +41,13 @@ pub struct SongState {
 }
 
 pub struct Singer {
+    pub steady_time: i64,
     pub song: model::Song,
     song_sender: Sender<SongCommand>,
     pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
     pub gui_context: Option<eframe::egui::Context>,
     line_play: usize,
-    process_context: ProcessContext,
-    process_track_context: Vec<ProcessTrackContext>,
+    process_track_contexts: Vec<ProcessTrackContext>,
 }
 
 unsafe impl Send for Singer {}
@@ -60,13 +57,13 @@ impl Singer {
     pub fn new(song_sender: Sender<SongCommand>) -> Self {
         let song = model::Song::new();
         let mut this = Self {
+            steady_time: 0,
             song,
             song_sender,
             plugins: Default::default(),
             gui_context: None,
             line_play: 0,
-            process_context: ProcessContext::default(),
-            process_track_context: vec![],
+            process_track_contexts: vec![],
         };
         this.add_track();
         this
@@ -74,9 +71,8 @@ impl Singer {
 
     fn add_track(&mut self) {
         self.song.add_track();
-        self.process_context.add_track();
         self.plugins.push(vec![]);
-        self.process_track_context
+        self.process_track_contexts
             .push(ProcessTrackContext::default());
     }
 
@@ -112,17 +108,11 @@ impl Singer {
     pub fn process(&mut self, output: &mut [f32], nchannels: usize) -> Result<()> {
         //log::debug!("AudioProcess process steady_time {}", self.steady_time);
         let nframes = output.len() / nchannels;
-        self.process_context.nframes = nframes;
-        self.process_context.nchannels = nchannels;
-        self.process_context.ensure_buffer();
 
         self.compute_play_position(nframes);
 
-        self.process_context.play_p = self.song.play_p;
-        self.process_context.play_position = self.song.play_position.clone();
-
         for (context, plugins) in self
-            .process_track_context
+            .process_track_contexts
             .iter_mut()
             .zip(self.plugins.iter_mut())
         {
@@ -130,7 +120,7 @@ impl Singer {
             context.nframes = nframes;
             context.play_p = self.song.play_p;
             context.bpm = self.song.bpm;
-            context.steady_time = self.process_context.steady_time;
+            context.steady_time = self.steady_time;
             context.play_position = self.song.play_position.clone();
             context.plugins = plugins
                 .iter_mut()
@@ -143,22 +133,22 @@ impl Singer {
             .song
             .tracks
             .par_iter()
-            .zip(self.process_track_context.par_iter_mut())
+            .zip(self.process_track_contexts.par_iter_mut())
             .try_for_each(|(track, process_track_context)| {
                 process_track(track, process_track_context)
             });
 
         for channel in 0..nchannels {
-            for frame in 0..self.process_context.nframes {
+            for frame in 0..nframes {
                 output[nchannels * frame + channel] = self
-                    .process_track_context
+                    .process_track_contexts
                     .iter()
                     .map(|x| x.buffer.buffer[channel][frame])
                     .sum();
             }
         }
-        self.process_context.clear_event_lists();
-        self.process_context.steady_time += self.process_context.nframes as i64;
+
+        self.steady_time += nframes as i64;
 
         Ok(())
     }
@@ -217,12 +207,15 @@ impl Singer {
                     }
                     ViewCommand::NoteOn(track_index, key, _channel, velocity, _time) => {
                         let mut singer = singer.lock().unwrap();
-                        singer.process_context.event_list_inputs[track_index]
-                            .push(NoteOn(key, velocity));
+                        singer.process_track_contexts[track_index]
+                            .event_list_input
+                            .push(Event::NoteOn(key, velocity));
                     }
                     ViewCommand::NoteOff(track_index, key, _channel, _velocity, _time) => {
                         let mut singer = singer.lock().unwrap();
-                        singer.process_context.event_list_inputs[track_index].push(NoteOff(key));
+                        singer.process_track_contexts[track_index]
+                            .event_list_input
+                            .push(Event::NoteOff(key));
                     }
                     ViewCommand::TrackAdd => {
                         let mut singer = singer.lock().unwrap();
