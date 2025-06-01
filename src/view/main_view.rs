@@ -16,7 +16,7 @@ use crate::{
     singer::{ClapPluginPtr, Singer, SingerMsg, SongState},
 };
 
-use super::view_state::ViewState;
+use super::{command_view::CommandView, view_state::ViewState};
 
 #[derive(Debug)]
 pub enum ViewMsg {
@@ -24,6 +24,11 @@ pub enum ViewMsg {
     Song(Song),
     State(SongState),
     PluginCallback(ClapPluginPtr),
+}
+
+pub enum Route {
+    Main,
+    Command,
 }
 
 pub struct MainView {
@@ -35,6 +40,7 @@ pub struct MainView {
     song: Song,
     state: ViewState,
     clap_manager: ClapManager,
+    command_view: CommandView,
 }
 
 impl MainView {
@@ -49,6 +55,7 @@ impl MainView {
             song: Song::new(),
             state: ViewState::new(),
             clap_manager,
+            command_view: CommandView::new(),
         }
     }
 
@@ -110,6 +117,19 @@ impl MainView {
         }
         self.process_shortcut(gui_context)?;
 
+        match &self.state.route {
+            Route::Main => self.view_main(gui_context, device, singer)?,
+            Route::Command => self.command_view.view(gui_context, &mut self.state)?,
+        }
+        Ok(())
+    }
+
+    fn view_main(
+        &mut self,
+        gui_context: &eframe::egui::Context,
+        device: &mut Option<Device>,
+        singer: &Arc<Mutex<Singer>>,
+    ) -> Result<()> {
         TopBottomPanel::top("Top").show(gui_context, |ui| {
             ui.heading("Sing Like Coding");
         });
@@ -324,13 +344,16 @@ impl MainView {
             return Ok(());
         }
 
-        if input.key_pressed(Key::Space) {
+        if input.modifiers.ctrl && input.key_pressed(eframe::egui::Key::Space) {
+            self.state.route = Route::Command;
+        } else if input.key_pressed(Key::Space) {
             self.view_sender.send(if self.song_state.play_p {
                 SingerMsg::Stop
             } else {
                 SingerMsg::Play
             })?;
         }
+
         Ok(())
     }
 }

@@ -1,2 +1,3 @@
+mod command_view;
 pub mod main_view;
-pub mod view_state;
+mod view_state;
