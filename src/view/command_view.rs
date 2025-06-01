@@ -34,10 +34,8 @@ impl CommandView {
             let response = ui.add(edit);
             if response.changed() || (self.focus_p && !self.buffer.is_empty()) {
                 self.commands = self.commander.query(&self.buffer);
-                log::debug!("a commands.len {}", self.commands.len());
             }
             if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                log::debug!("enter");
                 self.commands[0].lock().unwrap().call()?;
                 self.close(state);
                 return Ok(());
@@ -52,7 +50,7 @@ impl CommandView {
                 let mut command = command.lock().unwrap();
                 let button = Button::new(command.name()).wrap_mode(egui::TextWrapMode::Extend);
                 if ui.add(button).clicked() {
-                    command.call().unwrap();
+                    command.call()?;
                     called = true;
                 }
             }
@@ -69,6 +67,7 @@ impl CommandView {
 
             Ok(())
         });
+
         Ok(())
     }
 
