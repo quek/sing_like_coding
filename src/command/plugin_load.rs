@@ -6,7 +6,6 @@ pub struct PluginLoad {}
 
 impl Command for PluginLoad {
     fn call(&mut self, state: &mut ViewState) -> anyhow::Result<()> {
-        dbg!("state.route = Route::PluginSelect;");
         state.route = Route::PluginSelect;
         Ok(())
     }
