@@ -1,11 +1,15 @@
 use anyhow::Result;
-use eframe::egui::{CentralPanel, Ui};
+use eframe::egui::{CentralPanel, Key, TextEdit, Ui};
+
+use crate::{command::Command, commander::Commander};
 
 use super::{main_view::Route, view_state::ViewState};
 
 pub struct CommandView {
     focus_p: bool,
     buffer: String,
+    commander: Commander,
+    commands: Vec<Box<dyn Command>>,
 }
 
 impl CommandView {
@@ -13,6 +17,8 @@ impl CommandView {
         Self {
             focus_p: true,
             buffer: "".to_string(),
+            commander: Commander::new(),
+            commands: vec![],
         }
     }
 
@@ -21,20 +27,31 @@ impl CommandView {
         gui_context: &eframe::egui::Context,
         state: &mut ViewState,
     ) -> Result<()> {
-        CentralPanel::default().show(gui_context, |ui: &mut Ui| {
-            let edit = ui.text_edit_singleline(&mut self.buffer);
-            if edit.changed() {
-                dbg!(&self.buffer);
+        CentralPanel::default().show(gui_context, |ui: &mut Ui| -> Result<()> {
+            let edit = TextEdit::singleline(&mut self.buffer);
+            let response = ui.add(edit);
+            if response.changed() {
+                self.commands = self.commander.query(&self.buffer);
+                log::debug!("a commands.len {}", self.commands.len());
+            }
+            if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                log::debug!("b commands.len {}", self.commands.len());
+                if self.commands.len() == 1 {
+                    log::debug!("enter");
+                    self.commands[0].call()?;
+                }
             }
             if self.focus_p {
                 self.focus_p = false;
-                gui_context.memory_mut(|x| x.request_focus(edit.id));
+                gui_context.memory_mut(|x| x.request_focus(response.id));
             }
 
             if ui.button("Cancel").clicked() {
                 self.focus_p = true;
                 state.route = Route::Main;
             }
+
+            Ok(())
         });
         Ok(())
     }
