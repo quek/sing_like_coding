@@ -219,15 +219,16 @@ impl TrackView {
                                 ui.label(&track.name);
                             });
                         for line in 0..nlines {
-                            let color = if state.cursor_position == (track_index, line) {
-                                Color32::YELLOW
-                            } else if state.selected_cells.contains(&(track_index, line)) {
-                                Color32::LIGHT_BLUE
-                            } else if line == song_state.line_play % 0x0f {
-                                Color32::GREEN
-                            } else {
-                                Color32::BLACK
-                            };
+                            let color =
+                                if state.cursor_track == track_index && state.cursor_line == line {
+                                    Color32::YELLOW
+                                } else if state.selected_cells.contains(&(track_index, line)) {
+                                    Color32::LIGHT_BLUE
+                                } else if line == song_state.line_play % 0x0f {
+                                    Color32::GREEN
+                                } else {
+                                    Color32::BLACK
+                                };
                             Frame::NONE.fill(color).show(ui, |ui| {
                                 let mut text = line_buffer[line].as_str();
                                 if text.is_empty() {
@@ -235,23 +236,6 @@ impl TrackView {
                                 }
                                 ui.label(text);
                             });
-                        }
-                        for line in 0..nlines {
-                            let text_edit = TextEdit::singleline(&mut line_buffer[line]);
-                            let text_edit = text_edit.desired_width(30.0);
-                            let text_edit = if line == song_state.line_play % 0x0f {
-                                text_edit.background_color(Color32::GREEN)
-                            } else {
-                                text_edit
-                            };
-                            if ui.add(text_edit).changed() {
-                                note_name_to_midi(&line_buffer[line]).map(|key| {
-                                    state
-                                        .view_sender
-                                        .send(SingerMsg::Note(track_index, line, key))
-                                        .unwrap();
-                                });
-                            }
                         }
                     });
                 }
@@ -274,33 +258,57 @@ impl TrackView {
             return Ok(());
         }
 
-        if input.modifiers.ctrl && input.key_pressed(eframe::egui::Key::Space) {
+        if input.modifiers.ctrl {
+            if input.key_pressed(Key::J) {
+                note_update(-1, state, song);
+            } else if input.key_pressed(Key::K) {
+                note_update(1, state, song);
+            } else if input.key_pressed(Key::H) {
+                note_update(-12, state, song);
+            } else if input.key_pressed(Key::L) {
+                note_update(12, state, song);
+            }
         } else if input.key_pressed(Key::J) {
-            if state.cursor_position.1 + 1 == song.nlines {
-                state.cursor_position.1 = 0;
+            if state.cursor_line + 1 == song.nlines {
+                state.cursor_line = 0;
             } else {
-                state.cursor_position.1 += 1;
+                state.cursor_line += 1;
             }
         } else if input.key_pressed(Key::K) {
-            if state.cursor_position.1 == 0 {
-                state.cursor_position.1 = song.nlines - 1;
+            if state.cursor_line == 0 {
+                state.cursor_line = song.nlines - 1;
             } else {
-                state.cursor_position.1 -= 1;
+                state.cursor_line -= 1;
             }
         } else if input.key_pressed(Key::H) {
-            if state.cursor_position.0 == 0 {
-                state.cursor_position.0 = song.tracks.len() - 1;
+            if state.cursor_track == 0 {
+                state.cursor_track = song.tracks.len() - 1;
             } else {
-                state.cursor_position.0 -= 1;
+                state.cursor_track -= 1;
             }
         } else if input.key_pressed(Key::L) {
-            if state.cursor_position.0 + 1 == song.tracks.len() {
-                state.cursor_position.0 = 0;
+            if state.cursor_track + 1 == song.tracks.len() {
+                state.cursor_track = 0;
             } else {
-                state.cursor_position.0 += 1;
+                state.cursor_track += 1;
             }
         }
 
         Ok(())
     }
+}
+
+fn note_update(key_delta: i16, state: &mut ViewState, song: &Song) {
+    let key = if let Some(note) = song.tracks[state.cursor_track].note(state.cursor_line) {
+        note.key + key_delta
+    } else {
+        state.key_last
+    }
+    .clamp(0, 127);
+
+    state
+        .view_sender
+        .send(SingerMsg::Note(state.cursor_track, state.cursor_line, key))
+        .unwrap();
+    state.key_last = key;
 }
