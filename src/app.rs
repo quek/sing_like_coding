@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::clap_manager::ClapManager;
 use crate::device::Device;
 use crate::singer::{Singer, SingerMsg};
-use crate::track_view::TrackView;
+use crate::view::main_view::MainView;
 use eframe::egui;
 
 pub fn main() -> eframe::Result {
@@ -28,7 +28,7 @@ pub fn main() -> eframe::Result {
 struct MyApp {
     device: Option<Device>,
     singer: Arc<Mutex<Singer>>,
-    track_view: Arc<Mutex<TrackView>>,
+    view: Arc<Mutex<MainView>>,
 }
 
 pub enum Msg {
@@ -46,13 +46,13 @@ impl Default for MyApp {
         device.start(singer.clone()).unwrap();
         let device = Some(device);
         view_sender.send(SingerMsg::Song).unwrap();
-        let track_view = Arc::new(Mutex::new(TrackView::new(view_sender)));
-        TrackView::start_listener(track_view.clone(), song_receiver);
+        let view = Arc::new(Mutex::new(MainView::new(view_sender)));
+        MainView::start_listener(view.clone(), song_receiver);
 
         Self {
             device,
             singer,
-            track_view,
+            view,
         }
     }
 }
@@ -94,7 +94,7 @@ impl eframe::App for MyApp {
 
             ui.separator();
 
-            self.track_view
+            self.view
                 .lock()
                 .unwrap()
                 .view(ui, ctx, &self.singer)

@@ -2,7 +2,7 @@ use std::{
     env::current_exe,
     ffi::{c_char, CStr, CString, OsStr},
     fs::{self, create_dir_all, metadata, File},
-    io::Write,
+    io::{BufReader, Write},
     path::{Path, PathBuf},
 };
 
@@ -21,7 +21,7 @@ pub struct Description {
     pub id: String,
     pub path: String,
     pub modified: u64,
-    pub index: usize,
+    pub index: u32,
     pub name: String,
     pub vender: String,
     pub version: String,
@@ -34,10 +34,19 @@ impl ClapManager {
         let exe_path = current_exe().unwrap();
         let dir = exe_path.parent().unwrap();
         let setting_path = dir.join("user/setting/claps.json");
-        Self {
+        let mut this = Self {
             setting_path,
             descriptions: vec![],
-        }
+        };
+        let _ = this.load();
+        this
+    }
+
+    pub fn load(&mut self) -> Result<()> {
+        let file = File::open(&self.setting_path)?;
+        let reader = BufReader::new(file);
+        self.descriptions = serde_json::from_reader(reader)?;
+        Ok(())
     }
 
     pub fn scan(&mut self) {
@@ -48,6 +57,7 @@ impl ClapManager {
                 let _ = self.scan_plugin_file(&path);
             }
         }
+        self.descriptions.sort_by_key(|x| x.name.clone());
         self.save();
     }
 
@@ -124,7 +134,7 @@ impl ClapManager {
                             .elapsed()
                             .unwrap()
                             .as_secs(),
-                        index: index as usize,
+                        index,
                         name: CStr::from_ptr(descriptor.name)
                             .to_string_lossy()
                             .to_string(),

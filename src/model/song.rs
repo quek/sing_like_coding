@@ -11,6 +11,7 @@ pub struct Song {
     pub lpb: u16,
     pub play_p: bool,
     pub play_position: Range<i64>,
+    pub nlines: usize,
     pub tracks: Vec<Track>,
 }
 
@@ -22,6 +23,7 @@ impl Song {
             lpb: 4,
             play_p: false,
             play_position: (0..0),
+            nlines: 16,
             tracks: vec![],
         }
     }

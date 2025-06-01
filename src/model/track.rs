@@ -10,7 +10,6 @@ use super::module::Module;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
     pub name: String,
-    pub nlines: usize,
     pub modules: Vec<Module>,
     pub notes: Vec<Note>,
 }
@@ -19,7 +18,6 @@ impl Track {
     pub fn new() -> Self {
         Self {
             name: "T01".to_string(),
-            nlines: 16,
             modules: vec![],
             notes: vec![],
         }

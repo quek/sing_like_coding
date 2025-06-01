@@ -39,7 +39,7 @@ use clap_sys::{
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
 
-use crate::{event::Event, singer::ClapPluginPtr, track_view::ViewMsg};
+use crate::{event::Event, singer::ClapPluginPtr, view::main_view::ViewMsg};
 use crate::{
     event_list::{EventListInput, EventListOutput},
     process_track_context::ProcessTrackContext,
@@ -266,7 +266,7 @@ impl Plugin {
         }
     }
 
-    pub fn load(&mut self, path: &Path) {
+    pub fn load(&mut self, path: &Path, index: u32) {
         unsafe {
             let lib = Library::new(path).expect("Failed to load plugin");
             self.lib = Some(lib);
@@ -296,8 +296,7 @@ impl Plugin {
             }
             let factory = &*factory_ptr;
 
-            // plugin ID を取得（index 0 のみ取得例）
-            let descriptor = factory.get_plugin_descriptor.unwrap()(factory, 0);
+            let descriptor = factory.get_plugin_descriptor.unwrap()(factory, index);
             if descriptor.is_null() {
                 panic!("No plugin descriptor");
             }

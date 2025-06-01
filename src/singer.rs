@@ -14,7 +14,7 @@ use crate::{
     model::{module::Module, note::Note, song::Song},
     plugin::Plugin,
     process_track_context::{PluginPtr, ProcessTrackContext},
-    track_view::ViewMsg,
+    view::main_view::ViewMsg,
 };
 
 use anyhow::Result;
@@ -36,7 +36,7 @@ pub enum SingerMsg {
     Note(usize, usize, i16),
     NoteOn(usize, i16, i16, f64, u32),
     NoteOff(usize, i16, i16, f64, u32),
-    PluginLoad(usize, String),
+    PluginLoad(usize, String, u32),
     TrackAdd,
 }
 
@@ -192,10 +192,10 @@ impl Singer {
                             singer.send_song();
                         }
                     }
-                    SingerMsg::PluginLoad(track_index, path) => {
+                    SingerMsg::PluginLoad(track_index, path, index) => {
                         let mut singer = singer.lock().unwrap();
                         let mut plugin = Plugin::new(singer.song_sender.clone());
-                        plugin.load(Path::new(&path));
+                        plugin.load(Path::new(&path), index);
                         plugin.start().unwrap();
                         singer.song.tracks[track_index]
                             .modules
