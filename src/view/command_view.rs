@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use eframe::egui::{self, Button, CentralPanel, Id, Key, TextEdit, Ui};
+use eframe::egui::{self, Button, CentralPanel, Key, TextEdit, Ui};
 
 use crate::{command::Command, commander::Commander};
 
@@ -47,29 +47,23 @@ impl CommandView {
                 gui_context.memory_mut(|x| x.request_focus(response.id));
             }
 
-            if !self.commands.is_empty() {
-                egui::Area::new(Id::new("autocomplete_popup"))
-                    .fixed_pos(response.rect.left_bottom())
-                    .show(gui_context, |ui| {
-                        ui.group(|ui| {
-                            let mut called = false;
-                            for command in self.commands.iter() {
-                                let mut command = command.lock().unwrap();
-                                let button = Button::new(command.name())
-                                    .wrap_mode(egui::TextWrapMode::Extend);
-                                if ui.add(button).clicked() {
-                                    command.call().unwrap();
-                                    called = true;
-                                }
-                            }
-                            if called {
-                                self.close(state);
-                            }
-                        });
-                    });
+            let mut called = false;
+            for command in self.commands.iter() {
+                let mut command = command.lock().unwrap();
+                let button = Button::new(command.name()).wrap_mode(egui::TextWrapMode::Extend);
+                if ui.add(button).clicked() {
+                    command.call().unwrap();
+                    called = true;
+                }
+            }
+            if called {
+                self.close(state);
+                return Ok(());
             }
 
-            if ui.button("Cancel").clicked() {
+            ui.separator();
+
+            if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                 self.close(state);
             }
 
