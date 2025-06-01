@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use eframe::egui::{CentralPanel, Color32, ComboBox, Frame, Key, TopBottomPanel, Ui};
+use eframe::egui::{CentralPanel, Color32, Frame, Key, TopBottomPanel, Ui};
 
 use crate::{
     device::Device,
@@ -138,51 +138,6 @@ impl TrackView {
 
             ui.separator();
 
-            {
-                ComboBox::from_id_salt((0, "plugin"))
-                    .selected_text(
-                        state
-                            .clap_manager
-                            .descriptions
-                            .iter()
-                            .find(|x| Some(&x.id) == state.plugin_selected.as_ref())
-                            .map(|x| x.name.clone())
-                            .unwrap_or("".to_string()),
-                    )
-                    .show_ui(ui, |ui| {
-                        for description in state.clap_manager.descriptions.iter() {
-                            ui.selectable_value(
-                                &mut state.plugin_selected,
-                                Some(description.id.clone()),
-                                &description.name,
-                            );
-                        }
-                    });
-
-                if state.song.tracks[0].modules.first().map_or(true, |module| {
-                    Some(&module.id) != state.plugin_selected.as_ref()
-                }) {
-                    if let Some(description) = state
-                        .clap_manager
-                        .descriptions
-                        .iter()
-                        .find(|x| Some(&x.id) == state.plugin_selected.as_ref())
-                    {
-                        log::debug!("plugin selected {:?}", state.plugin_selected);
-                        // TODO track_index
-                        let track_index = state.song.tracks.len() - 1;
-                        state
-                            .view_sender
-                            .send(SingerMsg::PluginLoad(
-                                track_index,
-                                description.path.clone(),
-                                description.index,
-                            ))
-                            .unwrap();
-                    }
-                }
-            }
-
             let nlines = state.song.nlines;
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
@@ -220,10 +175,10 @@ impl TrackView {
                             let color =
                                 if state.cursor_track == track_index && state.cursor_line == line {
                                     Color32::YELLOW
+                                } else if line == state.song_state.line_play % 0x0f {
+                                    Color32::DARK_GREEN
                                 } else if state.selected_cells.contains(&(track_index, line)) {
                                     Color32::LIGHT_BLUE
-                                } else if line == state.song_state.line_play % 0x0f {
-                                    Color32::GREEN
                                 } else {
                                     Color32::BLACK
                                 };

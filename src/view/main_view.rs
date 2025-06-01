@@ -36,23 +36,27 @@ pub enum Route {
 }
 
 pub struct MainView {
+    singer: Arc<Mutex<Singer>>,
     gui_context: Option<eframe::egui::Context>,
     callback_plugins: Vec<ClapPluginPtr>,
     state: ViewState,
     track_view: TrackView,
     command_view: CommandView,
     plugin_select_view: Option<QueryView<Description>>,
+    will_plugin_open: Option<(usize, usize)>,
 }
 
 impl MainView {
-    pub fn new(view_sender: Sender<SingerMsg>) -> Self {
+    pub fn new(view_sender: Sender<SingerMsg>, singer: Arc<Mutex<Singer>>) -> Self {
         Self {
+            singer,
             gui_context: None,
             callback_plugins: vec![],
             state: ViewState::new(view_sender),
             track_view: TrackView::new(),
             command_view: CommandView::new(),
             plugin_select_view: None,
+            will_plugin_open: None,
         }
     }
 
@@ -114,14 +118,14 @@ impl MainView {
         }
         self.process_shortcut(gui_context)?;
 
-        dbg!(&self.state.route);
+        self.do_plugin_open()?;
+
         match &self.state.route {
             Route::Track => self
                 .track_view
                 .view(gui_context, &mut self.state, device, singer)?,
             Route::Command => self.command_view.view(gui_context, &mut self.state)?,
             Route::PluginSelect => {
-                dbg!("Route::PluginSelect");
                 if self.plugin_select_view.is_none() {
                     let xs = self
                         .state
@@ -147,12 +151,35 @@ impl MainView {
                             .view_sender
                             .send(SingerMsg::PluginLoad(*track_index, path.clone(), index))
                             .unwrap();
+                        let singer = singer.lock().unwrap();
+                        self.will_plugin_open =
+                            Some((*track_index, singer.plugins[*track_index].len()));
                     }
 
                     self.plugin_select_view = None;
                     self.state.route = Route::Track;
                 }
             }
+        }
+        Ok(())
+    }
+
+    fn do_plugin_open(&mut self) -> Result<()> {
+        let mut opened = false;
+        if let Some((track_index, plugin_index)) = &self.will_plugin_open {
+            let mut singer = self.singer.lock().unwrap();
+            if let Some(plugin) = &mut singer
+                .plugins
+                .get_mut(*track_index)
+                .map(|x| x.get_mut(*plugin_index))
+                .flatten()
+            {
+                plugin.gui_open()?;
+                opened = true;
+            }
+        }
+        if opened {
+            self.will_plugin_open = None;
         }
         Ok(())
     }

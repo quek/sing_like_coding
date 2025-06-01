@@ -36,8 +36,9 @@ impl CommandView {
                 self.commands = self.commander.query(&self.buffer);
             }
             if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                state.route = Route::Track;
                 self.commands[0].lock().unwrap().call(state)?;
-                self.close(state);
+                self.close();
                 return Ok(());
             }
             if self.focus_p {
@@ -50,19 +51,20 @@ impl CommandView {
                 let mut command = command.lock().unwrap();
                 let button = Button::new(command.name()).wrap_mode(egui::TextWrapMode::Extend);
                 if ui.add(button).clicked() {
+                    state.route = Route::Track;
                     command.call(state)?;
                     called = true;
                 }
             }
             if called {
-                self.close(state);
+                self.close();
                 return Ok(());
             }
 
             ui.separator();
 
             if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
-                self.close(state);
+                self.close();
             }
 
             Ok(())
@@ -71,9 +73,8 @@ impl CommandView {
         Ok(())
     }
 
-    fn close(&mut self, state: &mut ViewState) {
+    fn close(&mut self) {
         self.focus_p = true;
         self.commands.clear();
-        state.route = Route::Track;
     }
 }

@@ -45,7 +45,7 @@ impl Default for MyApp {
         device.start(singer.clone()).unwrap();
         let device = Some(device);
         view_sender.send(SingerMsg::Song).unwrap();
-        let view = Arc::new(Mutex::new(MainView::new(view_sender)));
+        let view = Arc::new(Mutex::new(MainView::new(view_sender, singer.clone())));
         MainView::start_listener(view.clone(), song_receiver);
 
         Self {
