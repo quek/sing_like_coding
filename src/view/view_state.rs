@@ -12,18 +12,20 @@ pub struct ViewState {
     pub cursor_position: (usize, usize),
     pub selected_tracks: Vec<usize>,
     pub selected_cells: Vec<(usize, usize)>,
+    pub line_buffers: Vec<Vec<String>>,
 }
 
 impl ViewState {
     pub fn new(view_sender: Sender<SingerMsg>) -> Self {
         Self {
             view_sender,
-            route: Route::Main,
+            route: Route::Track,
             plugin_selected: None,
             clap_manager: ClapManager::new(),
             cursor_position: (0, 0),
             selected_tracks: vec![0],
             selected_cells: vec![(0, 0)],
+            line_buffers: vec![],
         }
     }
 }

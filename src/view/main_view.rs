@@ -7,15 +7,15 @@ use std::{
 };
 
 use anyhow::Result;
-use eframe::egui::{CentralPanel, Color32, ComboBox, Frame, Key, TextEdit, TopBottomPanel, Ui};
+use eframe::egui::Key;
 
 use crate::{
     device::Device,
-    model::{note::note_name_to_midi, song::Song},
+    model::song::Song,
     singer::{ClapPluginPtr, Singer, SingerMsg, SongState},
 };
 
-use super::{command_view::CommandView, view_state::ViewState};
+use super::{command_view::CommandView, track_view::TrackView, view_state::ViewState};
 
 #[derive(Debug)]
 pub enum ViewMsg {
@@ -26,29 +26,29 @@ pub enum ViewMsg {
 }
 
 pub enum Route {
-    Main,
+    Track,
     Command,
 }
 
 pub struct MainView {
-    line_buffers: Vec<Vec<String>>,
     gui_context: Option<eframe::egui::Context>,
     song_state: SongState,
     callback_plugins: Vec<ClapPluginPtr>,
     song: Song,
     state: ViewState,
+    track_view: TrackView,
     command_view: CommandView,
 }
 
 impl MainView {
     pub fn new(view_sender: Sender<SingerMsg>) -> Self {
         Self {
-            line_buffers: vec![],
             gui_context: None,
             song_state: SongState::default(),
             callback_plugins: vec![],
             song: Song::new(),
             state: ViewState::new(view_sender),
+            track_view: TrackView::new(),
             command_view: CommandView::new(),
         }
     }
@@ -60,7 +60,7 @@ impl MainView {
                 match command {
                     ViewMsg::Song(song) => {
                         let mut view = view.lock().unwrap();
-                        view.line_buffers.clear();
+                        view.state.line_buffers.clear();
                         for track in song.tracks.iter() {
                             let mut xs = vec![];
                             for line in 0..song.nlines {
@@ -72,7 +72,7 @@ impl MainView {
                                     xs.push("".to_string());
                                 }
                             }
-                            view.line_buffers.push(xs);
+                            view.state.line_buffers.push(xs);
                         }
                         view.song = song;
                         view.gui_context.as_ref().map(|x| x.request_repaint());
@@ -112,247 +112,16 @@ impl MainView {
         self.process_shortcut(gui_context)?;
 
         match &self.state.route {
-            Route::Main => self.view_main(gui_context, device, singer)?,
+            Route::Track => self.track_view.view(
+                gui_context,
+                &mut self.state,
+                &self.song,
+                &self.song_state,
+                device,
+                singer,
+            )?,
             Route::Command => self.command_view.view(gui_context, &mut self.state)?,
         }
-        Ok(())
-    }
-
-    fn view_main(
-        &mut self,
-        gui_context: &eframe::egui::Context,
-        device: &mut Option<Device>,
-        singer: &Arc<Mutex<Singer>>,
-    ) -> Result<()> {
-        TopBottomPanel::top("Top").show(gui_context, |ui| {
-            ui.heading("Sing Like Coding");
-        });
-
-        CentralPanel::default().show(gui_context, |ui: &mut Ui| {
-            ui.horizontal(|ui| {
-                if ui.button("device start").clicked() {
-                    device.as_mut().unwrap().start(singer.clone()).unwrap();
-                }
-                if ui.button("device stop").clicked() {
-                    device.as_mut().unwrap().stop().unwrap();
-                }
-            });
-
-            ui.separator();
-
-            ui.horizontal(|ui| {
-                ui.label(format!("line {}", self.song_state.line_play));
-                if ui.button("Play").clicked() {
-                    self.state.view_sender.send(SingerMsg::Play).unwrap();
-                }
-                if ui.button("Stop").clicked() {
-                    self.state.view_sender.send(SingerMsg::Stop).unwrap();
-                }
-
-                if ui.button("Load Surge XT").clicked() {
-                    let path = "c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap"
-                        .to_string();
-                    let track_index = self.song.tracks.len() - 1;
-                    self.state
-                        .view_sender
-                        .send(SingerMsg::PluginLoad(track_index, path, 0))
-                        .unwrap();
-                }
-
-                if ui.button("Load VCV Rack 2").clicked() {
-                    let path = "c:/Program Files/Common Files/CLAP/VCV Rack 2.clap".to_string();
-                    let track_index = self.song.tracks.len() - 1;
-                    self.state
-                        .view_sender
-                        .send(SingerMsg::PluginLoad(track_index, path, 0))
-                        .unwrap();
-                }
-
-                if ui.button("Load TyrellN6").clicked() {
-                    let path = "c:/Program Files/Common Files/CLAP/u-he/TyrellN6.clap".to_string();
-                    let track_index = self.song.tracks.len() - 1;
-                    self.state
-                        .view_sender
-                        .send(SingerMsg::PluginLoad(track_index, path, 0))
-                        .unwrap();
-                }
-
-                if ui.button("Load Zebralette3").clicked() {
-                    let path =
-                        "c:/Program Files/Common Files/CLAP/u-he/Zebralette3.clap".to_string();
-                    let track_index = self.song.tracks.len() - 1;
-                    self.state
-                        .view_sender
-                        .send(SingerMsg::PluginLoad(track_index, path, 0))
-                        .unwrap();
-                }
-
-                if ui.button("Open").clicked() {
-                    // main thread で処理しないといけないので、send せずに実装
-                    log::debug!("Open before lock");
-                    let mut singer = singer.lock().unwrap();
-                    log::debug!("Open after lock");
-                    let track_index = self.song.tracks.len() - 1;
-                    let plugin = &mut singer.plugins[track_index][0];
-                    log::debug!("Open plugin");
-                    plugin.gui_open().unwrap();
-                    log::debug!("did gui_open");
-                }
-            });
-
-            ui.separator();
-
-            ui.horizontal(|ui| {
-                if ui.button("Note On").clicked() {
-                    let track_index = 0;
-                    let key = 63;
-                    let channel = 0;
-                    let velocity = 100.0;
-                    let time = 0;
-                    self.state
-                        .view_sender
-                        .send(SingerMsg::NoteOn(track_index, key, channel, velocity, time))
-                        .unwrap();
-                }
-
-                if ui.button("Note Off").clicked() {
-                    let track_index = 0;
-                    let key = 63;
-                    let channel = 0;
-                    let velocity = 0.0;
-                    let time = 0;
-                    self.state
-                        .view_sender
-                        .send(SingerMsg::NoteOff(
-                            track_index,
-                            key,
-                            channel,
-                            velocity,
-                            time,
-                        ))
-                        .unwrap();
-                }
-            });
-
-            ui.separator();
-
-            {
-                ComboBox::from_id_salt((0, "plugin"))
-                    .selected_text(
-                        self.state
-                            .clap_manager
-                            .descriptions
-                            .iter()
-                            .find(|x| Some(&x.id) == self.state.plugin_selected.as_ref())
-                            .map(|x| x.name.clone())
-                            .unwrap_or("".to_string()),
-                    )
-                    .show_ui(ui, |ui| {
-                        for description in self.state.clap_manager.descriptions.iter() {
-                            ui.selectable_value(
-                                &mut self.state.plugin_selected,
-                                Some(description.id.clone()),
-                                &description.name,
-                            );
-                        }
-                    });
-
-                if self.song.tracks[0].modules.first().map_or(true, |module| {
-                    Some(&module.id) != self.state.plugin_selected.as_ref()
-                }) {
-                    if let Some(description) = self
-                        .state
-                        .clap_manager
-                        .descriptions
-                        .iter()
-                        .find(|x| Some(&x.id) == self.state.plugin_selected.as_ref())
-                    {
-                        log::debug!("plugin selected {:?}", self.state.plugin_selected);
-                        // TODO track_index
-                        let track_index = self.song.tracks.len() - 1;
-                        self.state
-                            .view_sender
-                            .send(SingerMsg::PluginLoad(
-                                track_index,
-                                description.path.clone(),
-                                description.index,
-                            ))
-                            .unwrap();
-                    }
-                }
-            }
-
-            let nlines = self.song.nlines;
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(format!("{:02X}", nlines));
-                    for line in 0..nlines {
-                        Frame::NONE
-                            .fill(if line == self.song_state.line_play % 0x0F {
-                                Color32::DARK_GREEN
-                            } else {
-                                Color32::BLACK
-                            })
-                            .show(ui, |ui| {
-                                ui.label(format!("{:02X}", line));
-                            });
-                    }
-                });
-                for (track_index, (track, line_buffer)) in self
-                    .song
-                    .tracks
-                    .iter()
-                    .zip(self.line_buffers.iter_mut())
-                    .enumerate()
-                {
-                    ui.vertical(|ui| {
-                        Frame::NONE
-                            .fill(if self.state.selected_tracks.contains(&track_index) {
-                                Color32::GREEN
-                            } else {
-                                Color32::BLACK
-                            })
-                            .show(ui, |ui| {
-                                ui.label(&track.name);
-                            });
-                        for line in 0..nlines {
-                            Frame::NONE
-                                .fill(if self.state.cursor_position == (track_index, line) {
-                                    Color32::YELLOW
-                                } else if self.state.selected_cells.contains(&(track_index, line)) {
-                                    Color32::LIGHT_BLUE
-                                } else if line == self.song_state.line_play % 0x0f {
-                                    Color32::GREEN
-                                } else {
-                                    Color32::BLACK
-                                })
-                                .show(ui, |ui| {
-                                    ui.label(&line_buffer[line]);
-                                });
-                        }
-                        for line in 0..nlines {
-                            let text_edit = TextEdit::singleline(&mut line_buffer[line]);
-                            let text_edit = text_edit.desired_width(30.0);
-                            let text_edit = if line == self.song_state.line_play % 0x0f {
-                                text_edit.background_color(Color32::GREEN)
-                            } else {
-                                text_edit
-                            };
-                            if ui.add(text_edit).changed() {
-                                note_name_to_midi(&line_buffer[line]).map(|key| {
-                                    self.state
-                                        .view_sender
-                                        .send(SingerMsg::Note(track_index, line, key))
-                                        .unwrap();
-                                });
-                            }
-                        }
-                    });
-                }
-            });
-            Ok::<(), anyhow::Error>(())
-        });
-
         Ok(())
     }
 

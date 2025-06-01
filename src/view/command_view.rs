@@ -74,6 +74,6 @@ impl CommandView {
     fn close(&mut self, state: &mut ViewState) {
         self.focus_p = true;
         self.commands.clear();
-        state.route = Route::Main;
+        state.route = Route::Track;
     }
 }
