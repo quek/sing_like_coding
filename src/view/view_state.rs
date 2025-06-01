@@ -1,6 +1,10 @@
 use std::sync::mpsc::Sender;
 
-use crate::{clap_manager::ClapManager, singer::SingerMsg};
+use crate::{
+    clap_manager::ClapManager,
+    model::song::Song,
+    singer::{SingerMsg, SongState},
+};
 
 use super::main_view::Route;
 
@@ -14,6 +18,8 @@ pub struct ViewState {
     pub route: Route,
     pub selected_cells: Vec<(usize, usize)>,
     pub selected_tracks: Vec<usize>,
+    pub song: Song,
+    pub song_state: SongState,
     pub view_sender: Sender<SingerMsg>,
 }
 
@@ -29,6 +35,8 @@ impl ViewState {
             route: Route::Track,
             selected_cells: vec![(0, 0)],
             selected_tracks: vec![0],
+            song: Song::new(),
+            song_state: SongState::default(),
             view_sender,
         }
     }

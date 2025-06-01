@@ -1,12 +1,11 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use eframe::egui::{CentralPanel, Color32, ComboBox, Frame, Key, TextEdit, TopBottomPanel, Ui};
+use eframe::egui::{CentralPanel, Color32, ComboBox, Frame, Key, TopBottomPanel, Ui};
 
 use crate::{
     device::Device,
-    model::{note::note_name_to_midi, song::Song},
-    singer::{Singer, SingerMsg, SongState},
+    singer::{Singer, SingerMsg},
 };
 
 use super::view_state::ViewState;
@@ -22,12 +21,10 @@ impl TrackView {
         &mut self,
         gui_context: &eframe::egui::Context,
         state: &mut ViewState,
-        song: &Song,
-        song_state: &SongState,
         device: &mut Option<Device>,
         singer: &Arc<Mutex<Singer>>,
     ) -> Result<()> {
-        self.process_shortcut(gui_context, state, song)?;
+        self.process_shortcut(gui_context, state)?;
 
         TopBottomPanel::top("Top").show(gui_context, |ui| {
             ui.heading("Sing Like Coding");
@@ -46,7 +43,7 @@ impl TrackView {
             ui.separator();
 
             ui.horizontal(|ui| {
-                ui.label(format!("line {}", song_state.line_play));
+                ui.label(format!("line {}", state.song_state.line_play));
                 if ui.button("Play").clicked() {
                     state.view_sender.send(SingerMsg::Play).unwrap();
                 }
@@ -57,7 +54,7 @@ impl TrackView {
                 if ui.button("Load Surge XT").clicked() {
                     let path = "c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap"
                         .to_string();
-                    let track_index = song.tracks.len() - 1;
+                    let track_index = state.song.tracks.len() - 1;
                     state
                         .view_sender
                         .send(SingerMsg::PluginLoad(track_index, path, 0))
@@ -66,7 +63,7 @@ impl TrackView {
 
                 if ui.button("Load VCV Rack 2").clicked() {
                     let path = "c:/Program Files/Common Files/CLAP/VCV Rack 2.clap".to_string();
-                    let track_index = song.tracks.len() - 1;
+                    let track_index = state.song.tracks.len() - 1;
                     state
                         .view_sender
                         .send(SingerMsg::PluginLoad(track_index, path, 0))
@@ -75,7 +72,7 @@ impl TrackView {
 
                 if ui.button("Load TyrellN6").clicked() {
                     let path = "c:/Program Files/Common Files/CLAP/u-he/TyrellN6.clap".to_string();
-                    let track_index = song.tracks.len() - 1;
+                    let track_index = state.song.tracks.len() - 1;
                     state
                         .view_sender
                         .send(SingerMsg::PluginLoad(track_index, path, 0))
@@ -85,7 +82,7 @@ impl TrackView {
                 if ui.button("Load Zebralette3").clicked() {
                     let path =
                         "c:/Program Files/Common Files/CLAP/u-he/Zebralette3.clap".to_string();
-                    let track_index = song.tracks.len() - 1;
+                    let track_index = state.song.tracks.len() - 1;
                     state
                         .view_sender
                         .send(SingerMsg::PluginLoad(track_index, path, 0))
@@ -97,7 +94,7 @@ impl TrackView {
                     log::debug!("Open before lock");
                     let mut singer = singer.lock().unwrap();
                     log::debug!("Open after lock");
-                    let track_index = song.tracks.len() - 1;
+                    let track_index = state.song.tracks.len() - 1;
                     let plugin = &mut singer.plugins[track_index][0];
                     log::debug!("Open plugin");
                     plugin.gui_open().unwrap();
@@ -162,7 +159,7 @@ impl TrackView {
                         }
                     });
 
-                if song.tracks[0].modules.first().map_or(true, |module| {
+                if state.song.tracks[0].modules.first().map_or(true, |module| {
                     Some(&module.id) != state.plugin_selected.as_ref()
                 }) {
                     if let Some(description) = state
@@ -173,7 +170,7 @@ impl TrackView {
                     {
                         log::debug!("plugin selected {:?}", state.plugin_selected);
                         // TODO track_index
-                        let track_index = song.tracks.len() - 1;
+                        let track_index = state.song.tracks.len() - 1;
                         state
                             .view_sender
                             .send(SingerMsg::PluginLoad(
@@ -186,13 +183,13 @@ impl TrackView {
                 }
             }
 
-            let nlines = song.nlines;
+            let nlines = state.song.nlines;
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(format!("{:02X}", nlines));
                     for line in 0..nlines {
                         Frame::NONE
-                            .fill(if line == song_state.line_play % 0x0F {
+                            .fill(if line == state.song_state.line_play % 0x0F {
                                 Color32::DARK_GREEN
                             } else {
                                 Color32::BLACK
@@ -202,7 +199,8 @@ impl TrackView {
                             });
                     }
                 });
-                for (track_index, (track, line_buffer)) in song
+                for (track_index, (track, line_buffer)) in state
+                    .song
                     .tracks
                     .iter()
                     .zip(state.line_buffers.iter_mut())
@@ -224,7 +222,7 @@ impl TrackView {
                                     Color32::YELLOW
                                 } else if state.selected_cells.contains(&(track_index, line)) {
                                     Color32::LIGHT_BLUE
-                                } else if line == song_state.line_play % 0x0f {
+                                } else if line == state.song_state.line_play % 0x0f {
                                     Color32::GREEN
                                 } else {
                                     Color32::BLACK
@@ -250,7 +248,6 @@ impl TrackView {
         &mut self,
         gui_context: &eframe::egui::Context,
         state: &mut ViewState,
-        song: &Song,
     ) -> Result<()> {
         let input = gui_context.input(|i| i.clone());
         let focused = gui_context.memory(|memory| memory.focused());
@@ -260,34 +257,34 @@ impl TrackView {
 
         if input.modifiers.ctrl {
             if input.key_pressed(Key::J) {
-                note_update(-1, state, song);
+                note_update(-1, state);
             } else if input.key_pressed(Key::K) {
-                note_update(1, state, song);
+                note_update(1, state);
             } else if input.key_pressed(Key::H) {
-                note_update(-12, state, song);
+                note_update(-12, state);
             } else if input.key_pressed(Key::L) {
-                note_update(12, state, song);
+                note_update(12, state);
             }
         } else if input.key_pressed(Key::J) {
-            if state.cursor_line + 1 == song.nlines {
+            if state.cursor_line + 1 == state.song.nlines {
                 state.cursor_line = 0;
             } else {
                 state.cursor_line += 1;
             }
         } else if input.key_pressed(Key::K) {
             if state.cursor_line == 0 {
-                state.cursor_line = song.nlines - 1;
+                state.cursor_line = state.song.nlines - 1;
             } else {
                 state.cursor_line -= 1;
             }
         } else if input.key_pressed(Key::H) {
             if state.cursor_track == 0 {
-                state.cursor_track = song.tracks.len() - 1;
+                state.cursor_track = state.song.tracks.len() - 1;
             } else {
                 state.cursor_track -= 1;
             }
         } else if input.key_pressed(Key::L) {
-            if state.cursor_track + 1 == song.tracks.len() {
+            if state.cursor_track + 1 == state.song.tracks.len() {
                 state.cursor_track = 0;
             } else {
                 state.cursor_track += 1;
@@ -298,8 +295,8 @@ impl TrackView {
     }
 }
 
-fn note_update(key_delta: i16, state: &mut ViewState, song: &Song) {
-    let key = if let Some(note) = song.tracks[state.cursor_track].note(state.cursor_line) {
+fn note_update(key_delta: i16, state: &mut ViewState) {
+    let key = if let Some(note) = state.song.tracks[state.cursor_track].note(state.cursor_line) {
         note.key + key_delta
     } else {
         state.key_last

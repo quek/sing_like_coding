@@ -10,12 +10,15 @@ use anyhow::Result;
 use eframe::egui::Key;
 
 use crate::{
+    clap_manager::Description,
     device::Device,
     model::song::Song,
     singer::{ClapPluginPtr, Singer, SingerMsg, SongState},
 };
 
-use super::{command_view::CommandView, track_view::TrackView, view_state::ViewState};
+use super::{
+    command_view::CommandView, query_view::QueryView, track_view::TrackView, view_state::ViewState,
+};
 
 #[derive(Debug)]
 pub enum ViewMsg {
@@ -25,31 +28,31 @@ pub enum ViewMsg {
     PluginCallback(ClapPluginPtr),
 }
 
+#[derive(Debug)]
 pub enum Route {
     Track,
     Command,
+    PluginSelect,
 }
 
 pub struct MainView {
     gui_context: Option<eframe::egui::Context>,
-    song_state: SongState,
     callback_plugins: Vec<ClapPluginPtr>,
-    song: Song,
     state: ViewState,
     track_view: TrackView,
     command_view: CommandView,
+    plugin_select_view: Option<QueryView<Description>>,
 }
 
 impl MainView {
     pub fn new(view_sender: Sender<SingerMsg>) -> Self {
         Self {
             gui_context: None,
-            song_state: SongState::default(),
             callback_plugins: vec![],
-            song: Song::new(),
             state: ViewState::new(view_sender),
             track_view: TrackView::new(),
             command_view: CommandView::new(),
+            plugin_select_view: None,
         }
     }
 
@@ -74,12 +77,12 @@ impl MainView {
                             }
                             view.state.line_buffers.push(xs);
                         }
-                        view.song = song;
+                        view.state.song = song;
                         view.gui_context.as_ref().map(|x| x.request_repaint());
                     }
                     ViewMsg::State(song_state) => {
                         let mut view = view.lock().unwrap();
-                        view.song_state = song_state;
+                        view.state.song_state = song_state;
                         view.gui_context.as_ref().map(|x| x.request_repaint());
                     }
                     ViewMsg::PluginCallback(plugin) => {
@@ -111,16 +114,45 @@ impl MainView {
         }
         self.process_shortcut(gui_context)?;
 
+        dbg!(&self.state.route);
         match &self.state.route {
-            Route::Track => self.track_view.view(
-                gui_context,
-                &mut self.state,
-                &self.song,
-                &self.song_state,
-                device,
-                singer,
-            )?,
+            Route::Track => self
+                .track_view
+                .view(gui_context, &mut self.state, device, singer)?,
             Route::Command => self.command_view.view(gui_context, &mut self.state)?,
+            Route::PluginSelect => {
+                dbg!("Route::PluginSelect");
+                if self.plugin_select_view.is_none() {
+                    let xs = self
+                        .state
+                        .clap_manager
+                        .descriptions
+                        .iter()
+                        .map(|x| Arc::new(Mutex::new(x.clone())) as Arc<Mutex<Description>>)
+                        .collect();
+                    self.plugin_select_view = Some(QueryView::new(xs));
+                }
+
+                if let Some(description) = self
+                    .plugin_select_view
+                    .as_mut()
+                    .unwrap()
+                    .view(gui_context)?
+                {
+                    let description = description.lock().unwrap();
+                    let path = &description.path;
+                    let index = description.index;
+                    for track_index in &self.state.selected_tracks {
+                        self.state
+                            .view_sender
+                            .send(SingerMsg::PluginLoad(*track_index, path.clone(), index))
+                            .unwrap();
+                    }
+
+                    self.plugin_select_view = None;
+                    self.state.route = Route::Track;
+                }
+            }
         }
         Ok(())
     }
@@ -135,11 +167,13 @@ impl MainView {
         if input.modifiers.ctrl && input.key_pressed(eframe::egui::Key::Space) {
             self.state.route = Route::Command;
         } else if input.key_pressed(Key::Space) {
-            self.state.view_sender.send(if self.song_state.play_p {
-                SingerMsg::Stop
-            } else {
-                SingerMsg::Play
-            })?;
+            self.state
+                .view_sender
+                .send(if self.state.song_state.play_p {
+                    SingerMsg::Stop
+                } else {
+                    SingerMsg::Play
+                })?;
         }
 
         Ok(())

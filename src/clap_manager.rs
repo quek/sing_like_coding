@@ -11,6 +11,8 @@ use clap_sys::{entry::clap_plugin_entry, factory::plugin_factory::clap_plugin_fa
 use libloading::{Library, Symbol};
 use serde::{Deserialize, Serialize};
 
+use crate::view::query_view::QueryItem;
+
 pub struct ClapManager {
     pub setting_path: PathBuf,
     pub descriptions: Vec<Description>,
@@ -27,6 +29,12 @@ pub struct Description {
     pub version: String,
     pub description: String,
     pub features: Vec<String>,
+}
+
+impl QueryItem for Description {
+    fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 impl ClapManager {

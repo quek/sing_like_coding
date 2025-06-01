@@ -1,12 +1,13 @@
-use crate::view::view_state::ViewState;
+use crate::view::{main_view::Route, view_state::ViewState};
 
 use super::Command;
 
 pub struct PluginLoad {}
 
 impl Command for PluginLoad {
-    fn call(&mut self, _state: &mut ViewState) -> anyhow::Result<()> {
-        dbg!("PluginScan Load!");
+    fn call(&mut self, state: &mut ViewState) -> anyhow::Result<()> {
+        dbg!("state.route = Route::PluginSelect;");
+        state.route = Route::PluginSelect;
         Ok(())
     }
 
