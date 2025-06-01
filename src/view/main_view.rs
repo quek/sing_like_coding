@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::Result;
-use eframe::egui::{Color32, ComboBox, TextEdit, Ui};
+use eframe::egui::{Color32, ComboBox, Frame, TextEdit, Ui};
 
 use crate::{
     clap_manager::ClapManager,
@@ -251,7 +251,15 @@ impl MainView {
             ui.vertical(|ui| {
                 ui.label(format!("{:02X}", nlines));
                 for line in 0..nlines {
-                    ui.label(format!("{:02X}", line));
+                    Frame::NONE
+                        .fill(if line == self.song_state.line_play % 0x0F {
+                            Color32::DARK_GREEN
+                        } else {
+                            Color32::BLACK
+                        })
+                        .show(ui, |ui| {
+                            ui.label(format!("{:02X}", line));
+                        });
                 }
             });
             for (track_index, (track, line_buffer)) in self
