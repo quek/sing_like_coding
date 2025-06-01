@@ -306,7 +306,30 @@ impl MainView {
                     .enumerate()
                 {
                     ui.vertical(|ui| {
-                        ui.heading(&track.name);
+                        Frame::NONE
+                            .fill(if self.state.selected_tracks.contains(&track_index) {
+                                Color32::GREEN
+                            } else {
+                                Color32::BLACK
+                            })
+                            .show(ui, |ui| {
+                                ui.label(&track.name);
+                            });
+                        for line in 0..nlines {
+                            Frame::NONE
+                                .fill(if self.state.cursor_position == (track_index, line) {
+                                    Color32::YELLOW
+                                } else if self.state.selected_cells.contains(&(track_index, line)) {
+                                    Color32::LIGHT_BLUE
+                                } else if line == self.song_state.line_play % 0x0f {
+                                    Color32::GREEN
+                                } else {
+                                    Color32::BLACK
+                                })
+                                .show(ui, |ui| {
+                                    ui.label(&line_buffer[line]);
+                                });
+                        }
                         for line in 0..nlines {
                             let text_edit = TextEdit::singleline(&mut line_buffer[line]);
                             let text_edit = text_edit.desired_width(30.0);

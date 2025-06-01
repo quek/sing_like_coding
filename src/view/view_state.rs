@@ -9,6 +9,9 @@ pub struct ViewState {
     pub route: Route,
     pub plugin_selected: Option<String>,
     pub clap_manager: ClapManager,
+    pub cursor_position: (usize, usize),
+    pub selected_tracks: Vec<usize>,
+    pub selected_cells: Vec<(usize, usize)>,
 }
 
 impl ViewState {
@@ -18,6 +21,9 @@ impl ViewState {
             route: Route::Main,
             plugin_selected: None,
             clap_manager: ClapManager::new(),
+            cursor_position: (0, 0),
+            selected_tracks: vec![0],
+            selected_cells: vec![(0, 0)],
         }
     }
 }
