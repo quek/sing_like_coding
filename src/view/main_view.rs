@@ -319,6 +319,10 @@ impl MainView {
 
     fn process_shortcut(&mut self, gui_context: &eframe::egui::Context) -> Result<()> {
         let input = gui_context.input(|i| i.clone());
+        let focused = gui_context.memory(|memory| memory.focused());
+        if focused.is_some() {
+            return Ok(());
+        }
 
         if input.key_pressed(Key::Space) {
             self.view_sender.send(if self.song_state.play_p {
