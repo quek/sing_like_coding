@@ -1,5 +1,6 @@
 use std::{
     ffi::c_void,
+    ops::Range,
     path::Path,
     pin::Pin,
     sync::{
@@ -42,11 +43,14 @@ pub enum SingerMsg {
 
 #[derive(Debug, Default)]
 pub struct SongState {
+    pub play_p: bool,
     pub line_play: usize,
 }
 
 pub struct Singer {
     pub steady_time: i64,
+    pub play_p: bool,
+    pub play_position: Range<i64>,
     pub song: Song,
     song_sender: Sender<ViewMsg>,
     pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
@@ -63,6 +67,8 @@ impl Singer {
         let song = Song::new();
         let mut this = Self {
             steady_time: 0,
+            play_p: false,
+            play_position: (0..0),
             song,
             song_sender,
             plugins: Default::default(),
@@ -82,30 +88,26 @@ impl Singer {
     }
 
     fn compute_play_position(&mut self, frames_count: usize) {
-        self.song.play_position.start = self.song.play_position.end;
+        self.play_position.start = self.play_position.end;
 
-        let line = (self.song.play_position.start / 0x100) as usize;
+        let line = (self.play_position.start / 0x100) as usize;
         if self.line_play != line {
-            self.song_sender
-                .send(ViewMsg::State(SongState {
-                    line_play: self.line_play,
-                }))
-                .unwrap();
+            self.send_state();
         }
         self.line_play = line;
 
-        if !self.song.play_p {
+        if !self.play_p {
             return;
         }
         let sec_per_frame = frames_count as f64 / self.song.sample_rate;
         let sec_per_delay = 60.0 / (self.song.bpm * self.song.lpb as f64 * 256.0);
-        self.song.play_position.end =
-            self.song.play_position.start + (sec_per_frame / sec_per_delay).round() as i64;
+        self.play_position.end =
+            self.play_position.start + (sec_per_frame / sec_per_delay).round() as i64;
 
         // TODO DELET THIS BLOC
         {
-            if self.song.play_position.start > 0x0e * 0x100 {
-                self.song.play_position = 0..0;
+            if self.play_position.start > 0x0e * 0x100 {
+                self.play_position = 0..0;
             }
         }
     }
@@ -123,10 +125,10 @@ impl Singer {
         {
             context.nchannels = nchannels;
             context.nframes = nframes;
-            context.play_p = self.song.play_p;
+            context.play_p = self.play_p;
             context.bpm = self.song.bpm;
             context.steady_time = self.steady_time;
-            context.play_position = self.song.play_position.clone();
+            context.play_position = self.play_position.clone();
             context.plugins = plugins
                 .iter_mut()
                 .map(|x| PluginPtr(x.as_mut().get_mut() as *mut _ as *mut c_void))
@@ -156,12 +158,18 @@ impl Singer {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn play(&mut self) {
-        if self.song.play_p {
+        if self.play_p {
             return;
         }
-        self.song.play_p = true;
+        self.play_p = true;
+    }
+
+    pub fn stop(&mut self) {
+        if !self.play_p {
+            return;
+        }
+        self.play_p = false;
     }
 
     pub fn start_listener(singer: Arc<Mutex<Self>>, receiver: Receiver<SingerMsg>) {
@@ -170,8 +178,16 @@ impl Singer {
             while let Ok(msg) = receiver.recv() {
                 log::debug!("Song 受信 {:?}", msg);
                 match msg {
-                    SingerMsg::Play => singer.lock().unwrap().play(),
-                    SingerMsg::Stop => singer.lock().unwrap().stop(),
+                    SingerMsg::Play => {
+                        let mut singer = singer.lock().unwrap();
+                        singer.play();
+                        singer.send_state();
+                    }
+                    SingerMsg::Stop => {
+                        let mut singer = singer.lock().unwrap();
+                        singer.stop();
+                        singer.send_state();
+                    }
                     SingerMsg::Song => singer.lock().unwrap().send_song(),
                     SingerMsg::Note(track_index, line, key) => {
                         log::debug!("ViewCommand::Note({line}, {key})");
@@ -236,11 +252,12 @@ impl Singer {
             .unwrap();
     }
 
-    #[allow(dead_code)]
-    pub fn stop(&mut self) {
-        if !self.song.play_p {
-            return;
-        }
-        self.song.play_p = false;
+    fn send_state(&self) {
+        self.song_sender
+            .send(ViewMsg::State(SongState {
+                play_p: self.play_p,
+                line_play: self.line_play,
+            }))
+            .unwrap();
     }
 }

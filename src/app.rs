@@ -1,7 +1,6 @@
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 
-use crate::clap_manager::ClapManager;
 use crate::device::Device;
 use crate::singer::{Singer, SingerMsg};
 use crate::view::main_view::MainView;
@@ -66,39 +65,10 @@ impl eframe::App for MyApp {
             }
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Sing Like Coding");
-
-            // Ui.image(egui::include_image!(
-            //     "../../../crates/egui/assets/ferris.png"
-            // ));
-
-            ui.separator();
-
-            ui.horizontal(|ui| {
-                if ui.button("device start").clicked() {
-                    self.device
-                        .as_mut()
-                        .unwrap()
-                        .start(self.singer.clone())
-                        .unwrap();
-                }
-                if ui.button("device stop").clicked() {
-                    self.device.as_mut().unwrap().stop().unwrap();
-                }
-                if ui.button("Scan CLAP").clicked() {
-                    let mut clap_manager = ClapManager::new();
-                    clap_manager.scan();
-                }
-            });
-
-            ui.separator();
-
-            self.view
-                .lock()
-                .unwrap()
-                .view(ui, ctx, &self.singer)
-                .unwrap();
-        });
+        self.view
+            .lock()
+            .unwrap()
+            .view(ctx, &mut self.device, &self.singer)
+            .unwrap();
     }
 }
