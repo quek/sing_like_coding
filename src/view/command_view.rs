@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use eframe::egui::{CentralPanel, Key, TextEdit, Ui};
+use eframe::egui::{self, Button, CentralPanel, Id, Key, TextEdit, Ui};
 
 use crate::{command::Command, commander::Commander};
 
@@ -32,29 +32,55 @@ impl CommandView {
         CentralPanel::default().show(gui_context, |ui: &mut Ui| -> Result<()> {
             let edit = TextEdit::singleline(&mut self.buffer);
             let response = ui.add(edit);
-            if response.changed() {
+            if response.changed() || (self.focus_p && !self.buffer.is_empty()) {
                 self.commands = self.commander.query(&self.buffer);
                 log::debug!("a commands.len {}", self.commands.len());
             }
             if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                log::debug!("b commands.len {}", self.commands.len());
-                if self.commands.len() == 1 {
-                    log::debug!("enter");
-                    self.commands[0].lock().unwrap().call()?;
-                }
+                log::debug!("enter");
+                self.commands[0].lock().unwrap().call()?;
+                self.close(state);
+                return Ok(());
             }
             if self.focus_p {
                 self.focus_p = false;
                 gui_context.memory_mut(|x| x.request_focus(response.id));
             }
 
+            if !self.commands.is_empty() {
+                egui::Area::new(Id::new("autocomplete_popup"))
+                    .fixed_pos(response.rect.left_bottom())
+                    .show(gui_context, |ui| {
+                        ui.group(|ui| {
+                            let mut called = false;
+                            for command in self.commands.iter() {
+                                let mut command = command.lock().unwrap();
+                                let button = Button::new(command.name())
+                                    .wrap_mode(egui::TextWrapMode::Extend);
+                                if ui.add(button).clicked() {
+                                    command.call().unwrap();
+                                    called = true;
+                                }
+                            }
+                            if called {
+                                self.close(state);
+                            }
+                        });
+                    });
+            }
+
             if ui.button("Cancel").clicked() {
-                self.focus_p = true;
-                state.route = Route::Main;
+                self.close(state);
             }
 
             Ok(())
         });
         Ok(())
+    }
+
+    fn close(&mut self, state: &mut ViewState) {
+        self.focus_p = true;
+        self.commands.clear();
+        state.route = Route::Main;
     }
 }

@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    command::{plugin_scan::PluginScan, Command},
+    command::{plugin_load::PluginLoad, plugin_scan::PluginScan, Command},
     util::is_subsequence_case_insensitive,
 };
 
@@ -12,11 +12,14 @@ pub struct Commander {
 impl Commander {
     pub fn new() -> Self {
         Self {
-            commands: vec![Arc::new(Mutex::new(PluginScan::new()))],
+            commands: vec![
+                Arc::new(Mutex::new(PluginLoad::new())),
+                Arc::new(Mutex::new(PluginScan::new())),
+            ],
         }
     }
 
-    pub fn query<'a>(&'a mut self, q: &str) -> Vec<Arc<Mutex<dyn Command>>> {
+    pub fn query(&mut self, q: &str) -> Vec<Arc<Mutex<dyn Command>>> {
         self.commands
             .iter_mut()
             .filter(|x| is_subsequence_case_insensitive(x.lock().unwrap().name(), q))

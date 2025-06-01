@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+pub mod plugin_load;
 pub mod plugin_scan;
 
 pub trait Command: Send {
