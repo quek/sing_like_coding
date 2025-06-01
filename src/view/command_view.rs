@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
 use eframe::egui::{CentralPanel, Key, TextEdit, Ui};
 
@@ -9,7 +11,7 @@ pub struct CommandView {
     focus_p: bool,
     buffer: String,
     commander: Commander,
-    commands: Vec<Box<dyn Command>>,
+    commands: Vec<Arc<Mutex<dyn Command>>>,
 }
 
 impl CommandView {
@@ -38,7 +40,7 @@ impl CommandView {
                 log::debug!("b commands.len {}", self.commands.len());
                 if self.commands.len() == 1 {
                     log::debug!("enter");
-                    self.commands[0].call()?;
+                    self.commands[0].lock().unwrap().call()?;
                 }
             }
             if self.focus_p {

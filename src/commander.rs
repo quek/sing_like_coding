@@ -1,24 +1,26 @@
+use std::sync::{Arc, Mutex};
+
 use crate::{
     command::{plugin_scan::PluginScan, Command},
     util::is_subsequence_case_insensitive,
 };
 
 pub struct Commander {
-    pub commands: Vec<Box<dyn Command>>,
+    pub commands: Vec<Arc<Mutex<dyn Command>>>,
 }
 
 impl Commander {
     pub fn new() -> Self {
         Self {
-            commands: vec![Box::new(PluginScan::new())],
+            commands: vec![Arc::new(Mutex::new(PluginScan::new()))],
         }
     }
 
-    pub fn query(&mut self, q: &str) -> Vec<Box<dyn Command>> {
+    pub fn query<'a>(&'a mut self, q: &str) -> Vec<Arc<Mutex<dyn Command>>> {
         self.commands
             .iter_mut()
-            .filter(|x| is_subsequence_case_insensitive(x.name(), q))
-            .map(|x| x.boxed_clone())
+            .filter(|x| is_subsequence_case_insensitive(x.lock().unwrap().name(), q))
+            .map(|x| x.clone())
             .collect::<Vec<_>>()
     }
 }

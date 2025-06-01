@@ -1,6 +1,5 @@
 use super::Command;
 
-#[derive(Clone)]
 pub struct PluginScan {}
 
 impl Command for PluginScan {
@@ -11,10 +10,6 @@ impl Command for PluginScan {
 
     fn name(&self) -> &str {
         "Plugin Scan"
-    }
-
-    fn boxed_clone(&self) -> Box<dyn Command> {
-        Box::new(self.clone())
     }
 }
 
