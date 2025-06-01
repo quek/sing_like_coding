@@ -1,22 +1,21 @@
-use crate::view::view_state::ViewState;
+use crate::{singer::SingerMsg, view::view_state::ViewState};
 
 use super::Command;
 
-pub struct PluginScan {}
+pub struct TrackAdd {}
 
-impl Command for PluginScan {
+impl Command for TrackAdd {
     fn call(&mut self, state: &mut ViewState) -> anyhow::Result<()> {
-        dbg!("PluginScan call!");
-        state.clap_manager.scan();
+        state.view_sender.send(SingerMsg::TrackAdd)?;
         Ok(())
     }
 
     fn name(&self) -> &str {
-        "Plugin Scan"
+        "Track Add"
     }
 }
 
-impl PluginScan {
+impl TrackAdd {
     pub fn new() -> Self {
         Self {}
     }

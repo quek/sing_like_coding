@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    command::{plugin_load::PluginLoad, plugin_scan::PluginScan, Command},
+    command::{plugin_load::PluginLoad, plugin_scan::PluginScan, track_add::TrackAdd, Command},
     util::is_subsequence_case_insensitive,
 };
 
@@ -15,6 +15,7 @@ impl Commander {
             commands: vec![
                 Arc::new(Mutex::new(PluginLoad::new())),
                 Arc::new(Mutex::new(PluginScan::new())),
+                Arc::new(Mutex::new(TrackAdd::new())),
             ],
         }
     }

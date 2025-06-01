@@ -10,7 +10,6 @@ use anyhow::Result;
 use eframe::egui::{CentralPanel, Color32, ComboBox, Frame, Key, TextEdit, TopBottomPanel, Ui};
 
 use crate::{
-    clap_manager::ClapManager,
     device::Device,
     model::{note::note_name_to_midi, song::Song},
     singer::{ClapPluginPtr, Singer, SingerMsg, SongState},
@@ -33,28 +32,23 @@ pub enum Route {
 
 pub struct MainView {
     line_buffers: Vec<Vec<String>>,
-    view_sender: Sender<SingerMsg>,
     gui_context: Option<eframe::egui::Context>,
     song_state: SongState,
     callback_plugins: Vec<ClapPluginPtr>,
     song: Song,
     state: ViewState,
-    clap_manager: ClapManager,
     command_view: CommandView,
 }
 
 impl MainView {
     pub fn new(view_sender: Sender<SingerMsg>) -> Self {
-        let clap_manager = ClapManager::new();
         Self {
             line_buffers: vec![],
-            view_sender,
             gui_context: None,
             song_state: SongState::default(),
             callback_plugins: vec![],
             song: Song::new(),
-            state: ViewState::new(),
-            clap_manager,
+            state: ViewState::new(view_sender),
             command_view: CommandView::new(),
         }
     }
@@ -142,10 +136,6 @@ impl MainView {
                 if ui.button("device stop").clicked() {
                     device.as_mut().unwrap().stop().unwrap();
                 }
-                if ui.button("Scan CLAP").clicked() {
-                    let mut clap_manager = ClapManager::new();
-                    clap_manager.scan();
-                }
             });
 
             ui.separator();
@@ -153,17 +143,18 @@ impl MainView {
             ui.horizontal(|ui| {
                 ui.label(format!("line {}", self.song_state.line_play));
                 if ui.button("Play").clicked() {
-                    self.view_sender.send(SingerMsg::Play).unwrap();
+                    self.state.view_sender.send(SingerMsg::Play).unwrap();
                 }
                 if ui.button("Stop").clicked() {
-                    self.view_sender.send(SingerMsg::Stop).unwrap();
+                    self.state.view_sender.send(SingerMsg::Stop).unwrap();
                 }
 
                 if ui.button("Load Surge XT").clicked() {
                     let path = "c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap"
                         .to_string();
                     let track_index = self.song.tracks.len() - 1;
-                    self.view_sender
+                    self.state
+                        .view_sender
                         .send(SingerMsg::PluginLoad(track_index, path, 0))
                         .unwrap();
                 }
@@ -171,7 +162,8 @@ impl MainView {
                 if ui.button("Load VCV Rack 2").clicked() {
                     let path = "c:/Program Files/Common Files/CLAP/VCV Rack 2.clap".to_string();
                     let track_index = self.song.tracks.len() - 1;
-                    self.view_sender
+                    self.state
+                        .view_sender
                         .send(SingerMsg::PluginLoad(track_index, path, 0))
                         .unwrap();
                 }
@@ -179,7 +171,8 @@ impl MainView {
                 if ui.button("Load TyrellN6").clicked() {
                     let path = "c:/Program Files/Common Files/CLAP/u-he/TyrellN6.clap".to_string();
                     let track_index = self.song.tracks.len() - 1;
-                    self.view_sender
+                    self.state
+                        .view_sender
                         .send(SingerMsg::PluginLoad(track_index, path, 0))
                         .unwrap();
                 }
@@ -188,7 +181,8 @@ impl MainView {
                     let path =
                         "c:/Program Files/Common Files/CLAP/u-he/Zebralette3.clap".to_string();
                     let track_index = self.song.tracks.len() - 1;
-                    self.view_sender
+                    self.state
+                        .view_sender
                         .send(SingerMsg::PluginLoad(track_index, path, 0))
                         .unwrap();
                 }
@@ -215,7 +209,8 @@ impl MainView {
                     let channel = 0;
                     let velocity = 100.0;
                     let time = 0;
-                    self.view_sender
+                    self.state
+                        .view_sender
                         .send(SingerMsg::NoteOn(track_index, key, channel, velocity, time))
                         .unwrap();
                 }
@@ -226,7 +221,8 @@ impl MainView {
                     let channel = 0;
                     let velocity = 0.0;
                     let time = 0;
-                    self.view_sender
+                    self.state
+                        .view_sender
                         .send(SingerMsg::NoteOff(
                             track_index,
                             key,
@@ -243,7 +239,8 @@ impl MainView {
             {
                 ComboBox::from_id_salt((0, "plugin"))
                     .selected_text(
-                        self.clap_manager
+                        self.state
+                            .clap_manager
                             .descriptions
                             .iter()
                             .find(|x| Some(&x.id) == self.state.plugin_selected.as_ref())
@@ -251,7 +248,7 @@ impl MainView {
                             .unwrap_or("".to_string()),
                     )
                     .show_ui(ui, |ui| {
-                        for description in self.clap_manager.descriptions.iter() {
+                        for description in self.state.clap_manager.descriptions.iter() {
                             ui.selectable_value(
                                 &mut self.state.plugin_selected,
                                 Some(description.id.clone()),
@@ -264,6 +261,7 @@ impl MainView {
                     Some(&module.id) != self.state.plugin_selected.as_ref()
                 }) {
                     if let Some(description) = self
+                        .state
                         .clap_manager
                         .descriptions
                         .iter()
@@ -272,7 +270,8 @@ impl MainView {
                         log::debug!("plugin selected {:?}", self.state.plugin_selected);
                         // TODO track_index
                         let track_index = self.song.tracks.len() - 1;
-                        self.view_sender
+                        self.state
+                            .view_sender
                             .send(SingerMsg::PluginLoad(
                                 track_index,
                                 description.path.clone(),
@@ -281,10 +280,6 @@ impl MainView {
                             .unwrap();
                     }
                 }
-            }
-
-            if ui.button("Add Track").clicked() {
-                self.view_sender.send(SingerMsg::TrackAdd)?;
             }
 
             let nlines = self.song.nlines;
@@ -322,7 +317,8 @@ impl MainView {
                             };
                             if ui.add(text_edit).changed() {
                                 note_name_to_midi(&line_buffer[line]).map(|key| {
-                                    self.view_sender
+                                    self.state
+                                        .view_sender
                                         .send(SingerMsg::Note(track_index, line, key))
                                         .unwrap();
                                 });
@@ -347,7 +343,7 @@ impl MainView {
         if input.modifiers.ctrl && input.key_pressed(eframe::egui::Key::Space) {
             self.state.route = Route::Command;
         } else if input.key_pressed(Key::Space) {
-            self.view_sender.send(if self.song_state.play_p {
+            self.state.view_sender.send(if self.song_state.play_p {
                 SingerMsg::Stop
             } else {
                 SingerMsg::Play
