@@ -13,7 +13,6 @@ use crate::{
     clap_manager::Description,
     device::Device,
     model::song::Song,
-    plugin::Plugin,
     singer::{ClapPluginPtr, Singer, SingerMsg, SongState},
 };
 
@@ -117,7 +116,7 @@ impl MainView {
         }
         self.process_shortcut(gui_context)?;
 
-        self.do_plugin_open()?;
+        self.plugin_gui_open()?;
 
         match &self.state.route {
             Route::Track => self
@@ -143,12 +142,10 @@ impl MainView {
                     .view(gui_context)?
                 {
                     let description = description.lock().unwrap();
-                    let path = &description.path;
-                    let index = description.index;
                     for track_index in &self.state.selected_tracks {
                         self.state
                             .view_sender
-                            .send(SingerMsg::PluginLoad(*track_index, path.clone(), index))
+                            .send(SingerMsg::PluginLoad(*track_index, description.clone()))
                             .unwrap();
                         self.will_plugin_open = Some((
                             *track_index,
@@ -164,20 +161,19 @@ impl MainView {
         Ok(())
     }
 
-    fn do_plugin_open(&mut self) -> Result<()> {
+    fn plugin_gui_open(&mut self) -> Result<()> {
         let mut opened = false;
         if let Some((track_index, plugin_index)) = &self.will_plugin_open {
-            if let Some(plugin_ptr) = &mut self
+            if let Some(plugin) = &mut self
                 .state
                 .song
                 .tracks
                 .get_mut(*track_index)
                 .map(|x| x.modules.get_mut(*plugin_index))
                 .flatten()
-                .map(|module| module.plugin.as_mut())
+                .map(|module| module.plugin())
                 .flatten()
             {
-                let plugin: &mut Plugin = unsafe { plugin_ptr.as_mut() };
                 plugin.gui_open()?;
                 opened = true;
             }

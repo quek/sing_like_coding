@@ -43,98 +43,48 @@ impl TrackView {
             ui.separator();
 
             ui.horizontal(|ui| {
-                ui.label(format!("line {}", state.song_state.line_play));
                 if ui.button("Play").clicked() {
                     state.view_sender.send(SingerMsg::Play).unwrap();
                 }
                 if ui.button("Stop").clicked() {
                     state.view_sender.send(SingerMsg::Stop).unwrap();
                 }
-
-                if ui.button("Load Surge XT").clicked() {
-                    let path = "c:/Program Files/Common Files/CLAP/Surge Synth Team/Surge XT.clap"
-                        .to_string();
-                    let track_index = state.song.tracks.len() - 1;
-                    state
-                        .view_sender
-                        .send(SingerMsg::PluginLoad(track_index, path, 0))
-                        .unwrap();
-                }
-
-                if ui.button("Load VCV Rack 2").clicked() {
-                    let path = "c:/Program Files/Common Files/CLAP/VCV Rack 2.clap".to_string();
-                    let track_index = state.song.tracks.len() - 1;
-                    state
-                        .view_sender
-                        .send(SingerMsg::PluginLoad(track_index, path, 0))
-                        .unwrap();
-                }
-
-                if ui.button("Load TyrellN6").clicked() {
-                    let path = "c:/Program Files/Common Files/CLAP/u-he/TyrellN6.clap".to_string();
-                    let track_index = state.song.tracks.len() - 1;
-                    state
-                        .view_sender
-                        .send(SingerMsg::PluginLoad(track_index, path, 0))
-                        .unwrap();
-                }
-
-                if ui.button("Load Zebralette3").clicked() {
-                    let path =
-                        "c:/Program Files/Common Files/CLAP/u-he/Zebralette3.clap".to_string();
-                    let track_index = state.song.tracks.len() - 1;
-                    state
-                        .view_sender
-                        .send(SingerMsg::PluginLoad(track_index, path, 0))
-                        .unwrap();
-                }
-
-                if ui.button("Open").clicked() {
-                    // main thread で処理しないといけないので、send せずに実装
-                    log::debug!("Open before lock");
-                    let mut singer = singer.lock().unwrap();
-                    log::debug!("Open after lock");
-                    let track_index = state.song.tracks.len() - 1;
-                    let plugin = &mut singer.plugins[track_index][0];
-                    log::debug!("Open plugin");
-                    plugin.gui_open().unwrap();
-                    log::debug!("did gui_open");
-                }
+                ui.label(format!("line {}", state.song_state.line_play));
             });
 
-            ui.separator();
+            // ui.separator();
 
-            ui.horizontal(|ui| {
-                if ui.button("Note On").clicked() {
-                    let track_index = 0;
-                    let key = 63;
-                    let channel = 0;
-                    let velocity = 100.0;
-                    let time = 0;
-                    state
-                        .view_sender
-                        .send(SingerMsg::NoteOn(track_index, key, channel, velocity, time))
-                        .unwrap();
-                }
+            // ui.horizontal(|ui| {
+            //     if ui.button("Note On").clicked() {
+            //         let track_index = 0;
+            //         let key = 63;
+            //         let channel = 0;
+            //         let velocity = 100.0;
+            //         let time = 0;
+            //         state
+            //             .view_sender
+            //             .send(SingerMsg::NoteOn(track_index, key, channel, velocity, time))
+            //             .unwrap();
+            //     }
 
-                if ui.button("Note Off").clicked() {
-                    let track_index = 0;
-                    let key = 63;
-                    let channel = 0;
-                    let velocity = 0.0;
-                    let time = 0;
-                    state
-                        .view_sender
-                        .send(SingerMsg::NoteOff(
-                            track_index,
-                            key,
-                            channel,
-                            velocity,
-                            time,
-                        ))
-                        .unwrap();
-                }
-            });
+            //     if ui.button("Note Off").clicked() {
+            //         let track_index = 0;
+            //         let key = 63;
+            //         let channel = 0;
+            //         let velocity = 0.0;
+            //         let time = 0;
+            //         state
+            //             .view_sender
+            //             .send(SingerMsg::NoteOff(
+            //                 track_index,
+            //                 key,
+            //                 channel,
+            //                 velocity,
+            //                 time,
+            //             ))
+            //             .unwrap();
+            //     }
+            // });
 
             ui.separator();
 
@@ -157,7 +107,7 @@ impl TrackView {
                 for (track_index, (track, line_buffer)) in state
                     .song
                     .tracks
-                    .iter()
+                    .iter_mut()
                     .zip(state.line_buffers.iter_mut())
                     .enumerate()
                 {
@@ -189,6 +139,12 @@ impl TrackView {
                                 }
                                 ui.label(text);
                             });
+                        }
+
+                        for module in track.modules.iter_mut() {
+                            if ui.button(&module.name).clicked() {
+                                module.plugin().map(|x| x.gui_open());
+                            }
                         }
                     });
                 }

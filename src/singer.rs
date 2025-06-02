@@ -10,6 +10,7 @@ use std::{
 };
 
 use crate::{
+    clap_manager::Description,
     event::Event,
     model::{module::Module, note::Note, song::Song},
     plugin::Plugin,
@@ -28,15 +29,15 @@ unsafe impl Sync for ClapPluginPtr {}
 
 #[derive(Debug)]
 pub enum SingerMsg {
-    #[allow(dead_code)]
     Play,
-    #[allow(dead_code)]
     Stop,
     Song,
     Note(usize, usize, i16),
+    #[allow(dead_code)]
     NoteOn(usize, i16, i16, f64, u32),
+    #[allow(dead_code)]
     NoteOff(usize, i16, i16, f64, u32),
-    PluginLoad(usize, String, u32),
+    PluginLoad(usize, Description),
     TrackAdd,
 }
 
@@ -204,14 +205,16 @@ impl Singer {
                             singer.send_song();
                         }
                     }
-                    SingerMsg::PluginLoad(track_index, path, index) => {
+                    SingerMsg::PluginLoad(track_index, description) => {
                         let mut singer = singer.lock().unwrap();
                         let mut plugin = Plugin::new(singer.song_sender.clone());
-                        plugin.load(Path::new(&path), index);
+                        plugin.load(Path::new(&description.path), description.index);
                         plugin.start().unwrap();
-                        singer.song.tracks[track_index]
-                            .modules
-                            .push(Module::new(path, (&mut plugin).into()));
+                        singer.song.tracks[track_index].modules.push(Module::new(
+                            description.id.clone(),
+                            description.name.clone(),
+                            (&mut plugin).into(),
+                        ));
                         loop {
                             if singer.plugins.len() > track_index {
                                 break;
