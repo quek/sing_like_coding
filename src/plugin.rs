@@ -71,9 +71,9 @@ macro_rules! cstr {
     };
 }
 
-pub const NAME: &CStr = cstr!("sawavi");
-pub const VENDER: &CStr = cstr!("sawavi");
-pub const URL: &CStr = cstr!("https://github.com/quek/sawavi");
+pub const NAME: &CStr = cstr!("Sing Like Coding");
+pub const VENDER: &CStr = cstr!("Sing Like Coding");
+pub const URL: &CStr = cstr!("https://github.com/quek/sing_like_coding");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
 impl Plugin {

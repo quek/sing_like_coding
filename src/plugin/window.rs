@@ -28,7 +28,7 @@ pub fn create_handler(
     host_data: *mut c_void,
 ) -> *mut c_void {
     unsafe {
-        let class_name = to_wide("SawaviPluginClass");
+        let class_name = to_wide("SingLikeCodingPluginClass");
         let hinstance = GetModuleHandleW(None).unwrap();
 
         let wnd_class = WNDCLASSW {
@@ -43,7 +43,7 @@ pub fn create_handler(
         let hwnd = CreateWindowExW(
             Default::default(),
             PCWSTR(class_name.as_ptr()),
-            PCWSTR(to_wide("Sawavi Plugin").as_ptr()),
+            PCWSTR(to_wide("Sing Like Coding Plugin").as_ptr()),
             WS_OVERLAPPEDWINDOW,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
