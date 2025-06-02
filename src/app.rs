@@ -41,8 +41,8 @@ impl Default for MyApp {
         let (view_sender, view_receiver) = channel();
         let singer = Arc::new(Mutex::new(Singer::new(song_sender)));
         Singer::start_listener(singer.clone(), view_receiver);
-        let mut device = Device::open_default().unwrap();
-        device.start(singer.clone()).unwrap();
+        let mut device = Device::open_default(singer.clone()).unwrap();
+        device.start().unwrap();
         let device = Some(device);
         view_sender.send(SingerMsg::Song).unwrap();
         let view = Arc::new(Mutex::new(MainView::new(view_sender)));
@@ -68,7 +68,7 @@ impl eframe::App for MyApp {
         self.view
             .lock()
             .unwrap()
-            .view(ctx, &mut self.device, &self.singer)
+            .view(ctx, &mut self.device)
             .unwrap();
     }
 }

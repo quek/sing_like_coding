@@ -1,12 +1,7 @@
-use std::sync::{Arc, Mutex};
-
 use anyhow::Result;
 use eframe::egui::{CentralPanel, Color32, Frame, Key, TopBottomPanel, Ui};
 
-use crate::{
-    device::Device,
-    singer::{Singer, SingerMsg},
-};
+use crate::{device::Device, singer::SingerMsg};
 
 use super::view_state::ViewState;
 
@@ -22,7 +17,6 @@ impl TrackView {
         gui_context: &eframe::egui::Context,
         state: &mut ViewState,
         device: &mut Option<Device>,
-        singer: &Arc<Mutex<Singer>>,
     ) -> Result<()> {
         self.process_shortcut(gui_context, state)?;
 
@@ -33,7 +27,7 @@ impl TrackView {
         CentralPanel::default().show(gui_context, |ui: &mut Ui| {
             ui.horizontal(|ui| {
                 if ui.button("device start").clicked() {
-                    device.as_mut().unwrap().start(singer.clone()).unwrap();
+                    device.as_mut().unwrap().start().unwrap();
                 }
                 if ui.button("device stop").clicked() {
                     device.as_mut().unwrap().stop().unwrap();

@@ -11,10 +11,11 @@ pub struct Device {
     sample_format: SampleFormat,
     config: StreamConfig,
     stream: Option<Stream>,
+    singer: Arc<Mutex<Singer>>,
 }
 
 impl Device {
-    pub fn open_default() -> Result<Device> {
+    pub fn open_default(singer: Arc<Mutex<Singer>>) -> Result<Device> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
@@ -37,10 +38,11 @@ impl Device {
             sample_format,
             config,
             stream: None,
+            singer,
         })
     }
 
-    pub fn start(&mut self, singer: Arc<Mutex<Singer>>) -> Result<()> {
+    pub fn start(&mut self) -> Result<()> {
         let err_fn = |err| eprintln!("an error occurred on the output audio stream: {}", err);
 
         // let mut sample_clock = 0f32;
@@ -48,6 +50,7 @@ impl Device {
         let channels = self.config.channels as usize;
         // let frames_per_buffer = self.frames_per_buffer.clone();
 
+        let singer = self.singer.clone();
         let stream = match self.sample_format {
             SampleFormat::U8 => self.device.build_output_stream(
                 &self.config,

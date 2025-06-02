@@ -13,7 +13,7 @@ use crate::{
     clap_manager::Description,
     device::Device,
     model::song::Song,
-    singer::{ClapPluginPtr, Singer, SingerMsg, SongState},
+    singer::{ClapPluginPtr, SingerMsg, SongState},
 };
 
 use super::{
@@ -101,7 +101,6 @@ impl MainView {
         &mut self,
         gui_context: &eframe::egui::Context,
         device: &mut Option<Device>,
-        singer: &Arc<Mutex<Singer>>,
     ) -> Result<()> {
         for plugin in self.callback_plugins.iter() {
             let plugin = unsafe { &*plugin.0 };
@@ -119,9 +118,7 @@ impl MainView {
         self.plugin_gui_open()?;
 
         match &self.state.route {
-            Route::Track => self
-                .track_view
-                .view(gui_context, &mut self.state, device, singer)?,
+            Route::Track => self.track_view.view(gui_context, &mut self.state, device)?,
             Route::Command => self.command_view.view(gui_context, &mut self.state)?,
             Route::PluginSelect => {
                 if self.plugin_select_view.is_none() {
