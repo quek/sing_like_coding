@@ -58,6 +58,7 @@ impl ClapManager {
     }
 
     pub fn scan(&mut self) {
+        self.descriptions.clear();
         for path in self.find_clap_files(&Path::new("C:\\Program Files\\Common Files\\CLAP")) {
             log::debug!("path {path:?}");
             log::debug!("extension {:?}", path.extension());
