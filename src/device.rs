@@ -45,11 +45,12 @@ impl Device {
     pub fn start(&mut self) -> Result<()> {
         let err_fn = |err| eprintln!("an error occurred on the output audio stream: {}", err);
 
-        // let mut sample_clock = 0f32;
-        // let sample_rate = self.config.sample_rate.0 as f32;
-        let channels = self.config.channels as usize;
-        // let frames_per_buffer = self.frames_per_buffer.clone();
+        {
+            let sample_rate = self.config.sample_rate.0 as f64;
+            self.singer.lock().unwrap().song.sample_rate = sample_rate;
+        }
 
+        let channels = self.config.channels as usize;
         let singer = self.singer.clone();
         let stream = match self.sample_format {
             SampleFormat::U8 => self.device.build_output_stream(
