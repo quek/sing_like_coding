@@ -26,7 +26,6 @@ pub fn main() -> eframe::Result {
 
 struct MyApp {
     device: Option<Device>,
-    singer: Arc<Mutex<Singer>>,
     view: Arc<Mutex<MainView>>,
 }
 
@@ -41,30 +40,19 @@ impl Default for MyApp {
         let (view_sender, view_receiver) = channel();
         let singer = Arc::new(Mutex::new(Singer::new(song_sender)));
         Singer::start_listener(singer.clone(), view_receiver);
-        let mut device = Device::open_default(singer.clone()).unwrap();
+        let mut device = Device::open_default(singer).unwrap();
         device.start().unwrap();
         let device = Some(device);
         view_sender.send(SingerMsg::Song).unwrap();
         let view = Arc::new(Mutex::new(MainView::new(view_sender)));
         MainView::start_listener(view.clone(), song_receiver);
 
-        Self {
-            device,
-            singer,
-            view,
-        }
+        Self { device, view }
     }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        {
-            let mut singer = self.singer.lock().unwrap();
-            if singer.gui_context.is_none() {
-                singer.gui_context = Some(ctx.clone());
-            }
-        }
-
         self.view
             .lock()
             .unwrap()

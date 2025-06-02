@@ -54,7 +54,6 @@ pub struct Singer {
     pub song: Song,
     song_sender: Sender<ViewMsg>,
     pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
-    pub gui_context: Option<eframe::egui::Context>,
     line_play: usize,
     process_track_contexts: Vec<ProcessTrackContext>,
 }
@@ -72,7 +71,6 @@ impl Singer {
             song,
             song_sender,
             plugins: Default::default(),
-            gui_context: None,
             line_play: 0,
             process_track_contexts: vec![],
         };
