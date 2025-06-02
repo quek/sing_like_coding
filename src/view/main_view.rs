@@ -37,35 +37,41 @@ pub enum Route {
 
 pub struct MainView {
     gui_context: Option<eframe::egui::Context>,
-    callback_plugins: Vec<ClapPluginPtr>,
-    state: ViewState,
+    state: Arc<Mutex<ViewState>>,
     track_view: TrackView,
     command_view: CommandView,
     plugin_select_view: Option<QueryView<Description>>,
     will_plugin_open: Option<(usize, usize)>,
+    song_receiver: Option<Receiver<ViewMsg>>,
 }
 
 impl MainView {
-    pub fn new(view_sender: Sender<SingerMsg>) -> Self {
+    pub fn new(view_sender: Sender<SingerMsg>, song_receiver: Receiver<ViewMsg>) -> Self {
         Self {
             gui_context: None,
-            callback_plugins: vec![],
-            state: ViewState::new(view_sender),
+            state: Arc::new(Mutex::new(ViewState::new(view_sender))),
             track_view: TrackView::new(),
             command_view: CommandView::new(),
             plugin_select_view: None,
             will_plugin_open: None,
+            song_receiver: Some(song_receiver),
         }
     }
 
-    pub fn start_listener(view: Arc<Mutex<Self>>, receiver: Receiver<ViewMsg>) {
+    pub fn start_listener(
+        &mut self,
+        receiver: Receiver<ViewMsg>,
+        gui_context: &eframe::egui::Context,
+    ) {
         log::debug!("MainView::start_listener");
+        let state = self.state.clone();
+        let gui_context = gui_context.clone();
         thread::spawn(move || {
             while let Ok(command) = receiver.recv() {
                 match command {
                     ViewMsg::Song(song) => {
-                        let mut view = view.lock().unwrap();
-                        view.state.line_buffers.clear();
+                        let mut state = state.lock().unwrap();
+                        state.line_buffers.clear();
                         for track in song.tracks.iter() {
                             let mut xs = vec![];
                             for line in 0..song.nlines {
@@ -77,20 +83,18 @@ impl MainView {
                                     xs.push("".to_string());
                                 }
                             }
-                            view.state.line_buffers.push(xs);
+                            state.line_buffers.push(xs);
                         }
-                        view.state.song = song;
-                        view.gui_context.as_ref().map(|x| x.request_repaint());
+                        state.song = song;
+                        gui_context.request_repaint();
                     }
                     ViewMsg::State(song_state) => {
-                        let mut view = view.lock().unwrap();
-                        view.state.song_state = song_state;
-                        view.gui_context.as_ref().map(|x| x.request_repaint());
+                        state.lock().unwrap().song_state = song_state;
+                        gui_context.request_repaint();
                     }
                     ViewMsg::PluginCallback(plugin) => {
-                        let mut view = view.lock().unwrap();
-                        view.callback_plugins.push(plugin);
-                        view.gui_context.as_ref().map(|x| x.request_repaint());
+                        state.lock().unwrap().callback_plugins.push(plugin);
+                        gui_context.request_repaint();
                     }
                 }
             }
@@ -102,28 +106,23 @@ impl MainView {
         gui_context: &eframe::egui::Context,
         device: &mut Option<Device>,
     ) -> Result<()> {
-        for plugin in self.callback_plugins.iter() {
-            let plugin = unsafe { &*plugin.0 };
-            log::debug!("will on_main_thread");
-            unsafe { plugin.on_main_thread.unwrap()(plugin) };
-            log::debug!("did on_main_thread");
-        }
-        self.callback_plugins.clear();
+        self.do_callback_plugins()?;
 
-        if self.gui_context.is_none() {
+        if let Some(receiver) = self.song_receiver.take() {
+            self.start_listener(receiver, gui_context);
             self.gui_context = Some(gui_context.clone());
         }
         self.process_shortcut(gui_context)?;
 
         self.plugin_gui_open()?;
 
-        match &self.state.route {
-            Route::Track => self.track_view.view(gui_context, &mut self.state, device)?,
-            Route::Command => self.command_view.view(gui_context, &mut self.state)?,
+        let mut state = self.state.lock().unwrap();
+        match &state.route {
+            Route::Track => self.track_view.view(gui_context, &mut state, device)?,
+            Route::Command => self.command_view.view(gui_context, &mut state)?,
             Route::PluginSelect => {
                 if self.plugin_select_view.is_none() {
-                    let xs = self
-                        .state
+                    let xs = state
                         .clap_manager
                         .descriptions
                         .iter()
@@ -139,43 +138,54 @@ impl MainView {
                     .view(gui_context)?
                 {
                     let description = description.lock().unwrap();
-                    for track_index in &self.state.selected_tracks {
-                        self.state
+                    for track_index in &state.selected_tracks {
+                        state
                             .view_sender
                             .send(SingerMsg::PluginLoad(*track_index, description.clone()))
                             .unwrap();
-                        self.will_plugin_open = Some((
-                            *track_index,
-                            self.state.song.tracks[*track_index].modules.len(),
-                        ));
+                        self.will_plugin_open =
+                            Some((*track_index, state.song.tracks[*track_index].modules.len()));
                     }
 
                     self.plugin_select_view = None;
-                    self.state.route = Route::Track;
+                    state.route = Route::Track;
                 }
             }
         }
         Ok(())
     }
 
+    fn do_callback_plugins(&mut self) -> Result<()> {
+        let mut state = self.state.lock().unwrap();
+        let callback_plugins = &mut state.callback_plugins;
+        for plugin in callback_plugins.iter() {
+            let plugin = unsafe { &*plugin.0 };
+            log::debug!("will on_main_thread");
+            unsafe { plugin.on_main_thread.unwrap()(plugin) };
+            log::debug!("did on_main_thread");
+        }
+        callback_plugins.clear();
+        Ok(())
+    }
+
     fn plugin_gui_open(&mut self) -> Result<()> {
-        let mut opened = false;
-        if let Some((track_index, plugin_index)) = &self.will_plugin_open {
-            if let Some(plugin) = &mut self
-                .state
+        let plugin_ptr = if let Some((track_index, plugin_index)) = &self.will_plugin_open {
+            let mut state = self.state.lock().unwrap();
+            state
                 .song
                 .tracks
                 .get_mut(*track_index)
                 .map(|x| x.modules.get_mut(*plugin_index))
                 .flatten()
-                .map(|module| module.plugin())
+                .map(|module| module.plugin_ptr.clone())
                 .flatten()
-            {
-                plugin.gui_open()?;
-                opened = true;
-            }
-        }
-        if opened {
+        } else {
+            None
+        };
+
+        if let Some(plugin_ptr) = plugin_ptr {
+            let plugin = unsafe { plugin_ptr.as_mut() };
+            plugin.gui_open()?;
             self.will_plugin_open = None;
         }
         Ok(())
@@ -188,16 +198,16 @@ impl MainView {
             return Ok(());
         }
 
+        let mut state = self.state.lock().unwrap();
+
         if input.modifiers.ctrl && input.key_pressed(eframe::egui::Key::Space) {
-            self.state.route = Route::Command;
+            state.route = Route::Command;
         } else if input.key_pressed(Key::Space) {
-            self.state
-                .view_sender
-                .send(if self.state.song_state.play_p {
-                    SingerMsg::Stop
-                } else {
-                    SingerMsg::Play
-                })?;
+            state.view_sender.send(if state.song_state.play_p {
+                SingerMsg::Stop
+            } else {
+                SingerMsg::Play
+            })?;
         }
 
         Ok(())

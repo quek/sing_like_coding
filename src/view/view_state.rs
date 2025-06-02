@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use crate::{
     clap_manager::ClapManager,
     model::song::Song,
-    singer::{SingerMsg, SongState},
+    singer::{ClapPluginPtr, SingerMsg, SongState},
 };
 
 use super::main_view::Route;
@@ -20,6 +20,7 @@ pub struct ViewState {
     pub song: Song,
     pub song_state: SongState,
     pub view_sender: Sender<SingerMsg>,
+    pub callback_plugins: Vec<ClapPluginPtr>,
 }
 
 impl ViewState {
@@ -36,6 +37,7 @@ impl ViewState {
             song: Song::new(),
             song_state: SongState::default(),
             view_sender,
+            callback_plugins: vec![],
         }
     }
 }

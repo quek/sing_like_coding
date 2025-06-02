@@ -26,7 +26,7 @@ pub fn main() -> eframe::Result {
 
 struct MyApp {
     device: Option<Device>,
-    view: Arc<Mutex<MainView>>,
+    view: MainView,
 }
 
 pub enum Msg {
@@ -44,8 +44,7 @@ impl Default for MyApp {
         device.start().unwrap();
         let device = Some(device);
         view_sender.send(SingerMsg::Song).unwrap();
-        let view = Arc::new(Mutex::new(MainView::new(view_sender)));
-        MainView::start_listener(view.clone(), song_receiver);
+        let view = MainView::new(view_sender, song_receiver);
 
         Self { device, view }
     }
@@ -53,10 +52,6 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.view
-            .lock()
-            .unwrap()
-            .view(ctx, &mut self.device)
-            .unwrap();
+        let _ = self.view.view(ctx, &mut self.device);
     }
 }
