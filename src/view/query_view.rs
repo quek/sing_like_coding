@@ -33,7 +33,7 @@ impl<T: QueryItem + Send + 'static> QueryView<T> {
                 |ui: &mut Ui| -> Result<Option<Arc<Mutex<T>>>> {
                     let edit = TextEdit::singleline(&mut self.buffer);
                     let response = ui.add(edit);
-                    if response.changed() || (self.focus_p && !self.buffer.is_empty()) {
+                    if response.changed() || self.focus_p {
                         self.quried_items = self
                             .all_items
                             .iter_mut()

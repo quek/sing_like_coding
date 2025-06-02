@@ -32,7 +32,7 @@ impl CommandView {
         CentralPanel::default().show(gui_context, |ui: &mut Ui| -> Result<()> {
             let edit = TextEdit::singleline(&mut self.buffer);
             let response = ui.add(edit);
-            if response.changed() || (self.focus_p && !self.buffer.is_empty()) {
+            if response.changed() || self.focus_p {
                 self.commands = self.commander.query(&self.buffer);
             }
             if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
