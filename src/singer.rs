@@ -1,5 +1,4 @@
 use std::{
-    ffi::c_void,
     ops::Range,
     path::Path,
     pin::Pin,
@@ -14,7 +13,7 @@ use crate::{
     event::Event,
     model::{module::Module, note::Note, song::Song},
     plugin::Plugin,
-    process_track_context::{PluginPtr, ProcessTrackContext},
+    process_track_context::ProcessTrackContext,
     view::main_view::ViewMsg,
 };
 
@@ -129,10 +128,7 @@ impl Singer {
             context.bpm = self.song.bpm;
             context.steady_time = self.steady_time;
             context.play_position = self.play_position.clone();
-            context.plugins = plugins
-                .iter_mut()
-                .map(|x| PluginPtr(x.as_mut().get_mut() as *mut _ as *mut c_void))
-                .collect::<Vec<_>>();
+            context.plugins = plugins.iter_mut().map(|x| x.into()).collect::<Vec<_>>();
             context.prepare();
         }
 
@@ -215,7 +211,7 @@ impl Singer {
                         plugin.start().unwrap();
                         singer.song.tracks[track_index]
                             .modules
-                            .push(Module::new(path));
+                            .push(Module::new(path, (&mut plugin).into()));
                         loop {
                             if singer.plugins.len() > track_index {
                                 break;
