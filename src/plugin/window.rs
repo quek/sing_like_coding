@@ -80,7 +80,6 @@ unsafe extern "system" fn wnd_proc(
             let ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) };
             let plugin = unsafe { &mut *(ptr as *mut Plugin) };
             plugin.gui_close().unwrap();
-
             LRESULT(0)
         }
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },

@@ -88,8 +88,7 @@ impl Plugin {
             get_extension: Some(Self::get_extension),
             request_restart: Some(Self::request_restart),
             request_process: Some(Self::request_process),
-            // request_callback: Some(Self::request_callback),
-            request_callback: None,
+            request_callback: Some(Self::request_callback),
         };
 
         let host_audio_ports = clap_host_audio_ports {
@@ -219,6 +218,13 @@ impl Plugin {
     }
 
     unsafe extern "C" fn request_callback(host: *const clap_host) {
+        // let this = unsafe { &mut *((*host).host_data as *mut Self) };
+        // let plugin = unsafe { &*this.plugin.unwrap() };
+        // dbg!("BBBBBB");
+        // unsafe { plugin.on_main_thread.unwrap()(plugin) };
+        // dbg!("AAAAAA");
+        // return;
+
         log::debug!("request_callback start...");
         let this = unsafe { &mut *((*host).host_data as *mut Self) };
         let plugin = this.plugin.unwrap();

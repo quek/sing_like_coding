@@ -98,11 +98,11 @@ impl MainView {
                         dbg!("State end");
                     }
                     ViewMsg::PluginCallback(plugin) => {
-                        dbg!("PluginCallbackstart start...");
+                        dbg!("PluginCallback start...");
                         state.lock().unwrap().callback_plugins.push(plugin);
-                        dbg!("PluginCallbackstart state locked");
+                        dbg!("PluginCallback state locked");
                         gui_context.request_repaint();
-                        dbg!("PluginCallbackstart end");
+                        dbg!("PluginCallback end");
                     }
                 }
             }
