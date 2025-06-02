@@ -219,6 +219,7 @@ impl Singer {
                             singer.plugins.push(vec![]);
                         }
                         singer.plugins[track_index].push(plugin);
+                        singer.send_song();
                     }
                     SingerMsg::NoteOn(track_index, key, _channel, velocity, _time) => {
                         let mut singer = singer.lock().unwrap();

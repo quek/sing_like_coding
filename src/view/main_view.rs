@@ -13,6 +13,7 @@ use crate::{
     clap_manager::Description,
     device::Device,
     model::song::Song,
+    plugin::Plugin,
     singer::{ClapPluginPtr, Singer, SingerMsg, SongState},
 };
 
@@ -36,7 +37,6 @@ pub enum Route {
 }
 
 pub struct MainView {
-    singer: Arc<Mutex<Singer>>,
     gui_context: Option<eframe::egui::Context>,
     callback_plugins: Vec<ClapPluginPtr>,
     state: ViewState,
@@ -47,9 +47,8 @@ pub struct MainView {
 }
 
 impl MainView {
-    pub fn new(view_sender: Sender<SingerMsg>, singer: Arc<Mutex<Singer>>) -> Self {
+    pub fn new(view_sender: Sender<SingerMsg>) -> Self {
         Self {
-            singer,
             gui_context: None,
             callback_plugins: vec![],
             state: ViewState::new(view_sender),
@@ -151,9 +150,10 @@ impl MainView {
                             .view_sender
                             .send(SingerMsg::PluginLoad(*track_index, path.clone(), index))
                             .unwrap();
-                        let singer = singer.lock().unwrap();
-                        self.will_plugin_open =
-                            Some((*track_index, singer.plugins[*track_index].len()));
+                        self.will_plugin_open = Some((
+                            *track_index,
+                            self.state.song.tracks[*track_index].modules.len(),
+                        ));
                     }
 
                     self.plugin_select_view = None;
@@ -167,13 +167,17 @@ impl MainView {
     fn do_plugin_open(&mut self) -> Result<()> {
         let mut opened = false;
         if let Some((track_index, plugin_index)) = &self.will_plugin_open {
-            let mut singer = self.singer.lock().unwrap();
-            if let Some(plugin) = &mut singer
-                .plugins
+            if let Some(plugin_ptr) = &mut self
+                .state
+                .song
+                .tracks
                 .get_mut(*track_index)
-                .map(|x| x.get_mut(*plugin_index))
+                .map(|x| x.modules.get_mut(*plugin_index))
+                .flatten()
+                .map(|module| module.plugin.as_mut())
                 .flatten()
             {
+                let plugin: &mut Plugin = unsafe { plugin_ptr.as_mut() };
                 plugin.gui_open()?;
                 opened = true;
             }
