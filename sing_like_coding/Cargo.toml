@@ -1,0 +1,28 @@
+[package]
+name = "sing_like_coding"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+clap-sys = "0.5.0"
+common = { path = "../common" }
+cpal = "0.15.3"
+eframe = "0.31.1"
+egui_extras = "0.31.1"
+env_logger = "0.11.8"
+libloading = "0.8.7"
+log = "0.4.27"
+rayon = "1.10.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+windows = { version = "0.61.1", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Pipes",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_System_LibraryLoader"
+] }
