@@ -1,32 +1,24 @@
 use std::process::{Command, Stdio};
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use common::protocol::{Hello, Protocol};
+use anyhow::Result;
+use common::protocol::{MainToPlugin, PluginToMain};
 use common::{to_pcwstr, PIPE_BUFFER_SIZE, PIPE_NAME};
 use eframe::egui;
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::Pipes::{
-    ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_MESSAGE,
-    PIPE_TYPE_MESSAGE, PIPE_WAIT,
+    ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_MESSAGE, PIPE_TYPE_MESSAGE, PIPE_WAIT,
 };
-use windows::Win32::{
-    Foundation::{CloseHandle, INVALID_HANDLE_VALUE},
-    Storage::FileSystem::PIPE_ACCESS_DUPLEX,
-};
+use windows::Win32::{Foundation::INVALID_HANDLE_VALUE, Storage::FileSystem::PIPE_ACCESS_DUPLEX};
 
 use crate::device::Device;
+use crate::plugin_comminicator::PluginCommunicator;
 use crate::singer::{Singer, SingerMsg};
 use crate::view::main_view::MainView;
 
 pub fn main() -> eframe::Result {
-    let app = Box::<MyApp>::default();
-    thread::spawn(move || {
-        plugin_process().unwrap();
-    });
-
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 640.0]),
         ..Default::default()
@@ -37,7 +29,7 @@ pub fn main() -> eframe::Result {
         Box::new(|cc| {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(app)
+            Ok(Box::new(MyApp::default()))
         }),
     );
 
@@ -47,6 +39,8 @@ pub fn main() -> eframe::Result {
 struct MyApp {
     device: Option<Device>,
     view: MainView,
+    sender_to_loop: Sender<MainToPlugin>,
+    receiver_from_loop: Receiver<PluginToMain>,
 }
 
 pub enum Msg {
@@ -64,9 +58,19 @@ impl Default for MyApp {
         device.start().unwrap();
         let device = Some(device);
         view_sender.send(SingerMsg::Song).unwrap();
-        let view = MainView::new(view_sender, song_receiver);
 
-        Self { device, view }
+        let (sender_to_loop, receiver_from_main) = channel();
+        let (sender_to_main, receiver_from_loop) = channel();
+        let view = MainView::new(view_sender, song_receiver, sender_to_loop.clone());
+        thread::spawn(move || {
+            send_to_plugin_process(sender_to_main, receiver_from_main).unwrap();
+        });
+        Self {
+            device,
+            view,
+            sender_to_loop,
+            receiver_from_loop,
+        }
     }
 }
 
@@ -76,7 +80,10 @@ impl eframe::App for MyApp {
     }
 }
 
-pub fn plugin_process() -> anyhow::Result<()> {
+fn send_to_plugin_process(
+    sender_to_main: Sender<PluginToMain>,
+    receiver_from_main: Receiver<MainToPlugin>,
+) -> Result<()> {
     let pipe_name = to_pcwstr(PIPE_NAME);
 
     unsafe {
@@ -104,28 +111,10 @@ pub fn plugin_process() -> anyhow::Result<()> {
 
         ConnectNamedPipe(pipe, None)?;
 
-        srloop(pipe)?;
-
-        DisconnectNamedPipe(pipe)?;
-        CloseHandle(pipe)?;
+        let mut plugin_comminicator =
+            PluginCommunicator::new(pipe, sender_to_main, receiver_from_main);
+        plugin_comminicator.run()?;
 
         Ok(())
     }
-}
-
-fn srloop(pipe: HANDLE) -> anyhow::Result<()> {
-    let messages = vec![
-        Protocol::Hello(Hello {
-            message: "World!".to_string(),
-        }),
-        Protocol::Quit,
-    ];
-
-    for message in &messages {
-        message.send(pipe)?;
-        let message = Protocol::receive(pipe)?;
-        dbg!(message);
-    }
-
-    Ok(())
 }

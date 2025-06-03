@@ -8,6 +8,7 @@ mod event;
 mod event_list;
 mod model;
 mod plugin;
+mod plugin_comminicator;
 mod process_track_context;
 mod singer;
 mod util;

@@ -1,10 +1,10 @@
 use std::{
     path::Path,
+    pin::Pin,
     sync::mpsc::{channel, Receiver, Sender},
 };
 
 use anyhow::{anyhow, Result};
-use clap_sys::ext::track_info;
 use common::protocol::{MainToPlugin, PluginToMain};
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, GetMessageW, TranslateMessage, MSG,
