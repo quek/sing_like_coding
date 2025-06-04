@@ -6,9 +6,14 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use common::protocol::{MainToPlugin, PluginToMain};
-use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, GetMessageW, TranslateMessage, MSG,
+use windows::Win32::{
+    Foundation::{LPARAM, WPARAM},
+    UI::WindowsAndMessaging::{
+        DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW, TranslateMessage, MSG,
+        WM_NULL,
+    },
 };
+use windows::Win32::{System::Threading::GetCurrentThreadId, UI::WindowsAndMessaging::PM_REMOVE};
 
 use crate::{clap_manager::ClapManager, plugin::Plugin, process_track_context::PluginPtr};
 
@@ -40,6 +45,7 @@ impl PluginHost {
 
     pub fn run(&mut self) -> Result<()> {
         let mut win_msg = MSG::default();
+        unsafe { PostThreadMessageW(GetCurrentThreadId(), WM_NULL, WPARAM(0), LPARAM(0)) }?;
         loop {
             if let Ok(message) = self.receiver_from_loop.try_recv() {
                 match message {
@@ -56,19 +62,11 @@ impl PluginHost {
                 }
             }
 
-            // ウインドウメッセージの取得
             unsafe {
-                let ret = GetMessageW(&mut win_msg, None, 0, 0);
-                if ret.0 == 0 {
-                    // WM_QUIT受信で終了
-                    break;
-                } else if ret.0 == -1 {
-                    // エラー処理
-                    return Err(anyhow!("GetMessageW failed"));
+                while PeekMessageW(&mut win_msg, None, 0, 0, PM_REMOVE).as_bool() {
+                    let _ = TranslateMessage(&win_msg);
+                    let _ = DispatchMessageW(&win_msg);
                 }
-
-                let _ = TranslateMessage(&win_msg);
-                let _ = DispatchMessageW(&win_msg);
             };
         }
         Ok(())

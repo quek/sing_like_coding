@@ -24,11 +24,12 @@ impl MainCommunicator {
 
     pub fn run(&mut self) -> anyhow::Result<()> {
         loop {
+            log::debug!("####### before let message: MainToPlugin = receive(self.pipe)?;");
             let message: MainToPlugin = receive(self.pipe)?;
             log::debug!("RECEIVED {:?}", message);
-            self.sender_to_main.send(message);
+            self.sender_to_main.send(message)?;
             let message = self.receiver_from_main.recv()?;
-            send(self.pipe, &message);
+            send(self.pipe, &message)?;
             if message == PluginToMain::Quit {
                 break;
             }

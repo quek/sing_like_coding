@@ -24,10 +24,12 @@ pub fn main() {
     let (sender_to_loop, receiver_from_main) = channel();
     let (sender_to_main, receiver_from_loop) = channel();
     let mut plugin_host = PluginHost::new(sender_to_loop, receiver_from_loop);
-    plugin_host.run().unwrap();
+    log::debug!("$$$$$$$ before thread::spawn");
     thread::spawn(move || {
+        log::debug!("$$$$$$$ before receive_from_main_process");
         receive_from_main_process(sender_to_main, receiver_from_main).unwrap();
     });
+    plugin_host.run().unwrap();
 }
 
 fn receive_from_main_process(
@@ -37,6 +39,7 @@ fn receive_from_main_process(
     let pipe_name = to_pcwstr(PIPE_NAME);
 
     let pipe = unsafe {
+        dbg!("$$$$$$$ before CreateFileW");
         let pipe = CreateFileW(
             PCWSTR(pipe_name.as_ptr()),
             FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0,
@@ -46,6 +49,7 @@ fn receive_from_main_process(
             FILE_FLAGS_AND_ATTRIBUTES(0),
             None,
         )?;
+        dbg!("$$$$$$$ after CreateFileW");
         if pipe == INVALID_HANDLE_VALUE {
             panic!("Plugin: Failed to connect to named pipe");
         }
@@ -53,6 +57,7 @@ fn receive_from_main_process(
     };
 
     let mut main_comminicator = MainCommunicator::new(pipe, sender_to_main, receiver_from_main);
+    dbg!("$$$$$$$ before main_comminicator.run()?;");
     main_comminicator.run()?;
 
     Ok(())

@@ -63,6 +63,7 @@ impl Default for MyApp {
         let (sender_to_main, receiver_from_loop) = channel();
         let view = MainView::new(view_sender, song_receiver, sender_to_loop.clone());
         thread::spawn(move || {
+            dbg!("########## before send_to_plugin_process");
             send_to_plugin_process(sender_to_main, receiver_from_main).unwrap();
         });
         Self {
@@ -84,10 +85,12 @@ fn send_to_plugin_process(
     sender_to_main: Sender<PluginToMain>,
     receiver_from_main: Receiver<MainToPlugin>,
 ) -> Result<()> {
+    dbg!("########## in send_to_plugin_process");
     let pipe_name = to_pcwstr(PIPE_NAME);
 
     unsafe {
         // Named Pipe作成
+        dbg!("########## before CreateNamedPipeW");
         let pipe = CreateNamedPipeW(
             PCWSTR(pipe_name.as_ptr()),
             PIPE_ACCESS_DUPLEX,
@@ -103,17 +106,20 @@ fn send_to_plugin_process(
             panic!("Failed to create named pipe");
         }
 
-        // プラグインプロセス起動
+        dbg!("########## before Command::new(\"sing_like_coding_plugin.exe\")");
         let _child = Command::new("sing_like_coding_plugin.exe")
             .stdout(Stdio::inherit())
             .spawn()
             .expect("Failed to start plugin");
 
+        dbg!("########## before ConnectNamedPipe");
         ConnectNamedPipe(pipe, None)?;
 
         let mut plugin_comminicator =
             PluginCommunicator::new(pipe, sender_to_main, receiver_from_main);
+        dbg!("########## before plugin_comminicator.run()");
         plugin_comminicator.run()?;
+        dbg!("########## after plugin_comminicator.run()");
 
         Ok(())
     }

@@ -27,7 +27,9 @@ impl PluginCommunicator {
 
     pub fn run(&mut self) -> anyhow::Result<()> {
         loop {
+            dbg!("before receiver_from_main.recv()?;");
             let message = self.receiver_from_main.recv()?;
+            dbg!("after receiver_from_main.recv()?;");
             send(self.pipe, &message)?;
 
             let message: PluginToMain = receive(self.pipe)?;
