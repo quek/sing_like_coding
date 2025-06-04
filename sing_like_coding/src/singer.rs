@@ -112,18 +112,13 @@ impl Singer {
 
         self.compute_play_position(nframes);
 
-        for (context, plugins) in self
-            .process_track_contexts
-            .iter_mut()
-            .zip(self.plugins.iter_mut())
-        {
+        for context in self.process_track_contexts.iter_mut() {
             context.nchannels = nchannels;
             context.nframes = nframes;
             context.play_p = self.play_p;
             context.bpm = self.song.bpm;
             context.steady_time = self.steady_time;
             context.play_position = self.play_position.clone();
-            context.plugins = plugins.iter_mut().map(|x| x.clone()).collect::<Vec<_>>();
             context.prepare();
         }
 
