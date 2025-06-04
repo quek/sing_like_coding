@@ -36,13 +36,13 @@ use clap_sys::{
     process::{clap_process, CLAP_PROCESS_ERROR},
     version::{clap_version_is_compatible, CLAP_VERSION},
 };
+use common::{cstr, event::Event, process_track_context::ProcessTrackContext};
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
 
-use crate::{event::Event, process_track_context::PluginPtr};
 use crate::{
     event_list::{EventListInput, EventListOutput},
-    process_track_context::ProcessTrackContext,
+    plugin_ptr::PluginPtr,
 };
 
 mod window;
@@ -63,12 +63,6 @@ pub struct Plugin {
     host_latency: clap_host_latency,
     host_log: clap_host_log,
     host_params: clap_host_params,
-}
-
-macro_rules! cstr {
-    ($str:literal) => {
-        unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(concat!($str, "\0").as_bytes()) }
-    };
 }
 
 pub const NAME: &CStr = cstr!("Sing Like Coding");

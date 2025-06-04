@@ -4,18 +4,17 @@ use std::{
     sync::mpsc::{channel, Receiver, Sender},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use common::protocol::{MainToPlugin, PluginToMain};
 use windows::Win32::{
     Foundation::{LPARAM, WPARAM},
     UI::WindowsAndMessaging::{
-        DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW, TranslateMessage, MSG,
-        WM_NULL,
+        DispatchMessageW, PeekMessageW, PostThreadMessageW, TranslateMessage, MSG, WM_NULL,
     },
 };
 use windows::Win32::{System::Threading::GetCurrentThreadId, UI::WindowsAndMessaging::PM_REMOVE};
 
-use crate::{clap_manager::ClapManager, plugin::Plugin, process_track_context::PluginPtr};
+use crate::{clap_manager::ClapManager, plugin::Plugin, plugin_ptr::PluginPtr};
 
 pub struct PluginHost {
     sender_to_loop: Sender<PluginToMain>,

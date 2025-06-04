@@ -1,11 +1,8 @@
 use anyhow::Result;
+use common::{event::Event, module::Module, process_track_context::ProcessTrackContext};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    event::Event, model::note::Note, plugin::Plugin, process_track_context::ProcessTrackContext,
-};
-
-use super::module::Module;
+use crate::model::note::Note;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
@@ -49,9 +46,14 @@ impl Track {
         Ok(())
     }
 
-    fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
-        let plugin = unsafe { &mut *(context.plugins[module_index].0 as *mut Plugin) };
-        plugin.process(context)?;
+    fn process_module(
+        &self,
+        _context: &mut ProcessTrackContext,
+        _module_index: usize,
+    ) -> Result<()> {
+        // TODO send a process request.
+        // let plugin = unsafe { &mut *(context.plugins[module_index].0 as *mut Plugin) };
+        // plugin.process(context)?;
         Ok(())
     }
 

@@ -190,7 +190,7 @@ impl MainView {
     }
 
     fn plugin_gui_open(&mut self) -> Result<()> {
-        let plugin_ptr = if let Some((track_index, plugin_index)) = &self.will_plugin_open {
+        let module = if let Some((track_index, plugin_index)) = &self.will_plugin_open {
             let mut state = self.state.lock().unwrap();
             state
                 .song
@@ -198,17 +198,17 @@ impl MainView {
                 .get_mut(*track_index)
                 .map(|x| x.modules.get_mut(*plugin_index))
                 .flatten()
-                .map(|module| module.plugin_ptr.clone())
-                .flatten()
+                .map(|x| x.clone())
         } else {
             None
         };
 
-        if let Some(plugin_ptr) = plugin_ptr {
-            let plugin = unsafe { plugin_ptr.as_mut() };
-            dbg!("plugin.gui_open() before");
-            plugin.gui_open()?;
-            dbg!("plugin.gui_open() after");
+        if let Some(_module) = module {
+            // TODO send open request
+            // let plugin = unsafe { module.as_mut() };
+            // dbg!("plugin.gui_open() before");
+            // plugin.gui_open()?;
+            // dbg!("plugin.gui_open() after");
             self.will_plugin_open = None;
         }
         Ok(())

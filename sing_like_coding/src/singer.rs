@@ -1,7 +1,5 @@
 use std::{
     ops::Range,
-    path::Path,
-    pin::Pin,
     sync::{
         mpsc::{Receiver, Sender},
         Arc, Mutex,
@@ -11,15 +9,13 @@ use std::{
 
 use crate::{
     clap_manager::Description,
-    event::Event,
-    model::{module::Module, note::Note, song::Song},
-    plugin::Plugin,
-    process_track_context::ProcessTrackContext,
+    model::{note::Note, song::Song},
     view::main_view::ViewMsg,
 };
 
 use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
+use common::{event::Event, module::Module, process_track_context::ProcessTrackContext};
 use rayon::prelude::*;
 
 #[derive(Debug)]
@@ -53,7 +49,7 @@ pub struct Singer {
     pub play_position: Range<i64>,
     pub song: Song,
     song_sender: Sender<ViewMsg>,
-    pub plugins: Vec<Vec<Pin<Box<Plugin>>>>,
+    pub plugins: Vec<Vec<Module>>,
     line_play: usize,
     process_track_contexts: Vec<ProcessTrackContext>,
 }
@@ -127,7 +123,7 @@ impl Singer {
             context.bpm = self.song.bpm;
             context.steady_time = self.steady_time;
             context.play_position = self.play_position.clone();
-            context.plugins = plugins.iter_mut().map(|x| x.into()).collect::<Vec<_>>();
+            context.plugins = plugins.iter_mut().map(|x| x.clone()).collect::<Vec<_>>();
             context.prepare();
         }
 
@@ -203,24 +199,25 @@ impl Singer {
                             singer.send_song();
                         }
                     }
-                    SingerMsg::PluginLoad(track_index, description) => {
-                        let mut singer = singer.lock().unwrap();
-                        let mut plugin = Plugin::new(singer.song_sender.clone());
-                        plugin.load(Path::new(&description.path), description.index);
-                        plugin.start().unwrap();
-                        singer.song.tracks[track_index].modules.push(Module::new(
-                            description.id.clone(),
-                            description.name.clone(),
-                            (&mut plugin).into(),
-                        ));
-                        loop {
-                            if singer.plugins.len() > track_index {
-                                break;
-                            }
-                            singer.plugins.push(vec![]);
-                        }
-                        singer.plugins[track_index].push(plugin);
-                        singer.send_song();
+                    SingerMsg::PluginLoad(_track_index, _description) => {
+                        // TODO プラグインプロセスでロード後の状態を反映する
+                        // let mut singer = singer.lock().unwrap();
+                        // let mut plugin = Plugin::new(singer.song_sender.clone());
+                        // plugin.load(Path::new(&description.path), description.index);
+                        // plugin.start().unwrap();
+                        // singer.song.tracks[track_index].modules.push(Module::new(
+                        //     description.id.clone(),
+                        //     description.name.clone(),
+                        //     (&mut plugin).into(),
+                        // ));
+                        // loop {
+                        //     if singer.plugins.len() > track_index {
+                        //         break;
+                        //     }
+                        //     singer.plugins.push(vec![]);
+                        // }
+                        // singer.plugins[track_index].push(plugin);
+                        // singer.send_song();
                     }
                     SingerMsg::NoteOn(track_index, key, _channel, velocity, _time) => {
                         let mut singer = singer.lock().unwrap();

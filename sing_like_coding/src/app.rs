@@ -29,14 +29,14 @@ pub fn main() -> eframe::Result {
         Box::new(|cc| {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(Box::new(MyApp::default()))
+            Ok(Box::new(AppMain::default()))
         }),
     );
 
     result
 }
 
-struct MyApp {
+struct AppMain {
     device: Option<Device>,
     view: MainView,
     sender_to_loop: Sender<MainToPlugin>,
@@ -48,7 +48,7 @@ pub enum Msg {
     DidProcess(Vec<Vec<f32>>),
 }
 
-impl Default for MyApp {
+impl Default for AppMain {
     fn default() -> Self {
         let (song_sender, song_receiver) = channel();
         let (view_sender, view_receiver) = channel();
@@ -75,7 +75,7 @@ impl Default for MyApp {
     }
 }
 
-impl eframe::App for MyApp {
+impl eframe::App for AppMain {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let _ = self.view.view(ctx, &mut self.device);
     }

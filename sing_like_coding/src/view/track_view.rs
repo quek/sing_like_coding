@@ -141,7 +141,8 @@ impl TrackView {
 
                             for module in track.modules.iter_mut() {
                                 if ui.button(&module.name).clicked() {
-                                    module.plugin().map(|x| x.gui_open());
+                                    // TODO send Open request
+                                    // module.plugin().map(|x| x.gui_open());
                                 }
                             }
                         });
