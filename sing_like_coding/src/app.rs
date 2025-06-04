@@ -76,6 +76,10 @@ impl Default for AppMain {
 }
 
 impl eframe::App for AppMain {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let _ = self.sender_to_loop.send(MainToPlugin::Quit);
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let _ = self.view.view(ctx, &mut self.device);
     }
