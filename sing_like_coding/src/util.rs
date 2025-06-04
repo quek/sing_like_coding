@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use eframe::egui::{TextStyle, Ui};
 
 pub fn font_mono(ui: &mut Ui) {
@@ -39,4 +41,10 @@ pub fn is_subsequence_case_insensitive(name: &str, query: &str) -> bool {
         }
     }
     current_q.is_none()
+}
+
+static GLOBAL_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+pub fn next_id() -> usize {
+    GLOBAL_COUNTER.fetch_add(1, Ordering::Relaxed)
 }

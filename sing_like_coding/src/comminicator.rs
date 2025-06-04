@@ -5,14 +5,14 @@ use common::protocol::{receive, send, MainToPlugin, PluginToMain};
 use common::PIPE_CTRL_NAME;
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 
-pub struct PluginCommunicator {
+pub struct Communicator {
     child: Child,
     pipe: NamedPipeServer,
     sender_to_main: Sender<PluginToMain>,
     receiver_from_main: Receiver<MainToPlugin>,
 }
 
-impl PluginCommunicator {
+impl Communicator {
     pub async fn new(
         sender_to_main: Sender<PluginToMain>,
         receiver_from_main: Receiver<MainToPlugin>,

@@ -1,7 +1,8 @@
 pub mod app;
 mod clap_manager;
+mod comminicator;
 mod event_list;
-mod main_comminicator;
+mod host;
+mod manager;
 mod plugin;
-mod plugin_host;
 mod plugin_ptr;

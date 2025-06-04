@@ -3,7 +3,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[derive(Encode, Decode, PartialEq, Debug)]
 pub enum MainToPlugin {
-    Load(String, usize),
+    Load(String, String, usize),
     Quit,
 }
 

@@ -153,19 +153,14 @@ impl MainView {
                     .view(gui_context)?
                 {
                     // let description = description.lock().unwrap();
-                    // for track_index in &state.selected_tracks {
-                    //     state
-                    //         .view_sender
-                    //         .send(SingerMsg::PluginLoad(*track_index, description.clone()))
-                    //         .unwrap();
-                    //     self.will_plugin_open =
-                    //         Some((*track_index, state.song.tracks[*track_index].modules.len()));
-                    // }
-                    let description = description.lock().unwrap();
                     for track_index in &state.selected_tracks {
-                        log::debug!("will send MainToPlugin::Load {:?}", description);
-                        self.sender_to_loop
-                            .send(MainToPlugin::Load(description.id.clone(), *track_index))?;
+                        state
+                            .view_sender
+                            .send(SingerMsg::PluginLoad(
+                                *track_index,
+                                description.lock().unwrap().clone(),
+                            ))
+                            .unwrap();
                     }
 
                     self.plugin_select_view = None;

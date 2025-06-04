@@ -6,13 +6,13 @@ use common::{
 };
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
 
-pub struct MainCommunicator {
+pub struct Communicator {
     pipe: NamedPipeClient,
     sender_to_main: Sender<MainToPlugin>,
     receiver_from_main: Receiver<PluginToMain>,
 }
 
-impl MainCommunicator {
+impl Communicator {
     pub async fn new(
         sender_to_main: Sender<MainToPlugin>,
         receiver_from_main: Receiver<PluginToMain>,

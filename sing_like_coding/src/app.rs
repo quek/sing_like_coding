@@ -5,8 +5,8 @@ use anyhow::Result;
 use common::protocol::{MainToPlugin, PluginToMain};
 use eframe::egui;
 
+use crate::comminicator::Communicator;
 use crate::device::Device;
-use crate::plugin_comminicator::PluginCommunicator;
 use crate::singer::{Singer, SingerMsg};
 use crate::view::main_view::MainView;
 
@@ -44,15 +44,15 @@ impl Default for AppMain {
     fn default() -> Self {
         let (song_sender, song_receiver) = channel();
         let (view_sender, view_receiver) = channel();
-        let singer = Arc::new(Mutex::new(Singer::new(song_sender)));
+        let (sender_to_loop, receiver_from_main) = channel();
+        let (sender_to_main, receiver_from_loop) = channel();
+        let singer = Arc::new(Mutex::new(Singer::new(song_sender, sender_to_loop.clone())));
         Singer::start_listener(singer.clone(), view_receiver);
         let mut device = Device::open_default(singer).unwrap();
         device.start().unwrap();
         let device = Some(device);
         view_sender.send(SingerMsg::Song).unwrap();
 
-        let (sender_to_loop, receiver_from_main) = channel();
-        let (sender_to_main, receiver_from_loop) = channel();
         let view = MainView::new(view_sender, song_receiver, sender_to_loop.clone());
         tokio::spawn(async move {
             dbg!("########## before send_to_plugin_process");
@@ -85,8 +85,7 @@ async fn send_to_plugin_process(
 ) -> Result<()> {
     dbg!("########## in send_to_plugin_process");
 
-    let mut plugin_comminicator =
-        PluginCommunicator::new(sender_to_main, receiver_from_main).await?;
+    let mut plugin_comminicator = Communicator::new(sender_to_main, receiver_from_main).await?;
     plugin_comminicator.run().await?;
 
     Ok(())

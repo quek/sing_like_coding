@@ -1,8 +1,4 @@
-use std::{
-    path::Path,
-    pin::Pin,
-    sync::mpsc::{channel, Receiver, Sender},
-};
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 use anyhow::Result;
 use common::protocol::{MainToPlugin, PluginToMain};
@@ -14,18 +10,18 @@ use windows::Win32::{
 };
 use windows::Win32::{System::Threading::GetCurrentThreadId, UI::WindowsAndMessaging::PM_REMOVE};
 
-use crate::{clap_manager::ClapManager, plugin::Plugin, plugin_ptr::PluginPtr};
+use crate::{clap_manager::ClapManager, host::Host, plugin_ptr::PluginPtr};
 
-pub struct PluginHost {
+pub struct Manager {
     sender_to_loop: Sender<PluginToMain>,
     receiver_from_loop: Receiver<MainToPlugin>,
     sender_from_plugin: Sender<PluginPtr>,
     receiver_from_plugin: Receiver<PluginPtr>,
-    plugins: Vec<Vec<Pin<Box<Plugin>>>>,
+    plugins: Vec<Vec<Host>>,
     clap_manager: ClapManager,
 }
 
-impl PluginHost {
+impl Manager {
     pub fn new(
         sender_to_loop: Sender<PluginToMain>,
         receiver_from_loop: Receiver<MainToPlugin>,
@@ -48,9 +44,19 @@ impl PluginHost {
         loop {
             if let Ok(message) = self.receiver_from_loop.try_recv() {
                 match message {
-                    MainToPlugin::Load(id, track_index) => {
+                    MainToPlugin::Load(id, pipe_name, track_index) => {
                         log::debug!("will load {id}");
-                        self.load(id, track_index)?;
+                        let description = self.clap_manager.description(&id).unwrap();
+                        let host =
+                            Host::new(description, pipe_name, self.sender_from_plugin.clone())?;
+                        loop {
+                            if self.plugins.len() > track_index {
+                                break;
+                            }
+                            self.plugins.push(vec![]);
+                        }
+                        self.plugins[track_index].push(host);
+
                         self.sender_to_loop.send(PluginToMain::DidLoad)?;
                     }
                     MainToPlugin::Quit => {
@@ -68,23 +74,6 @@ impl PluginHost {
                 }
             };
         }
-        Ok(())
-    }
-
-    fn load(&mut self, id: String, track_index: usize) -> Result<()> {
-        let description = self.clap_manager.description(&id).unwrap();
-        let mut plugin = Plugin::new(self.sender_from_plugin.clone());
-        plugin.load(Path::new(&description.path), description.index);
-        plugin.start()?;
-        plugin.gui_open()?;
-        loop {
-            if self.plugins.len() > track_index {
-                break;
-            }
-            self.plugins.push(vec![]);
-        }
-        self.plugins[track_index].push(plugin);
-
         Ok(())
     }
 }
