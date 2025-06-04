@@ -7,7 +7,7 @@ pub mod plugin;
 pub mod process_track_context;
 pub mod protocol;
 
-pub const PIPE_NAME: &'static str = r"\\.\pipe\sing_like_coding";
+pub const PIPE_CTRL_NAME: &'static str = r"\\.\pipe\sing_like_coding\ctrl";
 pub const PIPE_BUFFER_SIZE: u32 = 8092;
 
 pub fn to_pcwstr(s: &str) -> Vec<u16> {

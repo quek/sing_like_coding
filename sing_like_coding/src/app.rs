@@ -1,17 +1,9 @@
-use std::process::{Command, Stdio};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 use anyhow::Result;
 use common::protocol::{MainToPlugin, PluginToMain};
-use common::{to_pcwstr, PIPE_BUFFER_SIZE, PIPE_NAME};
 use eframe::egui;
-use windows::core::PCWSTR;
-use windows::Win32::System::Pipes::{
-    ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_MESSAGE, PIPE_TYPE_MESSAGE, PIPE_WAIT,
-};
-use windows::Win32::{Foundation::INVALID_HANDLE_VALUE, Storage::FileSystem::PIPE_ACCESS_DUPLEX};
 
 use crate::device::Device;
 use crate::plugin_comminicator::PluginCommunicator;
@@ -62,9 +54,11 @@ impl Default for AppMain {
         let (sender_to_loop, receiver_from_main) = channel();
         let (sender_to_main, receiver_from_loop) = channel();
         let view = MainView::new(view_sender, song_receiver, sender_to_loop.clone());
-        thread::spawn(move || {
+        tokio::spawn(async move {
             dbg!("########## before send_to_plugin_process");
-            send_to_plugin_process(sender_to_main, receiver_from_main).unwrap();
+            send_to_plugin_process(sender_to_main, receiver_from_main)
+                .await
+                .unwrap();
         });
         Self {
             device,
@@ -85,46 +79,15 @@ impl eframe::App for AppMain {
     }
 }
 
-fn send_to_plugin_process(
+async fn send_to_plugin_process(
     sender_to_main: Sender<PluginToMain>,
     receiver_from_main: Receiver<MainToPlugin>,
 ) -> Result<()> {
     dbg!("########## in send_to_plugin_process");
-    let pipe_name = to_pcwstr(PIPE_NAME);
 
-    unsafe {
-        // Named Pipe作成
-        dbg!("########## before CreateNamedPipeW");
-        let pipe = CreateNamedPipeW(
-            PCWSTR(pipe_name.as_ptr()),
-            PIPE_ACCESS_DUPLEX,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            1,
-            PIPE_BUFFER_SIZE,
-            PIPE_BUFFER_SIZE,
-            0,
-            None,
-        );
+    let mut plugin_comminicator =
+        PluginCommunicator::new(sender_to_main, receiver_from_main).await?;
+    plugin_comminicator.run().await?;
 
-        if pipe == INVALID_HANDLE_VALUE {
-            panic!("Failed to create named pipe");
-        }
-
-        dbg!("########## before Command::new(\"sing_like_coding_plugin.exe\")");
-        let _child = Command::new("sing_like_coding_plugin.exe")
-            .stdout(Stdio::inherit())
-            .spawn()
-            .expect("Failed to start plugin");
-
-        dbg!("########## before ConnectNamedPipe");
-        ConnectNamedPipe(pipe, None)?;
-
-        let mut plugin_comminicator =
-            PluginCommunicator::new(pipe, sender_to_main, receiver_from_main);
-        dbg!("########## before plugin_comminicator.run()");
-        plugin_comminicator.run()?;
-        dbg!("########## after plugin_comminicator.run()");
-
-        Ok(())
-    }
+    Ok(())
 }

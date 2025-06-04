@@ -1,6 +1,5 @@
 use bincode::{config, Decode, Encode};
-use windows::Win32::Foundation::HANDLE;
-use windows::Win32::Storage::FileSystem::{ReadFile, WriteFile};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[derive(Encode, Decode, PartialEq, Debug)]
 pub enum MainToPlugin {
@@ -26,79 +25,31 @@ pub enum PluginToAudio {
     B,
 }
 
-pub fn send<T>(pipe: HANDLE, message: &T) -> anyhow::Result<()>
+pub async fn send<T, P>(pipe: &mut P, message: &T) -> anyhow::Result<()>
 where
     T: Encode,
+    P: AsyncWriteExt + Unpin,
 {
     let config = config::standard();
     let bytes: Vec<u8> = bincode::encode_to_vec(message, config).unwrap();
-    let len_bytes = (bytes.len() as u32).to_le_bytes();
 
-    unsafe {
-        let mut written = 0;
-        WriteFile(pipe, Some(&len_bytes), Some(&mut written), None)?;
-        if written != 4 {
-            return Err(
-                std::io::Error::new(std::io::ErrorKind::Other, "failed to write length").into(),
-            );
-        }
-
-        let mut total = 0;
-        while total < bytes.len() {
-            let chunk = &bytes[total..];
-            let mut written = 0;
-            WriteFile(pipe, Some(chunk), Some(&mut written), None)?;
-            if written == 0 {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::WriteZero,
-                    "failed to write chunk",
-                )
-                .into());
-            }
-            total += written as usize;
-        }
-    }
+    pipe.write_u32_le(bytes.len() as u32).await?;
+    pipe.write_all(&bytes).await?;
+    pipe.flush().await?;
     Ok(())
 }
 
-pub fn receive<T>(pipe: HANDLE) -> anyhow::Result<T>
+pub async fn receive<T, P>(pipe: &mut P) -> anyhow::Result<T>
 where
     T: Decode<()>,
+    P: AsyncReadExt + Unpin,
 {
-    unsafe {
-        let mut len_buf = [0u8; 4];
-        let mut read = 0;
+    let len = pipe.read_u32_le().await?;
+    let mut buffer = vec![0u8; len as usize];
+    pipe.read_exact(&mut buffer).await?;
 
-        // 長さ（4バイト）読み込み
-        ReadFile(pipe, Some(&mut len_buf), Some(&mut read), None)?;
-        if read != 4 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to read length",
-            )
-            .into());
-        }
+    let config = config::standard();
+    let (message, _len): (T, usize) = bincode::decode_from_slice(&buffer[..], config)?;
 
-        let len = u32::from_le_bytes(len_buf) as usize;
-        let mut buffer = vec![0u8; len];
-        let mut total_read = 0;
-
-        // 本文読み込み（ループで）
-        while total_read < len {
-            let chunk = &mut buffer[total_read..];
-            let mut read = 0;
-            ReadFile(pipe, Some(chunk), Some(&mut read), None)?;
-            if read == 0 {
-                return Err(
-                    std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "pipe closed").into(),
-                );
-            }
-            total_read += read as usize;
-        }
-
-        let config = config::standard();
-        let (message, _len): (T, usize) = bincode::decode_from_slice(&buffer[..], config)?;
-
-        Ok(message)
-    }
+    Ok(message)
 }
