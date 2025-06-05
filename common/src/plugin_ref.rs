@@ -1,9 +1,6 @@
-use windows::{
-    core::PCSTR,
-    Win32::{
-        Foundation::HANDLE,
-        System::Threading::{CreateEventA, SetEvent, WaitForSingleObject, INFINITE},
-    },
+use windows::Win32::{
+    Foundation::HANDLE,
+    System::Threading::{CreateEventA, SetEvent, WaitForSingleObject, INFINITE},
 };
 
 use crate::{
@@ -20,20 +17,23 @@ pub struct PluginRef {
 
 impl PluginRef {
     pub fn new(id: usize, ptr: *mut ProcessData) -> anyhow::Result<Self> {
+        let (event_name, _x) = event_request_name(id);
         let event_request = unsafe {
             CreateEventA(
                 None,
                 false.into(), // 自動リセット
                 false.into(), // 初期非シグナル
-                PCSTR(dbg!(event_request_name(id)).as_ptr().cast()),
+                event_name,
             )?
         };
+
+        let (event_name, _x) = event_response_name(id);
         let event_response = unsafe {
             CreateEventA(
                 None,
                 false.into(), // 自動リセット
                 false.into(), // 初期非シグナル
-                PCSTR(dbg!(event_response_name(id)).as_ptr().cast()),
+                event_name,
             )?
         };
 
