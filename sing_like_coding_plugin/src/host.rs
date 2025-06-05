@@ -2,21 +2,31 @@ use std::{path::Path, pin::Pin, sync::mpsc::Sender};
 
 use common::{
     plugin::description::Description,
-    process_track_context::ProcessTrackContext,
-    protocol::{receive, send, AudioToPlugin, PluginToAudio},
+    process_data::ProcessData,
+    shmem::{event_request_name, event_response_name, process_data_name},
 };
-use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
+use shared_memory::ShmemConf;
+use windows::{
+    core::PCSTR,
+    Win32::{
+        Storage::FileSystem::SYNCHRONIZE,
+        System::Threading::{
+            OpenEventA, SetEvent, WaitForSingleObject, EVENT_MODIFY_STATE, INFINITE,
+            SYNCHRONIZATION_ACCESS_RIGHTS,
+        },
+    },
+};
 
 use crate::{plugin::Plugin, plugin_ptr::PluginPtr};
 
 pub struct Host {
-    plugin: Pin<Box<Plugin>>,
+    _plugin: Pin<Box<Plugin>>,
 }
 
 impl Host {
     pub fn new(
+        id: usize,
         description: &Description,
-        pipe_name: String,
         sender: Sender<PluginPtr>,
     ) -> anyhow::Result<Self> {
         let mut plugin = Plugin::new(sender);
@@ -26,32 +36,39 @@ impl Host {
 
         let plugin_ptr: PluginPtr = (&mut plugin).into();
         tokio::spawn(async move {
-            process_loop(pipe_name, plugin_ptr).await.unwrap();
+            process_loop(id, plugin_ptr).await.unwrap();
         });
 
-        Ok(Self { plugin })
+        Ok(Self { _plugin: plugin })
     }
 }
 
-async fn process_loop(pipe_name: String, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
-    let mut pipe = ClientOptions::new().open(pipe_name)?;
-    loop {
-        let message: AudioToPlugin = receive(&mut pipe).await?;
-        // log::debug!("$$$$ Plugin Audio Thread received {:?}", message);
-        match message {
-            AudioToPlugin::Process(audio_buffer) => {
-                let plugin = unsafe { plugin_ptr.as_mut() };
-                let mut context = ProcessTrackContext::default();
-                context.nchannels = audio_buffer.buffer.len();
-                context.nframes = audio_buffer.buffer[0].len();
-                context.play_p = false;
-                context.bpm = 120.0;
-                context.buffer = audio_buffer;
-                plugin.process(&mut context)?;
+async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
+    let shmem = ShmemConf::new()
+        .size(size_of::<ProcessData>())
+        .os_id(process_data_name(id))
+        .open()?;
+    let process_data: &mut ProcessData = unsafe { &mut *(shmem.as_ptr() as *mut ProcessData) };
 
-                send(&mut pipe, &PluginToAudio::Process(context.buffer)).await?;
-            }
-            AudioToPlugin::B => (),
-        }
+    let event_request = unsafe {
+        OpenEventA(
+            EVENT_MODIFY_STATE | SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE.0),
+            false,
+            PCSTR(dbg!(event_request_name(id)).as_ptr()),
+        )?
+    };
+    let event_response = unsafe {
+        OpenEventA(
+            EVENT_MODIFY_STATE,
+            false,
+            PCSTR(event_response_name(id).as_ptr()),
+        )?
+    };
+
+    let plugin = unsafe { plugin_ptr.as_mut() };
+    loop {
+        unsafe { WaitForSingleObject(event_request, INFINITE) };
+        plugin.process(process_data)?;
+        unsafe { SetEvent(event_response) }?;
     }
 }

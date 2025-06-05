@@ -1,12 +1,5 @@
-use std::sync::{Arc, Mutex};
-
 use anyhow::Result;
-use common::{
-    event::Event,
-    module::Module,
-    process_track_context::ProcessTrackContext,
-    protocol::{receive, send, AudioToPlugin, PluginToAudio},
-};
+use common::{event::Event, module::Module, process_track_context::ProcessTrackContext};
 use serde::{Deserialize, Serialize};
 
 use crate::model::note::Note;
@@ -43,37 +36,31 @@ impl Track {
         }
     }
 
-    pub async fn process(&self, context: Arc<Mutex<ProcessTrackContext>>) -> Result<()> {
-        let mut context = context.lock().unwrap();
-        self.compute_midi(&mut context);
+    pub fn process(&self, context: &mut ProcessTrackContext) -> Result<()> {
+        self.compute_midi(context);
         let module_len = self.modules.len();
         for module_index in 0..module_len {
-            self.process_module(&mut context, module_index).await?;
+            self.process_module(context, module_index)?;
         }
 
         Ok(())
     }
 
-    async fn process_module(
-        &self,
-        context: &mut ProcessTrackContext,
-        module_index: usize,
-    ) -> Result<()> {
-        let pipe = &mut context.plugins[module_index].pipe;
-        let message = AudioToPlugin::Process(context.buffer.clone());
-        // log::debug!("#### will send to plugin audio thread {:?}", message);
-        // send(pipe, &message).await?;
-        let res = send(pipe, &message).await;
-        // log::debug!("#### send result: {:?}", res);
-        // log::debug!("#### did send");
-        let message: PluginToAudio = receive(pipe).await?;
-        // log::debug!("#### received from plugin audio thread {:?}", message);
-        match message {
-            PluginToAudio::Process(audio_buffer) => {
-                context.buffer = audio_buffer;
+    fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
+        let data = context.plugins[module_index].process_data();
+        data.nchannels = context.nchannels;
+        data.nframes = context.nframes;
+        data.play_p = if context.play_p { 1 } else { 0 };
+        data.bpm = context.bpm;
+        data.steady_time = context.steady_time;
+        for event in &context.event_list_input {
+            match event {
+                Event::NoteOn(key, velocity) => data.note_on(*key, *velocity, 0, 0),
+                Event::NoteOff(key) => data.note_off(*key, 0, 0),
             }
-            PluginToAudio::B => (),
         }
+        context.plugins[module_index].process()?;
+
         Ok(())
     }
 

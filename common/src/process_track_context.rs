@@ -2,9 +2,8 @@ use std::ops::Range;
 
 use crate::{audio_buffer::AudioBuffer, event::Event, plugin_ref::PluginRef};
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct ProcessTrackContext {
-    #[allow(dead_code)]
     pub nchannels: usize,
     pub nframes: usize,
     pub buffer: AudioBuffer,
@@ -14,8 +13,12 @@ pub struct ProcessTrackContext {
     pub play_position: Range<i64>,
     pub on_key: Option<i16>,
     pub event_list_input: Vec<Event>,
+    // TODO DELETE
     pub plugins: Vec<PluginRef>,
 }
+
+unsafe impl Send for ProcessTrackContext {}
+unsafe impl Sync for ProcessTrackContext {}
 
 impl ProcessTrackContext {
     pub fn prepare(&mut self) {

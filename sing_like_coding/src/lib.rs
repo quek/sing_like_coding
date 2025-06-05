@@ -2,7 +2,7 @@ pub mod app;
 mod clap_manager;
 mod command;
 mod commander;
-mod comminicator;
+mod communicator;
 mod device;
 mod event_list;
 mod model;

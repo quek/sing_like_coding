@@ -44,11 +44,10 @@ impl Manager {
         loop {
             if let Ok(message) = self.receiver_from_loop.try_recv() {
                 match message {
-                    MainToPlugin::Load(id, pipe_name, track_index) => {
+                    MainToPlugin::Load(id, clap_id, track_index) => {
                         log::debug!("will load {id}");
-                        let description = self.clap_manager.description(&id).unwrap();
-                        let host =
-                            Host::new(description, pipe_name, self.sender_from_plugin.clone())?;
+                        let description = self.clap_manager.description(&clap_id).unwrap();
+                        let host = Host::new(id, description, self.sender_from_plugin.clone())?;
                         loop {
                             if self.plugins.len() > track_index {
                                 break;

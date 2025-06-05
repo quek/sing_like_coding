@@ -5,7 +5,7 @@ use anyhow::Result;
 use common::protocol::{MainToPlugin, PluginToMain};
 use eframe::egui;
 
-use crate::comminicator::Communicator;
+use crate::communicator::Communicator;
 use crate::device::Device;
 use crate::singer::{Singer, SingerMsg};
 use crate::view::main_view::MainView;

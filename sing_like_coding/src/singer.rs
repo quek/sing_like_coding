@@ -16,12 +16,11 @@ use crate::{
 use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
 use common::{
-    event::Event, module::Module, plugin_ref::PluginRef,
-    process_track_context::ProcessTrackContext, protocol::MainToPlugin,
+    event::Event, module::Module, plugin_ref::PluginRef, process_data::ProcessData,
+    process_track_context::ProcessTrackContext, protocol::MainToPlugin, shmem::process_data_name,
 };
-use futures::future::{join_all, try_join_all};
 use rayon::prelude::*;
-use tokio::{net::windows::named_pipe::ServerOptions, task};
+use shared_memory::{Shmem, ShmemConf, ShmemError};
 
 #[derive(Debug)]
 pub struct ClapPluginPtr(pub *const clap_plugin);
@@ -56,7 +55,8 @@ pub struct Singer {
     song_sender: Sender<ViewMsg>,
     pub sender_to_loop: Sender<MainToPlugin>,
     line_play: usize,
-    process_track_contexts: Vec<Arc<Mutex<ProcessTrackContext>>>,
+    process_track_contexts: Vec<ProcessTrackContext>,
+    shmems: Vec<Vec<Shmem>>,
 }
 
 unsafe impl Send for Singer {}
@@ -74,6 +74,7 @@ impl Singer {
             sender_to_loop,
             line_play: 0,
             process_track_contexts: vec![],
+            shmems: vec![],
         };
         this.add_track();
         this
@@ -82,7 +83,8 @@ impl Singer {
     fn add_track(&mut self) {
         self.song.add_track();
         self.process_track_contexts
-            .push(Arc::new(Mutex::new(ProcessTrackContext::default())));
+            .push(ProcessTrackContext::default());
+        self.shmems.push(vec![]);
     }
 
     fn compute_play_position(&mut self, frames_count: usize) {
@@ -117,7 +119,6 @@ impl Singer {
         self.compute_play_position(nframes);
 
         for context in self.process_track_contexts.iter_mut() {
-            let mut context = context.lock().unwrap();
             context.nchannels = nchannels;
             context.nframes = nframes;
             context.play_p = self.play_p;
@@ -127,48 +128,48 @@ impl Singer {
             context.prepare();
         }
 
-        // let _ = self
-        //     .song
-        //     .tracks
-        //     .par_iter()
-        //     .zip(self.process_track_contexts.par_iter_mut())
-        //     .try_for_each(|(track, process_track_context)| track.process(process_track_context));
-
-        let contexts: Vec<_> = self
-            .process_track_contexts
-            .iter()
-            .map(|x| x.clone())
-            .collect();
-        let futures = self
+        let _ = self
             .song
             .tracks
-            .iter()
-            .zip(contexts.into_iter())
-            .map(|(track, ctx)| {
-                let track = track.clone();
-                async move {
-                    let ctx = ctx.clone();
-                    // log::debug!("#### before track.process");
-                    let r = track.process(ctx).await;
-                    // log::debug!("#### after track.process");
-                    r
-                }
-            });
+            .par_iter()
+            .zip(self.process_track_contexts.par_iter_mut())
+            .try_for_each(|(track, process_track_context)| track.process(process_track_context));
 
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let _ = runtime.block_on(async {
-            //log::debug!("#### before join_all");
-            let _ = join_all(futures).await;
-            //log::debug!("#### after join_all");
-            Ok::<(), anyhow::Error>(())
-        });
+        // let contexts: Vec<_> = self
+        //     .process_track_contexts
+        //     .iter()
+        //     .map(|x| x.clone())
+        //     .collect();
+        // let futures = self
+        //     .song
+        //     .tracks
+        //     .iter()
+        //     .zip(contexts.into_iter())
+        //     .map(|(track, ctx)| {
+        //         let track = track.clone();
+        //         async move {
+        //             let ctx = ctx.clone();
+        //             // log::debug!("#### before track.process");
+        //             let r = track.process(ctx).await;
+        //             // log::debug!("#### after track.process");
+        //             r
+        //         }
+        //     });
+
+        // let runtime = tokio::runtime::Runtime::new().unwrap();
+        // let _ = runtime.block_on(async {
+        //     //log::debug!("#### before join_all");
+        //     let _ = join_all(futures).await;
+        //     //log::debug!("#### after join_all");
+        //     Ok::<(), anyhow::Error>(())
+        // });
 
         for channel in 0..nchannels {
             for frame in 0..nframes {
                 output[nchannels * frame + channel] = self
                     .process_track_contexts
                     .iter()
-                    .map(|x| x.lock().unwrap().buffer.buffer[channel][frame])
+                    .map(|x| x.buffer.buffer[channel][frame])
                     .sum();
             }
         }
@@ -254,47 +255,51 @@ async fn singer_loop(
             }
             SingerMsg::PluginLoad(track_index, description) => {
                 log::debug!("will send MainToPlugin::Load {:?}", description);
-                let pipe_name = format!(r"\\.\pipe\sing_like_coding\plugin\{}", next_id());
-                let pipe = ServerOptions::new().create(&pipe_name)?;
 
-                {
-                    let singer = singer.lock().unwrap();
-                    singer.sender_to_loop.send(MainToPlugin::Load(
-                        description.id.clone(),
-                        pipe_name,
-                        track_index,
-                    ))?;
-                }
+                let mut singer = singer.lock().unwrap();
+                let id = next_id();
 
-                pipe.connect().await?;
+                let shmem_name = process_data_name(id);
+                let shmem = ShmemConf::new()
+                    .size(size_of::<ProcessData>())
+                    .os_id(dbg!(&shmem_name))
+                    .create();
+                let shmem = match shmem {
+                    Ok(s) => s,
+                    Err(ShmemError::MappingIdExists) => ShmemConf::new()
+                        .os_id(&shmem_name)
+                        .open()
+                        .expect("failed to open existing shared memory"),
+                    Err(e) => panic!("Unexpected shared memory error: {:?}", e),
+                };
 
-                {
-                    let mut singer = singer.lock().unwrap();
-                    singer.song.tracks[track_index].modules.push(Module::new(
-                        description.id.clone(),
-                        description.name.clone(),
-                    ));
-                    singer.process_track_contexts[track_index]
-                        .lock()
-                        .unwrap()
-                        .plugins
-                        .push(PluginRef::new(pipe));
-                    singer.send_song();
-                }
+                singer.process_track_contexts[track_index]
+                    .plugins
+                    .push(PluginRef::new(id, shmem.as_ptr() as *mut ProcessData)?);
+                singer.shmems[track_index].push(shmem);
+
+                singer.sender_to_loop.send(MainToPlugin::Load(
+                    id,
+                    description.id.clone(),
+                    track_index,
+                ))?;
+
+                singer.song.tracks[track_index].modules.push(Module::new(
+                    description.id.clone(),
+                    description.name.clone(),
+                ));
+
+                singer.send_song();
             }
             SingerMsg::NoteOn(track_index, key, _channel, velocity, _time) => {
-                let singer = singer.lock().unwrap();
+                let mut singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
-                    .lock()
-                    .unwrap()
                     .event_list_input
                     .push(Event::NoteOn(key, velocity));
             }
             SingerMsg::NoteOff(track_index, key, _channel, _velocity, _time) => {
-                let singer = singer.lock().unwrap();
+                let mut singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
-                    .lock()
-                    .unwrap()
                     .event_list_input
                     .push(Event::NoteOff(key));
             }
