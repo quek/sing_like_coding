@@ -4,6 +4,7 @@ pub mod audio_buffer;
 pub mod event;
 pub mod module;
 pub mod plugin;
+pub mod plugin_ref;
 pub mod process_track_context;
 pub mod protocol;
 

@@ -1,5 +1,12 @@
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
-use common::{event::Event, module::Module, process_track_context::ProcessTrackContext};
+use common::{
+    event::Event,
+    module::Module,
+    process_track_context::ProcessTrackContext,
+    protocol::{receive, send, AudioToPlugin, PluginToAudio},
+};
 use serde::{Deserialize, Serialize};
 
 use crate::model::note::Note;
@@ -36,24 +43,37 @@ impl Track {
         }
     }
 
-    pub fn process(&self, context: &mut ProcessTrackContext) -> Result<()> {
-        self.compute_midi(context);
+    pub async fn process(&self, context: Arc<Mutex<ProcessTrackContext>>) -> Result<()> {
+        let mut context = context.lock().unwrap();
+        self.compute_midi(&mut context);
         let module_len = self.modules.len();
         for module_index in 0..module_len {
-            self.process_module(context, module_index)?;
+            self.process_module(&mut context, module_index).await?;
         }
 
         Ok(())
     }
 
-    fn process_module(
+    async fn process_module(
         &self,
-        _context: &mut ProcessTrackContext,
-        _module_index: usize,
+        context: &mut ProcessTrackContext,
+        module_index: usize,
     ) -> Result<()> {
-        // TODO send a process request.
-        // let plugin = unsafe { &mut *(context.plugins[module_index].0 as *mut Plugin) };
-        // plugin.process(context)?;
+        let pipe = &mut context.plugins[module_index].pipe;
+        let message = AudioToPlugin::Process(context.buffer.clone());
+        // log::debug!("#### will send to plugin audio thread {:?}", message);
+        // send(pipe, &message).await?;
+        let res = send(pipe, &message).await;
+        // log::debug!("#### send result: {:?}", res);
+        // log::debug!("#### did send");
+        let message: PluginToAudio = receive(pipe).await?;
+        // log::debug!("#### received from plugin audio thread {:?}", message);
+        match message {
+            PluginToAudio::Process(audio_buffer) => {
+                context.buffer = audio_buffer;
+            }
+            PluginToAudio::B => (),
+        }
         Ok(())
     }
 

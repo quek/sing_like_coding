@@ -9,7 +9,6 @@ use std::{
 use crate::{
     clap_manager::Description,
     model::{note::Note, song::Song},
-    plugin_ref::PluginRef,
     util::next_id,
     view::main_view::ViewMsg,
 };
@@ -17,11 +16,12 @@ use crate::{
 use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
 use common::{
-    event::Event, module::Module, process_track_context::ProcessTrackContext,
-    protocol::MainToPlugin,
+    event::Event, module::Module, plugin_ref::PluginRef,
+    process_track_context::ProcessTrackContext, protocol::MainToPlugin,
 };
+use futures::future::{join_all, try_join_all};
 use rayon::prelude::*;
-use tokio::net::windows::named_pipe::ServerOptions;
+use tokio::{net::windows::named_pipe::ServerOptions, task};
 
 #[derive(Debug)]
 pub struct ClapPluginPtr(pub *const clap_plugin);
@@ -55,9 +55,8 @@ pub struct Singer {
     pub song: Song,
     song_sender: Sender<ViewMsg>,
     pub sender_to_loop: Sender<MainToPlugin>,
-    pub plugins: Vec<Vec<PluginRef>>,
     line_play: usize,
-    process_track_contexts: Vec<ProcessTrackContext>,
+    process_track_contexts: Vec<Arc<Mutex<ProcessTrackContext>>>,
 }
 
 unsafe impl Send for Singer {}
@@ -73,7 +72,6 @@ impl Singer {
             song,
             song_sender,
             sender_to_loop,
-            plugins: Default::default(),
             line_play: 0,
             process_track_contexts: vec![],
         };
@@ -83,9 +81,8 @@ impl Singer {
 
     fn add_track(&mut self) {
         self.song.add_track();
-        self.plugins.push(vec![]);
         self.process_track_contexts
-            .push(ProcessTrackContext::default());
+            .push(Arc::new(Mutex::new(ProcessTrackContext::default())));
     }
 
     fn compute_play_position(&mut self, frames_count: usize) {
@@ -120,6 +117,7 @@ impl Singer {
         self.compute_play_position(nframes);
 
         for context in self.process_track_contexts.iter_mut() {
+            let mut context = context.lock().unwrap();
             context.nchannels = nchannels;
             context.nframes = nframes;
             context.play_p = self.play_p;
@@ -129,19 +127,48 @@ impl Singer {
             context.prepare();
         }
 
-        let _ = self
+        // let _ = self
+        //     .song
+        //     .tracks
+        //     .par_iter()
+        //     .zip(self.process_track_contexts.par_iter_mut())
+        //     .try_for_each(|(track, process_track_context)| track.process(process_track_context));
+
+        let contexts: Vec<_> = self
+            .process_track_contexts
+            .iter()
+            .map(|x| x.clone())
+            .collect();
+        let futures = self
             .song
             .tracks
-            .par_iter()
-            .zip(self.process_track_contexts.par_iter_mut())
-            .try_for_each(|(track, process_track_context)| track.process(process_track_context));
+            .iter()
+            .zip(contexts.into_iter())
+            .map(|(track, ctx)| {
+                let track = track.clone();
+                async move {
+                    let ctx = ctx.clone();
+                    // log::debug!("#### before track.process");
+                    let r = track.process(ctx).await;
+                    // log::debug!("#### after track.process");
+                    r
+                }
+            });
+
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let _ = runtime.block_on(async {
+            //log::debug!("#### before join_all");
+            let _ = join_all(futures).await;
+            //log::debug!("#### after join_all");
+            Ok::<(), anyhow::Error>(())
+        });
 
         for channel in 0..nchannels {
             for frame in 0..nframes {
                 output[nchannels * frame + channel] = self
                     .process_track_contexts
                     .iter()
-                    .map(|x| x.buffer.buffer[channel][frame])
+                    .map(|x| x.lock().unwrap().buffer.buffer[channel][frame])
                     .sum();
             }
         }
@@ -247,25 +274,27 @@ async fn singer_loop(
                         description.id.clone(),
                         description.name.clone(),
                     ));
-                    loop {
-                        if singer.plugins.len() > track_index {
-                            break;
-                        }
-                        singer.plugins.push(vec![]);
-                    }
-                    singer.plugins[track_index].push(PluginRef::new(pipe));
+                    singer.process_track_contexts[track_index]
+                        .lock()
+                        .unwrap()
+                        .plugins
+                        .push(PluginRef::new(pipe));
                     singer.send_song();
                 }
             }
             SingerMsg::NoteOn(track_index, key, _channel, velocity, _time) => {
-                let mut singer = singer.lock().unwrap();
+                let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
+                    .lock()
+                    .unwrap()
                     .event_list_input
                     .push(Event::NoteOn(key, velocity));
             }
             SingerMsg::NoteOff(track_index, key, _channel, _velocity, _time) => {
-                let mut singer = singer.lock().unwrap();
+                let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
+                    .lock()
+                    .unwrap()
                     .event_list_input
                     .push(Event::NoteOff(key));
             }

@@ -1,6 +1,8 @@
 use bincode::{config, Decode, Encode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+use crate::audio_buffer::AudioBuffer;
+
 #[derive(Encode, Decode, PartialEq, Debug)]
 pub enum MainToPlugin {
     Load(String, String, usize),
@@ -15,13 +17,13 @@ pub enum PluginToMain {
 
 #[derive(Encode, Decode, PartialEq, Debug)]
 pub enum AudioToPlugin {
-    A,
+    Process(AudioBuffer),
     B,
 }
 
 #[derive(Encode, Decode, PartialEq, Debug)]
 pub enum PluginToAudio {
-    A,
+    Process(AudioBuffer),
     B,
 }
 

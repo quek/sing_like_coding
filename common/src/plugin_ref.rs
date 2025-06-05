@@ -1,7 +1,7 @@
 use tokio::net::windows::named_pipe::NamedPipeServer;
 
 pub struct PluginRef {
-    pipe: NamedPipeServer,
+    pub pipe: NamedPipeServer,
 }
 
 impl PluginRef {

@@ -1,4 +1,6 @@
-#[derive(Default)]
+use bincode::{Decode, Encode};
+
+#[derive(Clone, Default, Encode, Decode, PartialEq, Debug)]
 pub struct AudioBuffer {
     pub buffer: Vec<Vec<f32>>,
     #[allow(dead_code)]

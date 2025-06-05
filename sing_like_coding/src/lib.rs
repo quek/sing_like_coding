@@ -6,7 +6,6 @@ mod comminicator;
 mod device;
 mod event_list;
 mod model;
-mod plugin_ref;
 mod singer;
 mod util;
 mod view;
