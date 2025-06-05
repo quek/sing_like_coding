@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use shared_memory::{Shmem, ShmemConf};
 use windows::{
     core::PCSTR,
@@ -17,12 +19,12 @@ pub fn process_data_name(id: usize) -> String {
     format!("SingLikeCoding.Process.Data.{}", id)
 }
 
-pub fn event_request_name(id: usize) -> String {
-    format!("SingLikeCoding.Process.Request.{}", id)
+pub fn event_request_name(id: usize) -> CString {
+    CString::new(format!("SingLikeCoding.Process.Request.{}", id)).unwrap()
 }
 
-pub fn event_response_name(id: usize) -> String {
-    format!("SingLikeCoding.Process.Response.{}", id)
+pub fn event_response_name(id: usize) -> CString {
+    CString::new(format!("SingLikeCoding.Process.Response.{}", id)).unwrap()
 }
 
 pub const SHMEM_NAME: &str = "MySharedMemory";

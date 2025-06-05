@@ -25,7 +25,7 @@ impl PluginRef {
                 None,
                 false.into(), // 自動リセット
                 false.into(), // 初期非シグナル
-                PCSTR(dbg!(event_request_name(id)).as_ptr()),
+                PCSTR(dbg!(event_request_name(id)).as_ptr().cast()),
             )?
         };
         let event_response = unsafe {
@@ -33,7 +33,7 @@ impl PluginRef {
                 None,
                 false.into(), // 自動リセット
                 false.into(), // 初期非シグナル
-                PCSTR(event_response_name(id).as_ptr()),
+                PCSTR(dbg!(event_response_name(id)).as_ptr().cast()),
             )?
         };
 

@@ -1,4 +1,7 @@
-use std::{path::Path, pin::Pin, sync::mpsc::Sender};
+use std::{
+    ffi::CString, os::windows::raw::HANDLE, path::Path, pin::Pin, sync::mpsc::Sender,
+    time::Duration,
+};
 
 use common::{
     plugin::description::Description,
@@ -9,6 +12,7 @@ use shared_memory::ShmemConf;
 use windows::{
     core::PCSTR,
     Win32::{
+        Foundation::ERROR_FILE_NOT_FOUND,
         Storage::FileSystem::SYNCHRONIZE,
         System::Threading::{
             OpenEventA, SetEvent, WaitForSingleObject, EVENT_MODIFY_STATE, INFINITE,
@@ -54,14 +58,14 @@ async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
         OpenEventA(
             EVENT_MODIFY_STATE | SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE.0),
             false,
-            PCSTR(dbg!(event_request_name(id)).as_ptr()),
+            PCSTR(dbg!(event_request_name(id)).as_ptr().cast()),
         )?
     };
     let event_response = unsafe {
         OpenEventA(
             EVENT_MODIFY_STATE,
             false,
-            PCSTR(event_response_name(id).as_ptr()),
+            PCSTR(dbg!(event_response_name(id)).as_ptr().cast()),
         )?
     };
 
