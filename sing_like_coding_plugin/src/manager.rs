@@ -70,6 +70,11 @@ impl Manager {
                                 host.plugin.gui_open()?;
                             }
                         }
+                        self.sender_to_loop.send(PluginToMain::DidGuiOpen)?;
+                    }
+                    MainToPlugin::Scan => {
+                        // TODO scan scan scan
+                        self.sender_to_loop.send(PluginToMain::DidScan)?;
                     }
                     MainToPlugin::Quit => {
                         log::debug!("quit");

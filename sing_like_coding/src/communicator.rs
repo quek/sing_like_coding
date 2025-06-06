@@ -6,7 +6,7 @@ use common::PIPE_CTRL_NAME;
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 
 pub struct Communicator {
-    child: Child,
+    _child: Child,
     pipe: NamedPipeServer,
     sender_to_main: Sender<PluginToMain>,
     receiver_from_main: Receiver<MainToPlugin>,
@@ -28,7 +28,7 @@ impl Communicator {
         pipe.connect().await?;
 
         Ok(Self {
-            child,
+            _child: child,
             pipe,
             sender_to_main,
             receiver_from_main,
