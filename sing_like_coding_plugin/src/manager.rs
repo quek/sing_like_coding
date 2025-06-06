@@ -25,10 +25,6 @@ pub struct Manager {
 }
 
 /*
-#[derive(Debug)]
-pub struct ClapPluginPtr(pub *const clap_plugin);
-unsafe impl Send for ClapPluginPtr {}
-unsafe impl Sync for ClapPluginPtr {}
 
 fn do_callback_plugins(&mut self) -> Result<()> {
        let mut state = self.state.lock().unwrap();
@@ -105,6 +101,14 @@ impl Manager {
                         break;
                     }
                 }
+            }
+
+            if let Ok(plugin_ptr) = self.receiver_from_plugin.try_recv() {
+                let plugin = unsafe { plugin_ptr.as_mut() };
+                let plugin = unsafe { &*plugin.plugin.unwrap() };
+                log::debug!("will on_main_thread");
+                unsafe { plugin.on_main_thread.unwrap()(plugin) };
+                log::debug!("did on_main_thread");
             }
 
             unsafe {
