@@ -46,16 +46,16 @@ impl Communicator {
             send(&mut self.pipe, &message).await?;
 
             let message: PluginToMain = receive(&mut self.pipe).await?;
-            log::debug!("RECEIVED {:?}", message);
             let break_p = message == PluginToMain::Quit;
+            log::debug!("#### RECEIVED {:?} break_p {}", message, break_p);
             self.state
                 .lock()
                 .unwrap()
                 .received_from_plugin_process(message)?;
             if break_p {
-                break;
+                log::debug!("#### end Communicator run loop.");
+                return Ok(());
             }
         }
-        Ok(())
     }
 }

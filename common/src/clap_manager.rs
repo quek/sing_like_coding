@@ -47,7 +47,10 @@ impl ClapManager {
             log::debug!("path {path:?}");
             log::debug!("extension {:?}", path.extension());
             if path.extension() == Some(OsStr::new("clap")) || path.is_dir() {
-                let _ = self.scan_plugin_file(&path);
+                match self.scan_plugin_file(&path) {
+                    Ok(_) => (),
+                    Err(error) => log::error!("scan clap file is failed! {:?} {:?}", path, error),
+                }
             }
         }
         self.descriptions.sort_by_key(|x| x.name.clone());

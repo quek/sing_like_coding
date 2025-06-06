@@ -1,4 +1,4 @@
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -9,7 +9,7 @@ use crate::app_state::AppState;
 use crate::communicator::Communicator;
 use crate::device::Device;
 use crate::singer::{Singer, SingerMsg};
-use crate::view::main_view::MainView;
+use crate::view::main_view::{MainView, ViewMsg};
 
 pub fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -33,6 +33,7 @@ struct AppMain {
     state: Arc<Mutex<AppState>>,
     device: Option<Device>,
     view: MainView,
+    song_sender: Sender<ViewMsg>,
 }
 
 pub enum Msg {
@@ -45,7 +46,10 @@ impl Default for AppMain {
         let (song_sender, song_receiver) = channel();
         let (view_sender, view_receiver) = channel();
         let (sender_to_loop, receiver_from_main) = channel();
-        let singer = Arc::new(Mutex::new(Singer::new(song_sender, sender_to_loop.clone())));
+        let singer = Arc::new(Mutex::new(Singer::new(
+            song_sender.clone(),
+            sender_to_loop.clone(),
+        )));
         Singer::start_listener(singer.clone(), view_receiver);
         let mut device = Device::open_default(singer).unwrap();
         device.start().unwrap();
@@ -66,18 +70,21 @@ impl Default for AppMain {
             state: app_state,
             device,
             view,
+            song_sender,
         }
     }
 }
 
 impl eframe::App for AppMain {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        let _ = self
-            .state
+        self.song_sender.send(ViewMsg::Quit).unwrap();
+        self.state
             .lock()
             .unwrap()
             .sender_to_loop
-            .send(MainToPlugin::Quit);
+            .send(MainToPlugin::Quit)
+            .unwrap();
+        log::debug!("#### on_exit did send MainToPlugin::Quit");
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {

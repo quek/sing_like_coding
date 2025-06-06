@@ -21,6 +21,7 @@ use super::{
 pub enum ViewMsg {
     Song(Song),
     State(SongState),
+    Quit,
 }
 
 #[derive(Debug)]
@@ -36,7 +37,6 @@ pub struct MainView {
     track_view: TrackView,
     command_view: CommandView,
     plugin_select_view: Option<PluginSelectView>,
-    will_plugin_open: Option<(usize, usize)>,
     song_receiver: Option<Receiver<ViewMsg>>,
 }
 
@@ -48,7 +48,6 @@ impl MainView {
             track_view: TrackView::new(),
             command_view: CommandView::new(),
             plugin_select_view: None,
-            will_plugin_open: None,
             song_receiver: Some(song_receiver),
         }
     }
@@ -62,9 +61,8 @@ impl MainView {
             loop_receive_from_audio_thread(self.state.clone(), receiver, gui_context);
             self.gui_context = Some(gui_context.clone());
         }
-        self.process_shortcut(gui_context)?;
 
-        self.plugin_gui_open()?;
+        self.process_shortcut(gui_context)?;
 
         let mut state = self.state.lock().unwrap();
         match &state.route {
@@ -95,31 +93,6 @@ impl MainView {
                     state.route = Route::Track;
                 }
             }
-        }
-        Ok(())
-    }
-
-    fn plugin_gui_open(&mut self) -> Result<()> {
-        let module = if let Some((track_index, plugin_index)) = &self.will_plugin_open {
-            let mut state = self.state.lock().unwrap();
-            state
-                .song
-                .tracks
-                .get_mut(*track_index)
-                .map(|x| x.modules.get_mut(*plugin_index))
-                .flatten()
-                .map(|x| x.clone())
-        } else {
-            None
-        };
-
-        if let Some(_module) = module {
-            // TODO send open request
-            // let plugin = unsafe { module.as_mut() };
-            // dbg!("plugin.gui_open() before");
-            // plugin.gui_open()?;
-            // dbg!("plugin.gui_open() after");
-            self.will_plugin_open = None;
         }
         Ok(())
     }
@@ -182,6 +155,7 @@ pub fn loop_receive_from_audio_thread(
                     gui_context.request_repaint();
                     dbg!("State end");
                 }
+                ViewMsg::Quit => return,
             }
         }
     });

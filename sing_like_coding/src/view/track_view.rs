@@ -140,8 +140,6 @@ impl TrackView {
 
                             for (module_index, module) in track.modules.iter_mut().enumerate() {
                                 if ui.button(&module.name).clicked() {
-                                    // TODO send Open request
-                                    // module.plugin().map(|x| x.gui_open());
                                     state
                                         .sender_to_loop
                                         .send(MainToPlugin::GuiOpen(track_index, module_index))?;

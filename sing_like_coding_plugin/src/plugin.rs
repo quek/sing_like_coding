@@ -217,13 +217,6 @@ impl Plugin {
     }
 
     unsafe extern "C" fn request_callback(host: *const clap_host) {
-        // let this = unsafe { &mut *((*host).host_data as *mut Self) };
-        // let plugin = unsafe { &*this.plugin.unwrap() };
-        // dbg!("BBBBBB");
-        // unsafe { plugin.on_main_thread.unwrap()(plugin) };
-        // dbg!("AAAAAA");
-        // return;
-
         log::debug!("request_callback start...");
         let this = unsafe { &mut *((*host).host_data as *mut Self) };
         this.sender_to_view

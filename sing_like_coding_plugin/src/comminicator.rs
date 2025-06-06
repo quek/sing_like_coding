@@ -28,16 +28,16 @@ impl Communicator {
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
         loop {
-            log::debug!("####### before let message: MainToPlugin = receive(self.pipe)?;");
             let message: MainToPlugin = receive(&mut self.pipe).await?;
-            log::debug!("RECEIVED {:?}", message);
+            log::debug!("$$$$ DID RECEIVE {:?}", message);
             self.sender_to_main.send(message)?;
             let message = self.receiver_from_main.recv()?;
             send(&mut self.pipe, &message).await?;
+            log::debug!("$$$$ DiD SEND {:?}", message);
             if message == PluginToMain::Quit {
-                break;
+                log::debug!("$$$$ end Communicator run loop.");
+                return Ok(());
             }
         }
-        Ok(())
     }
 }

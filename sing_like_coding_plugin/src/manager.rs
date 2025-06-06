@@ -1,4 +1,8 @@
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::{
+    sync::mpsc::{channel, Receiver, Sender},
+    thread::sleep,
+    time::Duration,
+};
 
 use anyhow::Result;
 use common::{
@@ -58,8 +62,9 @@ impl Manager {
     }
 
     pub fn run(&mut self) -> Result<()> {
-        let mut win_msg = MSG::default();
+        // 最初は窓が一つもないために、これがないと PeekMessageW がエラーになる
         unsafe { PostThreadMessageW(GetCurrentThreadId(), WM_NULL, WPARAM(0), LPARAM(0)) }?;
+        let mut win_msg = MSG::default();
         loop {
             if let Ok(message) = self.receiver_from_loop.try_recv() {
                 match message {
@@ -92,13 +97,16 @@ impl Manager {
                         self.sender_to_loop.send(PluginToMain::DidGuiOpen)?;
                     }
                     MainToPlugin::Scan => {
+                        log::debug!("clap_manager.scan() start...");
                         self.clap_manager.scan();
+                        log::debug!("clap_manager.scan() end");
                         self.sender_to_loop.send(PluginToMain::DidScan)?;
                     }
                     MainToPlugin::Quit => {
-                        log::debug!("quit");
+                        log::debug!("$$$$ quit");
                         self.sender_to_loop.send(PluginToMain::Quit)?;
-                        break;
+                        sleep(Duration::from_millis(1000));
+                        return Ok(());
                     }
                 }
             }
@@ -118,6 +126,5 @@ impl Manager {
                 }
             };
         }
-        Ok(())
     }
 }
