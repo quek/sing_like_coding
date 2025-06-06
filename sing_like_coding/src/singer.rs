@@ -128,49 +128,22 @@ impl Singer {
             context.prepare();
         }
 
-        let _ = self
-            .song
+        self.song
             .tracks
             .par_iter()
             .zip(self.process_track_contexts.par_iter_mut())
-            .try_for_each(|(track, process_track_context)| track.process(process_track_context));
+            .try_for_each(|(track, process_track_context)| track.process(process_track_context))?;
 
-        // let contexts: Vec<_> = self
-        //     .process_track_contexts
-        //     .iter()
-        //     .map(|x| x.clone())
-        //     .collect();
-        // let futures = self
-        //     .song
-        //     .tracks
-        //     .iter()
-        //     .zip(contexts.into_iter())
-        //     .map(|(track, ctx)| {
-        //         let track = track.clone();
-        //         async move {
-        //             let ctx = ctx.clone();
-        //             // log::debug!("#### before track.process");
-        //             let r = track.process(ctx).await;
-        //             // log::debug!("#### after track.process");
-        //             r
-        //         }
-        //     });
-
-        // let runtime = tokio::runtime::Runtime::new().unwrap();
-        // let _ = runtime.block_on(async {
-        //     //log::debug!("#### before join_all");
-        //     let _ = join_all(futures).await;
-        //     //log::debug!("#### after join_all");
-        //     Ok::<(), anyhow::Error>(())
-        // });
-
+        let buffers: Vec<_> = self
+            .process_track_contexts
+            .iter_mut()
+            .filter_map(|x| x.plugins.last_mut())
+            .map(|plugin_ref: &mut PluginRef| plugin_ref.process_data().buffer)
+            .collect();
         for channel in 0..nchannels {
             for frame in 0..nframes {
-                output[nchannels * frame + channel] = self
-                    .process_track_contexts
-                    .iter()
-                    .map(|x| x.buffer.buffer[channel][frame])
-                    .sum();
+                output[nchannels * frame + channel] =
+                    buffers.iter().map(|buffer| buffer[channel][frame]).sum();
             }
         }
 

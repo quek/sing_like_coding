@@ -13,7 +13,6 @@ pub struct ProcessTrackContext {
     pub play_position: Range<i64>,
     pub on_key: Option<i16>,
     pub event_list_input: Vec<Event>,
-    // TODO DELETE
     pub plugins: Vec<PluginRef>,
 }
 

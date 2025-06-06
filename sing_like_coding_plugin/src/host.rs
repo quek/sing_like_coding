@@ -61,7 +61,9 @@ async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
 
     let plugin = unsafe { plugin_ptr.as_mut() };
     loop {
+        // log::debug!("$$$$ host will WaitForSingleObject process request");
         unsafe { WaitForSingleObject(event_request, INFINITE) };
+        // log::debug!("$$$$ before plugin.process");
         plugin.process(process_data)?;
         unsafe { SetEvent(event_response) }?;
     }
