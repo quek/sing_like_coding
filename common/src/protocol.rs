@@ -6,6 +6,7 @@ use crate::audio_buffer::AudioBuffer;
 #[derive(Encode, Decode, PartialEq, Debug)]
 pub enum MainToPlugin {
     Load(usize, String, usize),
+    GuiOpen(usize, usize),
     Quit,
 }
 

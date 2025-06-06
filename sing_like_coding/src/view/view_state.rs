@@ -1,5 +1,7 @@
 use std::sync::mpsc::Sender;
 
+use common::protocol::MainToPlugin;
+
 use crate::{
     clap_manager::ClapManager,
     model::song::Song,
@@ -20,11 +22,12 @@ pub struct ViewState {
     pub song: Song,
     pub song_state: SongState,
     pub view_sender: Sender<SingerMsg>,
+    pub sender_to_loop: Sender<MainToPlugin>,
     pub callback_plugins: Vec<ClapPluginPtr>,
 }
 
 impl ViewState {
-    pub fn new(view_sender: Sender<SingerMsg>) -> Self {
+    pub fn new(view_sender: Sender<SingerMsg>, sender_to_loop: Sender<MainToPlugin>) -> Self {
         Self {
             clap_manager: ClapManager::new(),
             cursor_line: 0,
@@ -37,6 +40,7 @@ impl ViewState {
             song: Song::new(),
             song_state: SongState::default(),
             view_sender,
+            sender_to_loop,
             callback_plugins: vec![],
         }
     }

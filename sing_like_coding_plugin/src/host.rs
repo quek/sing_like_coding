@@ -17,7 +17,7 @@ use windows::Win32::{
 use crate::{plugin::Plugin, plugin_ptr::PluginPtr};
 
 pub struct Host {
-    _plugin: Pin<Box<Plugin>>,
+    pub plugin: Pin<Box<Plugin>>,
 }
 
 impl Host {
@@ -36,7 +36,7 @@ impl Host {
             process_loop(id, plugin_ptr).await.unwrap();
         });
 
-        Ok(Self { _plugin: plugin })
+        Ok(Self { plugin })
     }
 }
 

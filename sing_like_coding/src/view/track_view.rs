@@ -1,4 +1,5 @@
 use anyhow::Result;
+use common::protocol::MainToPlugin;
 use eframe::egui::{CentralPanel, Color32, Frame, Key, TopBottomPanel, Ui};
 
 use crate::{device::Device, singer::SingerMsg, util::with_font_mono};
@@ -106,7 +107,7 @@ impl TrackView {
                         .zip(state.line_buffers.iter_mut())
                         .enumerate()
                     {
-                        ui.vertical(|ui| {
+                        ui.vertical(|ui| -> anyhow::Result<()> {
                             with_font_mono(ui, |ui| {
                                 Frame::NONE
                                     .fill(if state.selected_tracks.contains(&track_index) {
@@ -139,12 +140,16 @@ impl TrackView {
                                 }
                             });
 
-                            for module in track.modules.iter_mut() {
+                            for (module_index, module) in track.modules.iter_mut().enumerate() {
                                 if ui.button(&module.name).clicked() {
                                     // TODO send Open request
                                     // module.plugin().map(|x| x.gui_open());
+                                    state
+                                        .sender_to_loop
+                                        .send(MainToPlugin::GuiOpen(track_index, module_index))?;
                                 }
                             }
+                            Ok(())
                         });
                     }
                 });

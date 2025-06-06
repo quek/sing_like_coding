@@ -58,6 +58,19 @@ impl Manager {
 
                         self.sender_to_loop.send(PluginToMain::DidLoad)?;
                     }
+                    MainToPlugin::GuiOpen(track_index, module_index) => {
+                        if let Some(Some(host)) = self
+                            .plugins
+                            .get_mut(track_index)
+                            .map(|x| x.get_mut(module_index))
+                        {
+                            if host.plugin.gui_open_p {
+                                host.plugin.gui_close()?;
+                            } else {
+                                host.plugin.gui_open()?;
+                            }
+                        }
+                    }
                     MainToPlugin::Quit => {
                         log::debug!("quit");
                         self.sender_to_loop.send(PluginToMain::Quit)?;

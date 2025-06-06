@@ -55,7 +55,7 @@ pub struct Plugin {
     lib: Option<Library>,
     pub plugin: Option<*const clap_plugin>,
     gui: Option<*const clap_plugin_gui>,
-    gui_open_p: bool,
+    pub gui_open_p: bool,
     window_handler: Option<*mut c_void>,
     process_start_p: bool,
     sender_to_view: Sender<PluginPtr>,

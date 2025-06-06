@@ -44,7 +44,6 @@ pub struct MainView {
     plugin_select_view: Option<QueryView<Description>>,
     will_plugin_open: Option<(usize, usize)>,
     song_receiver: Option<Receiver<ViewMsg>>,
-    sender_to_loop: Sender<MainToPlugin>,
 }
 
 impl MainView {
@@ -55,13 +54,12 @@ impl MainView {
     ) -> Self {
         Self {
             gui_context: None,
-            state: Arc::new(Mutex::new(ViewState::new(view_sender))),
+            state: Arc::new(Mutex::new(ViewState::new(view_sender, sender_to_loop))),
             track_view: TrackView::new(),
             command_view: CommandView::new(),
             plugin_select_view: None,
             will_plugin_open: None,
             song_receiver: Some(song_receiver),
-            sender_to_loop,
         }
     }
 
