@@ -63,57 +63,6 @@ impl MainView {
         }
     }
 
-    pub fn start_listener(
-        &mut self,
-        receiver: Receiver<ViewMsg>,
-        gui_context: &eframe::egui::Context,
-    ) {
-        log::debug!("MainView::start_listener");
-        let state = self.state.clone();
-        let gui_context = gui_context.clone();
-        thread::spawn(move || {
-            while let Ok(command) = receiver.recv() {
-                dbg!(&command);
-                match command {
-                    ViewMsg::Song(song) => {
-                        dbg!("Song start...");
-                        let mut state = state.lock().unwrap();
-                        state.line_buffers.clear();
-                        for track in song.tracks.iter() {
-                            let mut xs = vec![];
-                            for line in 0..song.nlines {
-                                if let Some(note) =
-                                    track.notes.iter().find(|note| note.line == line)
-                                {
-                                    xs.push(note.note_name());
-                                } else {
-                                    xs.push("".to_string());
-                                }
-                            }
-                            state.line_buffers.push(xs);
-                        }
-                        state.song = song;
-                        gui_context.request_repaint();
-                        dbg!("Song end");
-                    }
-                    ViewMsg::State(song_state) => {
-                        dbg!("State start...");
-                        state.lock().unwrap().song_state = song_state;
-                        gui_context.request_repaint();
-                        dbg!("State end");
-                    }
-                    ViewMsg::PluginCallback(plugin) => {
-                        dbg!("PluginCallback start...");
-                        state.lock().unwrap().callback_plugins.push(plugin);
-                        dbg!("PluginCallback state locked");
-                        gui_context.request_repaint();
-                        dbg!("PluginCallback end");
-                    }
-                }
-            }
-        });
-    }
-
     pub fn view(
         &mut self,
         gui_context: &eframe::egui::Context,
@@ -122,7 +71,7 @@ impl MainView {
         self.do_callback_plugins()?;
 
         if let Some(receiver) = self.song_receiver.take() {
-            self.start_listener(receiver, gui_context);
+            loop_receive_from_audio_thread(self.state.clone(), receiver, gui_context);
             self.gui_context = Some(gui_context.clone());
         }
         self.process_shortcut(gui_context)?;
@@ -228,4 +177,51 @@ impl MainView {
 
         Ok(())
     }
+}
+
+pub fn loop_receive_from_audio_thread(
+    state: Arc<Mutex<ViewState>>,
+    receiver: Receiver<ViewMsg>,
+    gui_context: &eframe::egui::Context,
+) {
+    let gui_context = gui_context.clone();
+    thread::spawn(move || {
+        while let Ok(command) = receiver.recv() {
+            dbg!(&command);
+            match command {
+                ViewMsg::Song(song) => {
+                    dbg!("Song start...");
+                    let mut state = state.lock().unwrap();
+                    state.line_buffers.clear();
+                    for track in song.tracks.iter() {
+                        let mut xs = vec![];
+                        for line in 0..song.nlines {
+                            if let Some(note) = track.notes.iter().find(|note| note.line == line) {
+                                xs.push(note.note_name());
+                            } else {
+                                xs.push("".to_string());
+                            }
+                        }
+                        state.line_buffers.push(xs);
+                    }
+                    state.song = song;
+                    gui_context.request_repaint();
+                    dbg!("Song end");
+                }
+                ViewMsg::State(song_state) => {
+                    dbg!("State start...");
+                    state.lock().unwrap().song_state = song_state;
+                    gui_context.request_repaint();
+                    dbg!("State end");
+                }
+                ViewMsg::PluginCallback(plugin) => {
+                    dbg!("PluginCallback start...");
+                    state.lock().unwrap().callback_plugins.push(plugin);
+                    dbg!("PluginCallback state locked");
+                    gui_context.request_repaint();
+                    dbg!("PluginCallback end");
+                }
+            }
+        }
+    });
 }
