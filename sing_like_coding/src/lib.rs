@@ -4,7 +4,6 @@ mod command;
 mod commander;
 mod communicator;
 mod device;
-mod event_list;
 mod model;
 mod singer;
 mod util;

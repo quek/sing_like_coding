@@ -13,7 +13,6 @@ use crate::{
 };
 
 use anyhow::Result;
-use clap_sys::plugin::clap_plugin;
 use common::{
     event::Event, module::Module, plugin::description::Description, plugin_ref::PluginRef,
     process_data::ProcessData, process_track_context::ProcessTrackContext, protocol::MainToPlugin,
@@ -21,11 +20,6 @@ use common::{
 };
 use rayon::prelude::*;
 use shared_memory::{Shmem, ShmemConf, ShmemError};
-
-#[derive(Debug)]
-pub struct ClapPluginPtr(pub *const clap_plugin);
-unsafe impl Send for ClapPluginPtr {}
-unsafe impl Sync for ClapPluginPtr {}
 
 #[derive(Debug)]
 pub enum SingerMsg {

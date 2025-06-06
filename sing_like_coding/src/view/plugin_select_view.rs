@@ -4,10 +4,6 @@ use eframe::egui::{self, Button, CentralPanel, Key, TextEdit, Ui};
 
 use crate::util::is_subsequence_case_insensitive;
 
-pub trait QueryItem: Send {
-    fn name(&self) -> &str;
-}
-
 pub struct PluginSelectView {
     focus_p: bool,
     buffer: String,

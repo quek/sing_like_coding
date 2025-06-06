@@ -24,6 +24,26 @@ pub struct Manager {
     clap_manager: ClapManager,
 }
 
+/*
+#[derive(Debug)]
+pub struct ClapPluginPtr(pub *const clap_plugin);
+unsafe impl Send for ClapPluginPtr {}
+unsafe impl Sync for ClapPluginPtr {}
+
+fn do_callback_plugins(&mut self) -> Result<()> {
+       let mut state = self.state.lock().unwrap();
+       let callback_plugins = &mut state.callback_plugins;
+       for plugin in callback_plugins.iter() {
+           let plugin = unsafe { &*plugin.0 };
+           log::debug!("will on_main_thread");
+           unsafe { plugin.on_main_thread.unwrap()(plugin) };
+           log::debug!("did on_main_thread");
+       }
+       callback_plugins.clear();
+       Ok(())
+   }
+*/
+
 impl Manager {
     pub fn new(
         sender_to_loop: Sender<PluginToMain>,

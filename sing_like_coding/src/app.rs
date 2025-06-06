@@ -1,8 +1,8 @@
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use common::protocol::{MainToPlugin, PluginToMain};
+use common::protocol::MainToPlugin;
 use eframe::egui;
 
 use crate::app_state::AppState;

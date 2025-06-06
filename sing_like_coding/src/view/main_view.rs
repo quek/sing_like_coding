@@ -10,7 +10,7 @@ use crate::{
     app_state::AppState,
     device::Device,
     model::song::Song,
-    singer::{ClapPluginPtr, SingerMsg, SongState},
+    singer::{SingerMsg, SongState},
 };
 
 use super::{
@@ -19,10 +19,8 @@ use super::{
 
 #[derive(Debug)]
 pub enum ViewMsg {
-    #[allow(dead_code)]
     Song(Song),
     State(SongState),
-    PluginCallback(ClapPluginPtr),
 }
 
 #[derive(Debug)]
@@ -60,8 +58,6 @@ impl MainView {
         gui_context: &eframe::egui::Context,
         device: &mut Option<Device>,
     ) -> Result<()> {
-        self.do_callback_plugins()?;
-
         if let Some(receiver) = self.song_receiver.take() {
             loop_receive_from_audio_thread(self.state.clone(), receiver, gui_context);
             self.gui_context = Some(gui_context.clone());
@@ -100,19 +96,6 @@ impl MainView {
                 }
             }
         }
-        Ok(())
-    }
-
-    fn do_callback_plugins(&mut self) -> Result<()> {
-        let mut state = self.state.lock().unwrap();
-        let callback_plugins = &mut state.callback_plugins;
-        for plugin in callback_plugins.iter() {
-            let plugin = unsafe { &*plugin.0 };
-            log::debug!("will on_main_thread");
-            unsafe { plugin.on_main_thread.unwrap()(plugin) };
-            log::debug!("did on_main_thread");
-        }
-        callback_plugins.clear();
         Ok(())
     }
 
@@ -198,13 +181,6 @@ pub fn loop_receive_from_audio_thread(
                     state.lock().unwrap().song_state = song_state;
                     gui_context.request_repaint();
                     dbg!("State end");
-                }
-                ViewMsg::PluginCallback(plugin) => {
-                    dbg!("PluginCallback start...");
-                    state.lock().unwrap().callback_plugins.push(plugin);
-                    dbg!("PluginCallback state locked");
-                    gui_context.request_repaint();
-                    dbg!("PluginCallback end");
                 }
             }
         }

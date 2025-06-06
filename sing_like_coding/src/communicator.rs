@@ -1,5 +1,5 @@
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 
 use common::protocol::{receive, send, MainToPlugin, PluginToMain};

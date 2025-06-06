@@ -8,7 +8,7 @@ use eframe::egui;
 
 use crate::{
     model::song::Song,
-    singer::{ClapPluginPtr, SingerMsg, SongState},
+    singer::{SingerMsg, SongState},
     view::main_view::Route,
 };
 
@@ -26,7 +26,6 @@ pub struct AppState {
     pub song_state: SongState,
     pub view_sender: Sender<SingerMsg>,
     pub sender_to_loop: Sender<MainToPlugin>,
-    pub callback_plugins: Vec<ClapPluginPtr>,
 }
 
 impl AppState {
@@ -45,7 +44,6 @@ impl AppState {
             song_state: SongState::default(),
             view_sender,
             sender_to_loop,
-            callback_plugins: vec![],
         }
     }
 
