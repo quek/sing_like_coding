@@ -1,24 +1,21 @@
 use std::{
-    sync::{
-        mpsc::{Receiver, Sender},
-        Arc, Mutex,
-    },
+    sync::{mpsc::Receiver, Arc, Mutex},
     thread,
 };
 
 use anyhow::Result;
-use common::protocol::MainToPlugin;
 use eframe::egui::Key;
 
 use crate::{
     app_state::AppState,
-    clap_manager::Description,
     device::Device,
     model::song::Song,
     singer::{ClapPluginPtr, SingerMsg, SongState},
 };
 
-use super::{command_view::CommandView, query_view::QueryView, track_view::TrackView};
+use super::{
+    command_view::CommandView, plugin_select_view::PluginSelectView, track_view::TrackView,
+};
 
 #[derive(Debug)]
 pub enum ViewMsg {
@@ -40,7 +37,7 @@ pub struct MainView {
     state: Arc<Mutex<AppState>>,
     track_view: TrackView,
     command_view: CommandView,
-    plugin_select_view: Option<QueryView<Description>>,
+    plugin_select_view: Option<PluginSelectView>,
     will_plugin_open: Option<(usize, usize)>,
     song_receiver: Option<Receiver<ViewMsg>>,
 }
@@ -79,13 +76,9 @@ impl MainView {
             Route::Command => self.command_view.view(gui_context, &mut state)?,
             Route::PluginSelect => {
                 if self.plugin_select_view.is_none() {
-                    let xs = state
-                        .clap_manager
-                        .descriptions
-                        .iter()
-                        .map(|x| Arc::new(Mutex::new(x.clone())) as Arc<Mutex<Description>>)
-                        .collect();
-                    self.plugin_select_view = Some(QueryView::new(xs));
+                    self.plugin_select_view = Some(PluginSelectView::new(
+                        state.clap_manager.descriptions.clone(),
+                    ));
                 }
 
                 if let Some(description) = self
@@ -98,10 +91,7 @@ impl MainView {
                     for track_index in &state.selected_tracks {
                         state
                             .view_sender
-                            .send(SingerMsg::PluginLoad(
-                                *track_index,
-                                description.lock().unwrap().clone(),
-                            ))
+                            .send(SingerMsg::PluginLoad(*track_index, description.clone()))
                             .unwrap();
                     }
 

@@ -8,8 +8,9 @@ use std::{
 
 use anyhow::Result;
 use clap_sys::{entry::clap_plugin_entry, factory::plugin_factory::clap_plugin_factory};
-use common::plugin::description::Description;
 use libloading::{Library, Symbol};
+
+use crate::plugin::description::Description;
 
 pub struct ClapManager {
     pub setting_path: PathBuf,

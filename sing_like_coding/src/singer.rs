@@ -7,7 +7,6 @@ use std::{
 };
 
 use crate::{
-    clap_manager::Description,
     model::{note::Note, song::Song},
     util::next_id,
     view::main_view::ViewMsg,
@@ -16,8 +15,9 @@ use crate::{
 use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
 use common::{
-    event::Event, module::Module, plugin_ref::PluginRef, process_data::ProcessData,
-    process_track_context::ProcessTrackContext, protocol::MainToPlugin, shmem::process_data_name,
+    event::Event, module::Module, plugin::description::Description, plugin_ref::PluginRef,
+    process_data::ProcessData, process_track_context::ProcessTrackContext, protocol::MainToPlugin,
+    shmem::process_data_name,
 };
 use rayon::prelude::*;
 use shared_memory::{Shmem, ShmemConf, ShmemError};

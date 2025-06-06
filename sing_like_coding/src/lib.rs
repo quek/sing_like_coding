@@ -1,6 +1,5 @@
 pub mod app;
 mod app_state;
-mod clap_manager;
 mod command;
 mod commander;
 mod communicator;

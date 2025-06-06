@@ -1,10 +1,12 @@
 use std::sync::mpsc::Sender;
 
-use common::protocol::{MainToPlugin, PluginToMain};
+use common::{
+    clap_manager::ClapManager,
+    protocol::{MainToPlugin, PluginToMain},
+};
 use eframe::egui;
 
 use crate::{
-    clap_manager::ClapManager,
     model::song::Song,
     singer::{ClapPluginPtr, SingerMsg, SongState},
     view::main_view::Route,
@@ -51,7 +53,9 @@ impl AppState {
         match message {
             PluginToMain::DidLoad => (),
             PluginToMain::DidGuiOpen => (),
-            PluginToMain::DidScan => (),
+            PluginToMain::DidScan => {
+                self.clap_manager.load()?;
+            }
             PluginToMain::Quit => (),
         }
         Ok(())

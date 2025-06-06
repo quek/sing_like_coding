@@ -1,4 +1,5 @@
 pub mod audio_buffer;
+pub mod clap_manager;
 pub mod event;
 pub mod module;
 pub mod plugin;

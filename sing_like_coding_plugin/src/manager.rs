@@ -1,7 +1,10 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use anyhow::Result;
-use common::protocol::{MainToPlugin, PluginToMain};
+use common::{
+    clap_manager::ClapManager,
+    protocol::{MainToPlugin, PluginToMain},
+};
 use windows::Win32::{
     Foundation::{LPARAM, WPARAM},
     UI::WindowsAndMessaging::{
@@ -10,7 +13,7 @@ use windows::Win32::{
 };
 use windows::Win32::{System::Threading::GetCurrentThreadId, UI::WindowsAndMessaging::PM_REMOVE};
 
-use crate::{clap_manager::ClapManager, host::Host, plugin_ptr::PluginPtr};
+use crate::{host::Host, plugin_ptr::PluginPtr};
 
 pub struct Manager {
     sender_to_loop: Sender<PluginToMain>,
@@ -73,7 +76,7 @@ impl Manager {
                         self.sender_to_loop.send(PluginToMain::DidGuiOpen)?;
                     }
                     MainToPlugin::Scan => {
-                        // TODO scan scan scan
+                        self.clap_manager.scan();
                         self.sender_to_loop.send(PluginToMain::DidScan)?;
                     }
                     MainToPlugin::Quit => {
