@@ -1,6 +1,7 @@
 use std::sync::mpsc::Sender;
 
-use common::protocol::MainToPlugin;
+use common::protocol::{MainToPlugin, PluginToMain};
+use eframe::egui;
 
 use crate::{
     clap_manager::ClapManager,
@@ -10,6 +11,7 @@ use crate::{
 };
 
 pub struct AppState {
+    pub gui_context: Option<egui::Context>,
     pub clap_manager: ClapManager,
     pub cursor_line: usize,
     pub cursor_track: usize,
@@ -28,6 +30,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(view_sender: Sender<SingerMsg>, sender_to_loop: Sender<MainToPlugin>) -> Self {
         Self {
+            gui_context: None,
             clap_manager: ClapManager::new(),
             cursor_line: 0,
             cursor_track: 0,
@@ -42,5 +45,15 @@ impl AppState {
             sender_to_loop,
             callback_plugins: vec![],
         }
+    }
+
+    pub fn received_from_plugin_process(&mut self, message: PluginToMain) -> anyhow::Result<()> {
+        match message {
+            PluginToMain::DidLoad => (),
+            PluginToMain::DidGuiOpen => (),
+            PluginToMain::DidScan => (),
+            PluginToMain::Quit => (),
+        }
+        Ok(())
     }
 }

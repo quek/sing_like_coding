@@ -33,7 +33,6 @@ struct AppMain {
     state: Arc<Mutex<AppState>>,
     device: Option<Device>,
     view: MainView,
-    receiver_from_loop: Receiver<PluginToMain>,
 }
 
 pub enum Msg {
@@ -46,7 +45,6 @@ impl Default for AppMain {
         let (song_sender, song_receiver) = channel();
         let (view_sender, view_receiver) = channel();
         let (sender_to_loop, receiver_from_main) = channel();
-        let (sender_to_main, receiver_from_loop) = channel();
         let singer = Arc::new(Mutex::new(Singer::new(song_sender, sender_to_loop.clone())));
         Singer::start_listener(singer.clone(), view_receiver);
         let mut device = Device::open_default(singer).unwrap();
@@ -56,9 +54,11 @@ impl Default for AppMain {
 
         let app_state = Arc::new(Mutex::new(AppState::new(view_sender, sender_to_loop)));
         let view = MainView::new(app_state.clone(), song_receiver);
+
+        let app_state_cloned = app_state.clone();
         tokio::spawn(async move {
             dbg!("########## before send_to_plugin_process");
-            send_to_plugin_process(sender_to_main, receiver_from_main)
+            send_to_plugin_process(app_state_cloned, receiver_from_main)
                 .await
                 .unwrap();
         });
@@ -66,7 +66,6 @@ impl Default for AppMain {
             state: app_state,
             device,
             view,
-            receiver_from_loop,
         }
     }
 }
@@ -82,17 +81,20 @@ impl eframe::App for AppMain {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.state.lock().unwrap().gui_context.is_none() {
+            self.state.lock().unwrap().gui_context = Some(ctx.clone());
+        }
         let _ = self.view.view(ctx, &mut self.device);
     }
 }
 
 async fn send_to_plugin_process(
-    sender_to_main: Sender<PluginToMain>,
+    state: Arc<Mutex<AppState>>,
     receiver_from_main: Receiver<MainToPlugin>,
 ) -> Result<()> {
     dbg!("########## in send_to_plugin_process");
 
-    let mut plugin_comminicator = Communicator::new(sender_to_main, receiver_from_main).await?;
+    let mut plugin_comminicator = Communicator::new(state, receiver_from_main).await?;
     plugin_comminicator.run().await?;
 
     Ok(())

@@ -1,20 +1,23 @@
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Arc, Mutex};
 
 use common::protocol::{receive, send, MainToPlugin, PluginToMain};
 use common::PIPE_CTRL_NAME;
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 
+use crate::app_state::AppState;
+
 pub struct Communicator {
+    state: Arc<Mutex<AppState>>,
     _child: Child,
     pipe: NamedPipeServer,
-    sender_to_main: Sender<PluginToMain>,
     receiver_from_main: Receiver<MainToPlugin>,
 }
 
 impl Communicator {
     pub async fn new(
-        sender_to_main: Sender<PluginToMain>,
+        state: Arc<Mutex<AppState>>,
         receiver_from_main: Receiver<MainToPlugin>,
     ) -> anyhow::Result<Self> {
         let pipe = ServerOptions::new().create(PIPE_CTRL_NAME)?;
@@ -28,9 +31,9 @@ impl Communicator {
         pipe.connect().await?;
 
         Ok(Self {
+            state,
             _child: child,
             pipe,
-            sender_to_main,
             receiver_from_main,
         })
     }
@@ -45,7 +48,10 @@ impl Communicator {
             let message: PluginToMain = receive(&mut self.pipe).await?;
             log::debug!("RECEIVED {:?}", message);
             let break_p = message == PluginToMain::Quit;
-            self.sender_to_main.send(message)?;
+            self.state
+                .lock()
+                .unwrap()
+                .received_from_plugin_process(message)?;
             if break_p {
                 break;
             }
