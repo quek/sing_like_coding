@@ -1,14 +1,11 @@
 pub mod app;
-mod audio_buffer;
 mod clap_manager;
 mod command;
 mod commander;
+mod communicator;
 mod device;
-mod event;
 mod event_list;
 mod model;
-mod plugin;
-mod process_track_context;
 mod singer;
 mod util;
 mod view;

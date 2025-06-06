@@ -36,13 +36,16 @@ use clap_sys::{
     process::{clap_process, CLAP_PROCESS_ERROR},
     version::{clap_version_is_compatible, CLAP_VERSION},
 };
+use common::{
+    cstr,
+    process_data::{EventKind, ProcessData},
+};
 use libloading::{Library, Symbol};
 use window::{create_handler, destroy_handler};
 
-use crate::{event::Event, singer::ClapPluginPtr, view::main_view::ViewMsg};
 use crate::{
     event_list::{EventListInput, EventListOutput},
-    process_track_context::ProcessTrackContext,
+    plugin_ptr::PluginPtr,
 };
 
 mod window;
@@ -55,7 +58,7 @@ pub struct Plugin {
     gui_open_p: bool,
     window_handler: Option<*mut c_void>,
     process_start_p: bool,
-    sender_to_view: Sender<ViewMsg>,
+    sender_to_view: Sender<PluginPtr>,
     event_list_input: Pin<Box<EventListInput>>,
     event_list_output: Pin<Box<EventListOutput>>,
     host_audio_ports: clap_host_audio_ports,
@@ -63,12 +66,7 @@ pub struct Plugin {
     host_latency: clap_host_latency,
     host_log: clap_host_log,
     host_params: clap_host_params,
-}
-
-macro_rules! cstr {
-    ($str:literal) => {
-        unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(concat!($str, "\0").as_bytes()) }
-    };
+    on_key: Option<i16>,
 }
 
 pub const NAME: &CStr = cstr!("Sing Like Coding");
@@ -77,7 +75,7 @@ pub const URL: &CStr = cstr!("https://github.com/quek/sing_like_coding");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
 impl Plugin {
-    pub fn new(sender_to_view: Sender<ViewMsg>) -> Pin<Box<Self>> {
+    pub fn new(sender_to_view: Sender<PluginPtr>) -> Pin<Box<Self>> {
         let clap_host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: null_mut::<c_void>(),
@@ -134,6 +132,7 @@ impl Plugin {
             host_latency,
             host_log,
             host_params,
+            on_key: None,
         });
 
         let ptr = this.as_mut().get_mut() as *mut _ as *mut c_void;
@@ -227,9 +226,8 @@ impl Plugin {
 
         log::debug!("request_callback start...");
         let this = unsafe { &mut *((*host).host_data as *mut Self) };
-        let plugin = this.plugin.unwrap();
         this.sender_to_view
-            .send(ViewMsg::PluginCallback(ClapPluginPtr(plugin)))
+            .send(PluginPtr((unsafe { *host }).host_data))
             .unwrap();
         log::debug!("request_callback end");
     }
@@ -438,37 +436,37 @@ impl Plugin {
         Ok(())
     }
 
-    pub fn process(&mut self, context: &mut ProcessTrackContext) -> Result<()> {
+    pub fn process(&mut self, context: &mut ProcessData) -> Result<()> {
         //log::debug!("plugin.process frames_count {frames_count}");
 
-        let mut in_buf0 = vec![0.0; context.nframes];
-        let mut in_buf1 = vec![0.0; context.nframes];
-        let mut in_buffer = vec![in_buf0.as_mut_ptr(), in_buf1.as_mut_ptr()];
-
+        let mut in_buffer = vec![];
+        for channel in 0..context.nchannels {
+            in_buffer.push(context.buffer_in[channel].as_mut_ptr());
+        }
         let audio_input = clap_audio_buffer {
             data32: in_buffer.as_mut_ptr(),
             data64: null_mut::<*mut f64>(),
-            channel_count: 2,
+            channel_count: context.nchannels as u32,
             latency: 0,
             constant_mask: 0,
         };
         let mut audio_inputs = [audio_input];
 
         let mut out_buffer = vec![];
-        for channel in context.buffer.buffer.iter_mut() {
-            out_buffer.push(channel.as_mut_ptr());
+        for channel in 0..context.nchannels {
+            out_buffer.push(context.buffer_out[channel].as_mut_ptr());
         }
 
         let audio_output = clap_audio_buffer {
             data32: out_buffer.as_mut_ptr(),
             data64: null_mut::<*mut f64>(),
-            channel_count: 2,
+            channel_count: context.nchannels as u32,
             latency: 0,
             constant_mask: 0,
         };
         let mut audio_outputs = [audio_output];
 
-        let transport = if context.play_p {
+        let transport = if context.play_p != 0 {
             Some(clap_event_transport {
                 header: clap_event_header {
                     size: size_of::<clap_event_transport>() as u32,
@@ -495,20 +493,30 @@ impl Plugin {
             None
         };
 
-        for event in context.event_list_input.iter() {
+        for i in 0..context.nevents_input {
+            let event = &context.events_input[i];
             let channel = 0;
             let time = 0;
-            match event {
-                Event::NoteOn(key, velocity) => {
-                    if let Some(key) = context.on_key {
+            match &event.kind {
+                EventKind::NoteOn => {
+                    if let Some(key) = self.on_key {
                         self.event_list_input.note_off(key, channel, 0.0, time)
                     }
-                    self.event_list_input
-                        .note_on(*key, channel, *velocity, time);
-                    context.on_key = Some(*key);
+                    self.event_list_input.note_on(
+                        event.key,
+                        event.channel,
+                        event.velocity,
+                        event.time,
+                    );
+                    self.on_key = Some(event.key);
                 }
-                Event::NoteOff(key) => {
-                    self.event_list_input.note_off(*key, channel, 0.0, time);
+                EventKind::NoteOff => {
+                    self.event_list_input.note_off(
+                        event.key,
+                        event.channel,
+                        event.velocity,
+                        event.time,
+                    );
                 }
             }
         }
@@ -553,7 +561,9 @@ impl Plugin {
         //         cpal::SupportedBufferSize::Unknown => (64, 4096),
         //     };
         unsafe {
+            // TODO main-thread
             plugin.activate.unwrap()(plugin, 48000.0, 64, 4096);
+            // TODO audio-thread
             plugin.start_processing.unwrap()(plugin);
         };
         self.process_start_p = true;

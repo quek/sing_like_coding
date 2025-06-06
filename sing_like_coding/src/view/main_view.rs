@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::Result;
+use common::protocol::MainToPlugin;
 use eframe::egui::Key;
 
 use crate::{
@@ -43,10 +44,15 @@ pub struct MainView {
     plugin_select_view: Option<QueryView<Description>>,
     will_plugin_open: Option<(usize, usize)>,
     song_receiver: Option<Receiver<ViewMsg>>,
+    sender_to_loop: Sender<MainToPlugin>,
 }
 
 impl MainView {
-    pub fn new(view_sender: Sender<SingerMsg>, song_receiver: Receiver<ViewMsg>) -> Self {
+    pub fn new(
+        view_sender: Sender<SingerMsg>,
+        song_receiver: Receiver<ViewMsg>,
+        sender_to_loop: Sender<MainToPlugin>,
+    ) -> Self {
         Self {
             gui_context: None,
             state: Arc::new(Mutex::new(ViewState::new(view_sender))),
@@ -55,6 +61,7 @@ impl MainView {
             plugin_select_view: None,
             will_plugin_open: None,
             song_receiver: Some(song_receiver),
+            sender_to_loop,
         }
     }
 
@@ -116,20 +123,15 @@ impl MainView {
     ) -> Result<()> {
         self.do_callback_plugins()?;
 
-        dbg!("view 1");
         if let Some(receiver) = self.song_receiver.take() {
             self.start_listener(receiver, gui_context);
             self.gui_context = Some(gui_context.clone());
         }
-        dbg!("view 2");
         self.process_shortcut(gui_context)?;
 
-        dbg!("view 3");
         self.plugin_gui_open()?;
 
-        dbg!("view 4");
         let mut state = self.state.lock().unwrap();
-        dbg!("view 5");
         match &state.route {
             Route::Track => self.track_view.view(gui_context, &mut state, device)?,
             Route::Command => self.command_view.view(gui_context, &mut state)?,
@@ -150,14 +152,15 @@ impl MainView {
                     .unwrap()
                     .view(gui_context)?
                 {
-                    let description = description.lock().unwrap();
+                    // let description = description.lock().unwrap();
                     for track_index in &state.selected_tracks {
                         state
                             .view_sender
-                            .send(SingerMsg::PluginLoad(*track_index, description.clone()))
+                            .send(SingerMsg::PluginLoad(
+                                *track_index,
+                                description.lock().unwrap().clone(),
+                            ))
                             .unwrap();
-                        self.will_plugin_open =
-                            Some((*track_index, state.song.tracks[*track_index].modules.len()));
                     }
 
                     self.plugin_select_view = None;
@@ -169,7 +172,6 @@ impl MainView {
     }
 
     fn do_callback_plugins(&mut self) -> Result<()> {
-        dbg!("do_callback_plugins start...");
         let mut state = self.state.lock().unwrap();
         let callback_plugins = &mut state.callback_plugins;
         for plugin in callback_plugins.iter() {
@@ -179,12 +181,11 @@ impl MainView {
             log::debug!("did on_main_thread");
         }
         callback_plugins.clear();
-        dbg!("do_callback_plugins end");
         Ok(())
     }
 
     fn plugin_gui_open(&mut self) -> Result<()> {
-        let plugin_ptr = if let Some((track_index, plugin_index)) = &self.will_plugin_open {
+        let module = if let Some((track_index, plugin_index)) = &self.will_plugin_open {
             let mut state = self.state.lock().unwrap();
             state
                 .song
@@ -192,17 +193,17 @@ impl MainView {
                 .get_mut(*track_index)
                 .map(|x| x.modules.get_mut(*plugin_index))
                 .flatten()
-                .map(|module| module.plugin_ptr.clone())
-                .flatten()
+                .map(|x| x.clone())
         } else {
             None
         };
 
-        if let Some(plugin_ptr) = plugin_ptr {
-            let plugin = unsafe { plugin_ptr.as_mut() };
-            dbg!("plugin.gui_open() before");
-            plugin.gui_open()?;
-            dbg!("plugin.gui_open() after");
+        if let Some(_module) = module {
+            // TODO send open request
+            // let plugin = unsafe { module.as_mut() };
+            // dbg!("plugin.gui_open() before");
+            // plugin.gui_open()?;
+            // dbg!("plugin.gui_open() after");
             self.will_plugin_open = None;
         }
         Ok(())

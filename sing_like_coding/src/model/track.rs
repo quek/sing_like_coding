@@ -1,11 +1,8 @@
 use anyhow::Result;
+use common::{event::Event, module::Module, process_track_context::ProcessTrackContext};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    event::Event, model::note::Note, plugin::Plugin, process_track_context::ProcessTrackContext,
-};
-
-use super::module::Module;
+use crate::model::note::Note;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
@@ -50,8 +47,29 @@ impl Track {
     }
 
     fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
-        let plugin = unsafe { &mut *(context.plugins[module_index].0 as *mut Plugin) };
-        plugin.process(context)?;
+        let data = context.plugins[module_index].process_data();
+        for event in &context.event_list_input {
+            match event {
+                Event::NoteOn(key, velocity) => data.note_on(*key, *velocity, 0, 0),
+                Event::NoteOff(key) => data.note_off(*key, 0, 0),
+            }
+        }
+
+        if module_index > 0 {
+            let (left, right) = context.plugins.split_at_mut(module_index);
+            let prev = &mut left[module_index - 1];
+            let curr = &mut right[0];
+
+            let buffer_out = &prev.process_data().buffer_out;
+            let buffer_in = &mut curr.process_data().buffer_in;
+
+            for ch in 0..context.nchannels {
+                buffer_in[ch].copy_from_slice(&buffer_out[ch]);
+            }
+        }
+
+        context.plugins[module_index].process()?;
+
         Ok(())
     }
 
