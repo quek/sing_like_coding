@@ -5,6 +5,7 @@ use anyhow::Result;
 use common::protocol::{MainToPlugin, PluginToMain};
 use eframe::egui;
 
+use crate::app_state::AppState;
 use crate::communicator::Communicator;
 use crate::device::Device;
 use crate::singer::{Singer, SingerMsg};
@@ -29,9 +30,9 @@ pub fn main() -> eframe::Result {
 }
 
 struct AppMain {
+    state: Arc<Mutex<AppState>>,
     device: Option<Device>,
     view: MainView,
-    sender_to_loop: Sender<MainToPlugin>,
     receiver_from_loop: Receiver<PluginToMain>,
 }
 
@@ -53,7 +54,8 @@ impl Default for AppMain {
         let device = Some(device);
         view_sender.send(SingerMsg::Song).unwrap();
 
-        let view = MainView::new(view_sender, song_receiver, sender_to_loop.clone());
+        let app_state = Arc::new(Mutex::new(AppState::new(view_sender, sender_to_loop)));
+        let view = MainView::new(app_state.clone(), song_receiver);
         tokio::spawn(async move {
             dbg!("########## before send_to_plugin_process");
             send_to_plugin_process(sender_to_main, receiver_from_main)
@@ -61,9 +63,9 @@ impl Default for AppMain {
                 .unwrap();
         });
         Self {
+            state: app_state,
             device,
             view,
-            sender_to_loop,
             receiver_from_loop,
         }
     }
@@ -71,7 +73,12 @@ impl Default for AppMain {
 
 impl eframe::App for AppMain {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        let _ = self.sender_to_loop.send(MainToPlugin::Quit);
+        let _ = self
+            .state
+            .lock()
+            .unwrap()
+            .sender_to_loop
+            .send(MainToPlugin::Quit);
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {

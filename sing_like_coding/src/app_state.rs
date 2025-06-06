@@ -6,11 +6,10 @@ use crate::{
     clap_manager::ClapManager,
     model::song::Song,
     singer::{ClapPluginPtr, SingerMsg, SongState},
+    view::main_view::Route,
 };
 
-use super::main_view::Route;
-
-pub struct ViewState {
+pub struct AppState {
     pub clap_manager: ClapManager,
     pub cursor_line: usize,
     pub cursor_track: usize,
@@ -26,7 +25,7 @@ pub struct ViewState {
     pub callback_plugins: Vec<ClapPluginPtr>,
 }
 
-impl ViewState {
+impl AppState {
     pub fn new(view_sender: Sender<SingerMsg>, sender_to_loop: Sender<MainToPlugin>) -> Self {
         Self {
             clap_manager: ClapManager::new(),

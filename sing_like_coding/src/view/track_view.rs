@@ -2,9 +2,7 @@ use anyhow::Result;
 use common::protocol::MainToPlugin;
 use eframe::egui::{CentralPanel, Color32, Frame, Key, TopBottomPanel, Ui};
 
-use crate::{device::Device, singer::SingerMsg, util::with_font_mono};
-
-use super::view_state::ViewState;
+use crate::{app_state::AppState, device::Device, singer::SingerMsg, util::with_font_mono};
 
 pub struct TrackView {}
 
@@ -16,7 +14,7 @@ impl TrackView {
     pub fn view(
         &mut self,
         gui_context: &eframe::egui::Context,
-        state: &mut ViewState,
+        state: &mut AppState,
         device: &mut Option<Device>,
     ) -> Result<()> {
         self.process_shortcut(gui_context, state)?;
@@ -163,7 +161,7 @@ impl TrackView {
     fn process_shortcut(
         &mut self,
         gui_context: &eframe::egui::Context,
-        state: &mut ViewState,
+        state: &mut AppState,
     ) -> Result<()> {
         let input = gui_context.input(|i| i.clone());
         let focused = gui_context.memory(|memory| memory.focused());
@@ -213,7 +211,7 @@ impl TrackView {
     }
 }
 
-fn note_update(key_delta: i16, state: &mut ViewState) {
+fn note_update(key_delta: i16, state: &mut AppState) {
     let key = if let Some(note) = state.song.tracks[state.cursor_track].note(state.cursor_line) {
         note.key + key_delta
     } else {

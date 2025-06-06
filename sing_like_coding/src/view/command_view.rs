@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use eframe::egui::{self, Button, CentralPanel, Key, TextEdit, Ui};
 
-use crate::{command::Command, commander::Commander};
+use crate::{app_state::AppState, command::Command, commander::Commander};
 
-use super::{main_view::Route, view_state::ViewState};
+use super::main_view::Route;
 
 pub struct CommandView {
     focus_p: bool,
@@ -27,7 +27,7 @@ impl CommandView {
     pub fn view(
         &mut self,
         gui_context: &eframe::egui::Context,
-        state: &mut ViewState,
+        state: &mut AppState,
     ) -> Result<()> {
         CentralPanel::default().show(gui_context, |ui: &mut Ui| -> Result<()> {
             let edit = TextEdit::singleline(&mut self.buffer);

@@ -1,11 +1,11 @@
-use crate::view::view_state::ViewState;
+use crate::app_state::AppState;
 
 use super::Command;
 
 pub struct PluginScan {}
 
 impl Command for PluginScan {
-    fn call(&mut self, state: &mut ViewState) -> anyhow::Result<()> {
+    fn call(&mut self, state: &mut AppState) -> anyhow::Result<()> {
         dbg!("PluginScan call!");
         state.clap_manager.scan();
         Ok(())

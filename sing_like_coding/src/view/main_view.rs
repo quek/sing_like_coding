@@ -11,15 +11,14 @@ use common::protocol::MainToPlugin;
 use eframe::egui::Key;
 
 use crate::{
+    app_state::AppState,
     clap_manager::Description,
     device::Device,
     model::song::Song,
     singer::{ClapPluginPtr, SingerMsg, SongState},
 };
 
-use super::{
-    command_view::CommandView, query_view::QueryView, track_view::TrackView, view_state::ViewState,
-};
+use super::{command_view::CommandView, query_view::QueryView, track_view::TrackView};
 
 #[derive(Debug)]
 pub enum ViewMsg {
@@ -38,7 +37,7 @@ pub enum Route {
 
 pub struct MainView {
     gui_context: Option<eframe::egui::Context>,
-    state: Arc<Mutex<ViewState>>,
+    state: Arc<Mutex<AppState>>,
     track_view: TrackView,
     command_view: CommandView,
     plugin_select_view: Option<QueryView<Description>>,
@@ -47,14 +46,10 @@ pub struct MainView {
 }
 
 impl MainView {
-    pub fn new(
-        view_sender: Sender<SingerMsg>,
-        song_receiver: Receiver<ViewMsg>,
-        sender_to_loop: Sender<MainToPlugin>,
-    ) -> Self {
+    pub fn new(app_state: Arc<Mutex<AppState>>, song_receiver: Receiver<ViewMsg>) -> Self {
         Self {
             gui_context: None,
-            state: Arc::new(Mutex::new(ViewState::new(view_sender, sender_to_loop))),
+            state: app_state,
             track_view: TrackView::new(),
             command_view: CommandView::new(),
             plugin_select_view: None,
@@ -180,7 +175,7 @@ impl MainView {
 }
 
 pub fn loop_receive_from_audio_thread(
-    state: Arc<Mutex<ViewState>>,
+    state: Arc<Mutex<AppState>>,
     receiver: Receiver<ViewMsg>,
     gui_context: &eframe::egui::Context,
 ) {
