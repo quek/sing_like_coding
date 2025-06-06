@@ -1,5 +1,5 @@
-pub const NCHANNELS_2: usize = 2;
-pub const NFRAMES_2048: usize = 2048;
+pub const MAX_CANNELS: usize = 2;
+pub const MAX_FRAMES: usize = 2048;
 pub const MAX_EVENTS: usize = 64;
 
 #[repr(C)]
@@ -11,7 +11,8 @@ pub struct ProcessData {
     pub steady_time: i64,
     pub nevents_input: usize,
     pub events_input: [Event; MAX_EVENTS],
-    pub buffer: [[f32; NFRAMES_2048]; NCHANNELS_2],
+    pub buffer_in: [[f32; MAX_FRAMES]; MAX_CANNELS],
+    pub buffer_out: [[f32; MAX_FRAMES]; MAX_CANNELS],
 }
 
 #[repr(C)]
@@ -34,8 +35,8 @@ pub enum EventKind {
 impl ProcessData {
     pub fn new() -> Self {
         Self {
-            nchannels: NCHANNELS_2,
-            nframes: NFRAMES_2048,
+            nchannels: MAX_CANNELS,
+            nframes: MAX_FRAMES,
             play_p: 0,
             bpm: 120.0,
             steady_time: 0,
@@ -47,7 +48,8 @@ impl ProcessData {
                 channel: 0,
                 time: 0,
             }; MAX_EVENTS],
-            buffer: [[0.0; NFRAMES_2048]; NCHANNELS_2],
+            buffer_in: [[0.0; MAX_FRAMES]; MAX_CANNELS],
+            buffer_out: [[0.0; MAX_FRAMES]; MAX_CANNELS],
         }
     }
 

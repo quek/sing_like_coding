@@ -118,6 +118,18 @@ impl Singer {
 
         self.compute_play_position(nframes);
 
+        for track_index in 0..self.process_track_contexts.len() {
+            for module_index in 0..self.process_track_contexts[track_index].plugins.len() {
+                let process_data =
+                    self.process_track_contexts[track_index].plugins[module_index].process_data();
+                process_data.nchannels = nchannels;
+                process_data.nframes = nframes;
+                process_data.play_p = if self.play_p { 1 } else { 0 };
+                process_data.bpm = self.song.bpm;
+                process_data.steady_time = self.steady_time;
+            }
+        }
+
         for context in self.process_track_contexts.iter_mut() {
             context.nchannels = nchannels;
             context.nframes = nframes;
@@ -134,12 +146,12 @@ impl Singer {
             .zip(self.process_track_contexts.par_iter_mut())
             .try_for_each(|(track, process_track_context)| track.process(process_track_context))?;
 
-        let buffers: Vec<_> = self
+        let buffers = self
             .process_track_contexts
             .iter_mut()
             .filter_map(|x| x.plugins.last_mut())
-            .map(|plugin_ref: &mut PluginRef| plugin_ref.process_data().buffer)
-            .collect();
+            .map(|plugin_ref: &mut PluginRef| &plugin_ref.process_data().buffer_out)
+            .collect::<Vec<_>>();
         for channel in 0..nchannels {
             for frame in 0..nframes {
                 output[nchannels * frame + channel] =

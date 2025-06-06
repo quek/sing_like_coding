@@ -439,28 +439,28 @@ impl Plugin {
     pub fn process(&mut self, context: &mut ProcessData) -> Result<()> {
         //log::debug!("plugin.process frames_count {frames_count}");
 
-        let mut in_buf0 = vec![0.0; context.nframes];
-        let mut in_buf1 = vec![0.0; context.nframes];
-        let mut in_buffer = vec![in_buf0.as_mut_ptr(), in_buf1.as_mut_ptr()];
-
+        let mut in_buffer = vec![];
+        for channel in 0..context.nchannels {
+            in_buffer.push(context.buffer_in[channel].as_mut_ptr());
+        }
         let audio_input = clap_audio_buffer {
             data32: in_buffer.as_mut_ptr(),
             data64: null_mut::<*mut f64>(),
-            channel_count: 2,
+            channel_count: context.nchannels as u32,
             latency: 0,
             constant_mask: 0,
         };
         let mut audio_inputs = [audio_input];
 
         let mut out_buffer = vec![];
-        for channel in context.buffer.iter_mut() {
-            out_buffer.push(channel.as_mut_ptr());
+        for channel in 0..context.nchannels {
+            out_buffer.push(context.buffer_out[channel].as_mut_ptr());
         }
 
         let audio_output = clap_audio_buffer {
             data32: out_buffer.as_mut_ptr(),
             data64: null_mut::<*mut f64>(),
-            channel_count: 2,
+            channel_count: context.nchannels as u32,
             latency: 0,
             constant_mask: 0,
         };

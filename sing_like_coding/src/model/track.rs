@@ -48,17 +48,26 @@ impl Track {
 
     fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
         let data = context.plugins[module_index].process_data();
-        data.nchannels = context.nchannels;
-        data.nframes = context.nframes;
-        data.play_p = if context.play_p { 1 } else { 0 };
-        data.bpm = context.bpm;
-        data.steady_time = context.steady_time;
         for event in &context.event_list_input {
             match event {
                 Event::NoteOn(key, velocity) => data.note_on(*key, *velocity, 0, 0),
                 Event::NoteOff(key) => data.note_off(*key, 0, 0),
             }
         }
+
+        if module_index > 0 {
+            let (left, right) = context.plugins.split_at_mut(module_index);
+            let prev = &mut left[module_index - 1];
+            let curr = &mut right[0];
+
+            let buffer_out = &prev.process_data().buffer_out;
+            let buffer_in = &mut curr.process_data().buffer_in;
+
+            for ch in 0..context.nchannels {
+                buffer_in[ch].copy_from_slice(&buffer_out[ch]);
+            }
+        }
+
         context.plugins[module_index].process()?;
 
         Ok(())
