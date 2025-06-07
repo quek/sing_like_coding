@@ -99,8 +99,6 @@ async fn send_to_plugin_process(
     state: Arc<Mutex<AppState>>,
     receiver_from_main: Receiver<MainToPlugin>,
 ) -> Result<()> {
-    dbg!("########## in send_to_plugin_process");
-
     let mut plugin_comminicator = Communicator::new(state, receiver_from_main).await?;
     plugin_comminicator.run().await?;
 

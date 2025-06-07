@@ -22,7 +22,6 @@ impl Communicator {
     ) -> anyhow::Result<Self> {
         let pipe = ServerOptions::new().create(PIPE_CTRL_NAME)?;
 
-        dbg!("########## before Command::new(\"sing_like_coding_plugin.exe\")");
         let child = Command::new("sing_like_coding_plugin.exe")
             .stdout(Stdio::inherit())
             .spawn()
