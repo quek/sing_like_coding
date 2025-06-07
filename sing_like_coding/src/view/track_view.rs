@@ -1,8 +1,12 @@
 use anyhow::Result;
 use common::protocol::MainToPlugin;
-use eframe::egui::{CentralPanel, Color32, Frame, Key, TopBottomPanel, Ui};
+use eframe::egui::{Button, CentralPanel, Color32, Frame, Key, TopBottomPanel, Ui};
 
 use crate::{app_state::AppState, device::Device, singer::SingerMsg, util::with_font_mono};
+
+use super::main_view::Route;
+
+const DEFAULT_TRACK_WIDTH: f32 = 36.0;
 
 pub struct TrackView {}
 
@@ -152,6 +156,14 @@ impl TrackView {
                                         .send(MainToPlugin::GuiOpen(track_index, module_index))?;
                                 }
                             }
+
+                            if ui
+                                .add_sized([DEFAULT_TRACK_WIDTH, 0.0], Button::new("+"))
+                                .clicked()
+                            {
+                                state.route = Route::PluginSelect;
+                            }
+
                             Ok(())
                         });
                     }
