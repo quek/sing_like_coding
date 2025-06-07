@@ -20,7 +20,13 @@ impl TrackView {
         self.process_shortcut(gui_context, state)?;
 
         TopBottomPanel::top("Top").show(gui_context, |ui| {
-            ui.heading("Sing Like Coding");
+            ui.horizontal(|ui| {
+                ui.heading("Sing Like Coding");
+                ui.label(format!(
+                    "{:.6}ms",
+                    state.song_state.process_elasped_avg * 1000.0
+                ));
+            });
         });
 
         CentralPanel::default().show(gui_context, |ui: &mut Ui| -> anyhow::Result<()> {

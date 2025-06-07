@@ -11,8 +11,8 @@ use windows::Win32::{
     Foundation::{WAIT_EVENT, WAIT_OBJECT_0},
     Storage::FileSystem::SYNCHRONIZE,
     System::Threading::{
-        OpenEventA, SetEvent, WaitForMultipleObjects, WaitForSingleObject, EVENT_MODIFY_STATE,
-        INFINITE, SYNCHRONIZATION_ACCESS_RIGHTS,
+        OpenEventA, SetEvent, WaitForMultipleObjects, EVENT_MODIFY_STATE, INFINITE,
+        SYNCHRONIZATION_ACCESS_RIGHTS,
     },
 };
 

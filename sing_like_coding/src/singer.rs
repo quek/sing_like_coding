@@ -4,6 +4,7 @@ use std::{
         mpsc::{Receiver, Sender},
         Arc, Mutex,
     },
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -39,6 +40,7 @@ pub enum SingerMsg {
 pub struct SongState {
     pub play_p: bool,
     pub line_play: usize,
+    pub process_elasped_avg: f64,
 }
 
 pub struct Singer {
@@ -51,6 +53,10 @@ pub struct Singer {
     line_play: usize,
     process_track_contexts: Vec<ProcessTrackContext>,
     shmems: Vec<Vec<Shmem>>,
+
+    process_elaspeds: Vec<f64>,
+    process_elasped_last: Instant,
+    process_elasped_avg: f64,
 }
 
 unsafe impl Send for Singer {}
@@ -69,6 +75,10 @@ impl Singer {
             line_play: 0,
             process_track_contexts: vec![],
             shmems: vec![],
+
+            process_elaspeds: vec![],
+            process_elasped_last: Instant::now(),
+            process_elasped_avg: 0.0,
         };
         this.add_track();
         this
@@ -107,6 +117,8 @@ impl Singer {
     }
 
     pub fn process(&mut self, output: &mut [f32], nchannels: usize) -> Result<()> {
+        let this_start = Instant::now();
+
         //log::debug!("AudioProcess process steady_time {}", self.steady_time);
         let nframes = output.len() / nchannels;
 
@@ -156,6 +168,14 @@ impl Singer {
 
         self.steady_time += nframes as i64;
 
+        let this_elapsed = this_start.elapsed();
+        self.process_elaspeds.push(this_elapsed.as_secs_f64());
+        if self.process_elasped_last.elapsed() >= Duration::from_secs(1) {
+            self.process_elasped_avg = self.process_elaspeds.iter().sum::<f64>()
+                / self.process_elaspeds.len().max(1) as f64;
+            self.process_elasped_last = Instant::now();
+        }
+
         Ok(())
     }
 
@@ -191,6 +211,7 @@ impl Singer {
             .send(ViewMsg::State(SongState {
                 play_p: self.play_p,
                 line_play: self.line_play,
+                process_elasped_avg: self.process_elasped_avg,
             }))
             .unwrap();
     }

@@ -128,7 +128,6 @@ pub fn loop_receive_from_audio_thread(
     let gui_context = gui_context.clone();
     thread::spawn(move || {
         while let Ok(command) = receiver.recv() {
-            dbg!(&command);
             match command {
                 ViewMsg::Song(song) => {
                     dbg!("Song start...");
