@@ -134,7 +134,7 @@ impl TrackView {
                                         Color32::BLACK
                                     })
                                     .show(ui, |ui| {
-                                        ui.label(&track.name);
+                                        ui.add(Label::new(format!("{:<9}", track.name)).truncate());
                                     });
                                 for line in line_range.clone() {
                                     let color = if state.cursor_track == track_index
@@ -149,9 +149,17 @@ impl TrackView {
                                         Color32::BLACK
                                     };
                                     Frame::NONE.fill(color).show(ui, |ui| {
-                                        let text = track
-                                            .note(line)
-                                            .map_or("---".to_string(), |note| note.note_name());
+                                        let text = track.note(line).map_or(
+                                            "--- -- --".to_string(),
+                                            |note| {
+                                                format!(
+                                                    "{:<3} {:02X} {:02X}",
+                                                    note.note_name(),
+                                                    note.velocity as i32,
+                                                    note.delay
+                                                )
+                                            },
+                                        );
                                         ui.label(text);
                                     });
                                 }
