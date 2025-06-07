@@ -10,7 +10,10 @@ use crate::{
     util::with_font_mono,
 };
 
-use super::main_view::Route;
+use super::{
+    main_view::Route,
+    shortcut_key::{Modifier, ShortcutKey},
+};
 
 const DEFAULT_TRACK_WIDTH: f32 = 64.0;
 
@@ -217,59 +220,73 @@ impl TrackView {
             return Ok(());
         }
 
-        if input.modifiers.ctrl && !input.modifiers.alt && !input.modifiers.shift {
-            if input.key_pressed(Key::J) {
-                note_update(-1, state);
-            } else if input.key_pressed(Key::K) {
-                note_update(1, state);
-            } else if input.key_pressed(Key::H) {
-                note_update(-12, state);
-            } else if input.key_pressed(Key::L) {
-                note_update(12, state);
-            } else if input.key_pressed(Key::T) {
-                TrackAdd {}.call(state)?;
+        if input.is(Modifier::C, Key::J) {
+            note_update(-1, 0, 0, state);
+        } else if input.is(Modifier::C, Key::K) {
+            note_update(1, 0, 0, state);
+        } else if input.is(Modifier::C, Key::H) {
+            note_update(-12, 0, 0, state);
+        } else if input.is(Modifier::C, Key::L) {
+            note_update(12, 0, 0, state);
+        } else if input.is(Modifier::C, Key::T) {
+            TrackAdd {}.call(state)?;
+        } else if input.is(Modifier::A, Key::J) {
+            note_update(0, -1, 0, state);
+        } else if input.is(Modifier::A, Key::K) {
+            note_update(0, 1, 0, state);
+        } else if input.is(Modifier::A, Key::H) {
+            note_update(0, -0x10, 0, state);
+        } else if input.is(Modifier::A, Key::L) {
+            note_update(0, 0x10, 0, state);
+        } else if input.is(Modifier::CA, Key::J) {
+            note_update(0, 0, -1, state);
+        } else if input.is(Modifier::CA, Key::K) {
+            note_update(0, 0, 1, state);
+        } else if input.is(Modifier::CA, Key::H) {
+            note_update(0, 0, -0x10, state);
+        } else if input.is(Modifier::CA, Key::L) {
+            note_update(0, 0, 0x10, state);
+        } else if input.is(Modifier::None, Key::J) {
+            state.cursor_line += 1;
+        } else if input.is(Modifier::None, Key::K) {
+            if state.cursor_line != 0 {
+                state.cursor_line -= 1;
             }
-        } else if !input.modifiers.ctrl && !input.modifiers.alt && !input.modifiers.shift {
-            if input.key_pressed(Key::J) {
-                state.cursor_line += 1;
-            } else if input.key_pressed(Key::K) {
-                if state.cursor_line != 0 {
-                    state.cursor_line -= 1;
-                }
-            } else if input.key_pressed(Key::H) {
-                if state.cursor_track == 0 {
-                    state.cursor_track = state.song.tracks.len() - 1;
-                } else {
-                    state.cursor_track -= 1;
-                }
-                state.selected_tracks.clear();
-                state.selected_tracks.push(state.cursor_track);
-            } else if input.key_pressed(Key::L) {
-                if state.cursor_track + 1 == state.song.tracks.len() {
-                    state.cursor_track = 0;
-                } else {
-                    state.cursor_track += 1;
-                }
-                state.selected_tracks.clear();
-                state.selected_tracks.push(state.cursor_track);
+        } else if input.is(Modifier::None, Key::H) {
+            if state.cursor_track == 0 {
+                state.cursor_track = state.song.tracks.len() - 1;
+            } else {
+                state.cursor_track -= 1;
             }
+            state.selected_tracks.clear();
+            state.selected_tracks.push(state.cursor_track);
+        } else if input.is(Modifier::None, Key::L) {
+            if state.cursor_track + 1 == state.song.tracks.len() {
+                state.cursor_track = 0;
+            } else {
+                state.cursor_track += 1;
+            }
+            state.selected_tracks.clear();
+            state.selected_tracks.push(state.cursor_track);
         }
 
         Ok(())
     }
 }
 
-fn note_update(key_delta: i16, state: &mut AppState) {
-    let key = if let Some(note) = state.song.tracks[state.cursor_track].note(state.cursor_line) {
-        note.key + key_delta
-    } else {
-        state.key_last
+fn note_update(key_delta: i16, velociy_delta: i16, delay_delta: i16, state: &mut AppState) {
+    if let Some(note) = state.song.tracks[state.cursor_track].note(state.cursor_line) {
+        let mut note = note.clone();
+        note.key = (note.key + key_delta).clamp(0, 127);
+        note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
+        note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
+        state.note_last = note;
     }
-    .clamp(0, 127);
 
+    let mut note = state.note_last.clone();
+    note.line = state.cursor_line;
     state
         .view_sender
-        .send(SingerMsg::Note(state.cursor_track, state.cursor_line, key))
+        .send(SingerMsg::Note(state.cursor_track, note))
         .unwrap();
-    state.key_last = key;
 }

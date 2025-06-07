@@ -86,6 +86,7 @@ impl Track {
         self.notes.get(&line)
     }
 
+    #[allow(dead_code)]
     pub fn note_mut(&mut self, line: usize) -> Option<&mut Note> {
         self.notes.get_mut(&line)
     }

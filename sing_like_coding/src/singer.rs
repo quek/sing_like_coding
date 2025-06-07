@@ -28,7 +28,7 @@ pub enum SingerMsg {
     Stop,
     Loop,
     Song,
-    Note(usize, usize, i16),
+    Note(usize, Note),
     #[allow(dead_code)]
     NoteOn(usize, i16, i16, f64, u32),
     #[allow(dead_code)]
@@ -277,25 +277,11 @@ async fn singer_loop(
                 singer.send_state();
             }
             SingerMsg::Song => singer.lock().unwrap().send_song(),
-            SingerMsg::Note(track_index, line, key) => {
-                log::debug!("ViewCommand::Note({line}, {key})");
+            SingerMsg::Note(track_index, note) => {
                 let mut singer = singer.lock().unwrap();
                 let song = &mut singer.song;
                 if let Some(track) = song.tracks.get_mut(track_index) {
-                    if let Some(note) = track.note_mut(line) {
-                        note.key = key;
-                    } else {
-                        track.notes.insert(
-                            line,
-                            Note {
-                                line,
-                                delay: 0,
-                                channel: 0,
-                                key,
-                                velocity: 100.0,
-                            },
-                        );
-                    }
+                    track.notes.insert(note.line, note);
                     singer.send_song();
                 }
             }

@@ -4,8 +4,6 @@ use serde::{Deserialize, Serialize};
 pub struct Note {
     pub line: usize,
     pub delay: u8,
-    //time: f64,
-    //duration: f64,
     pub channel: i16,
     pub key: i16,
     pub velocity: f64,

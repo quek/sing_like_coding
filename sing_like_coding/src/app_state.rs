@@ -7,7 +7,7 @@ use common::{
 use eframe::egui;
 
 use crate::{
-    model::song::Song,
+    model::{note::Note, song::Song},
     singer::{SingerMsg, SongState},
     view::main_view::Route,
 };
@@ -17,7 +17,7 @@ pub struct AppState {
     pub clap_manager: ClapManager,
     pub cursor_line: usize,
     pub cursor_track: usize,
-    pub key_last: i16,
+    pub note_last: Note,
     pub route: Route,
     pub selected_cells: Vec<(usize, usize)>,
     pub selected_tracks: Vec<usize>,
@@ -34,7 +34,13 @@ impl AppState {
             clap_manager: ClapManager::new(),
             cursor_line: 0,
             cursor_track: 0,
-            key_last: 60,
+            note_last: Note {
+                line: 0,
+                delay: 0,
+                channel: 0,
+                key: 64,
+                velocity: 100.0,
+            },
             route: Route::Track,
             selected_cells: vec![(0, 0)],
             selected_tracks: vec![0],
