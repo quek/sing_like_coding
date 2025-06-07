@@ -256,13 +256,16 @@ async fn singer_loop(
                     if let Some(note) = track.note_mut(line) {
                         note.key = key;
                     } else {
-                        track.notes.push(Note {
+                        track.notes.insert(
                             line,
-                            delay: 0,
-                            channel: 0,
-                            key,
-                            velocity: 100.0,
-                        });
+                            Note {
+                                line,
+                                delay: 0,
+                                channel: 0,
+                                key,
+                                velocity: 100.0,
+                            },
+                        );
                     }
                     singer.send_song();
                 }

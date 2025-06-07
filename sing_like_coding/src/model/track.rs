@@ -1,5 +1,6 @@
 use anyhow::Result;
 use common::{event::Event, module::Module, process_track_context::ProcessTrackContext};
+use eframe::egui::ahash::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::model::note::Note;
@@ -8,7 +9,7 @@ use crate::model::note::Note;
 pub struct Track {
     pub name: String,
     pub modules: Vec<Module>,
-    pub notes: Vec<Note>,
+    pub notes: HashMap<usize, Note>,
 }
 
 impl Track {
@@ -16,22 +17,27 @@ impl Track {
         Self {
             name: "T01".to_string(),
             modules: vec![],
-            notes: vec![],
+            notes: Default::default(),
         }
     }
 
     pub fn compute_midi(&self, context: &mut ProcessTrackContext) {
-        for note in self.notes.iter() {
-            let time = note.line * 0x100 + note.delay as usize;
-            if context.play_position.contains(&(time as i64)) {
-                if let Some(key) = context.on_key {
-                    context.event_list_input.push(Event::NoteOff(key));
+        let line_start = context.play_position.start / 0x100;
+        let line_end = context.play_position.start / 0x100;
+
+        for line in line_start..=line_end {
+            if let Some(note) = self.notes.get(&(line as usize)) {
+                let time = note.line * 0x100 + note.delay as usize;
+                if context.play_position.contains(&(time as i64)) {
+                    if let Some(key) = context.on_key {
+                        context.event_list_input.push(Event::NoteOff(key));
+                    }
+                    // TODO time
+                    context
+                        .event_list_input
+                        .push(Event::NoteOn(note.key, note.velocity));
+                    context.on_key = Some(note.key);
                 }
-                // TODO time
-                context
-                    .event_list_input
-                    .push(Event::NoteOn(note.key, note.velocity));
-                context.on_key = Some(note.key);
             }
         }
     }
@@ -73,13 +79,11 @@ impl Track {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn note(&self, line: usize) -> Option<&Note> {
-        self.notes.iter().find(|note| note.line == line)
+        self.notes.get(&line)
     }
 
-    #[allow(dead_code)]
     pub fn note_mut(&mut self, line: usize) -> Option<&mut Note> {
-        self.notes.iter_mut().find(|note| note.line == line)
+        self.notes.get_mut(&line)
     }
 }

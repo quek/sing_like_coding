@@ -136,7 +136,7 @@ pub fn loop_receive_from_audio_thread(
                     for track in song.tracks.iter() {
                         let mut xs = vec![];
                         for line in 0..song.nlines {
-                            if let Some(note) = track.notes.iter().find(|note| note.line == line) {
+                            if let Some(note) = track.note(line) {
                                 xs.push(note.note_name());
                             } else {
                                 xs.push("".to_string());
