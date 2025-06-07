@@ -41,6 +41,7 @@ pub struct SongState {
     pub play_p: bool,
     pub line_play: usize,
     pub process_elasped_avg: f64,
+    pub cpu_usage: f64,
 }
 
 pub struct Singer {
@@ -54,6 +55,8 @@ pub struct Singer {
     process_track_contexts: Vec<ProcessTrackContext>,
     shmems: Vec<Vec<Shmem>>,
 
+    cpu_usages: Vec<f64>,
+    cpu_usage: f64,
     process_elaspeds: Vec<f64>,
     process_elasped_last: Instant,
     process_elasped_avg: f64,
@@ -76,6 +79,8 @@ impl Singer {
             process_track_contexts: vec![],
             shmems: vec![],
 
+            cpu_usages: vec![],
+            cpu_usage: 0.0,
             process_elaspeds: vec![],
             process_elasped_last: Instant::now(),
             process_elasped_avg: 0.0,
@@ -169,10 +174,17 @@ impl Singer {
         self.steady_time += nframes as i64;
 
         let this_elapsed = this_start.elapsed();
-        self.process_elaspeds.push(this_elapsed.as_secs_f64());
+        let elasped = this_elapsed.as_secs_f64();
+        self.process_elaspeds.push(elasped);
+        self.cpu_usages
+            .push(elasped / (nframes as f64 / self.song.sample_rate));
         if self.process_elasped_last.elapsed() >= Duration::from_secs(1) {
             self.process_elasped_avg = self.process_elaspeds.iter().sum::<f64>()
                 / self.process_elaspeds.len().max(1) as f64;
+            self.cpu_usage =
+                self.cpu_usages.iter().sum::<f64>() / self.cpu_usages.len().max(1) as f64;
+            self.process_elaspeds.clear();
+            self.cpu_usages.clear();
             self.process_elasped_last = Instant::now();
         }
 
@@ -212,6 +224,7 @@ impl Singer {
                 play_p: self.play_p,
                 line_play: self.line_play,
                 process_elasped_avg: self.process_elasped_avg,
+                cpu_usage: self.cpu_usage,
             }))
             .unwrap();
     }

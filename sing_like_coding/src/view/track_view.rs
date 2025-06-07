@@ -26,6 +26,7 @@ impl TrackView {
                     "{:.6}ms",
                     state.song_state.process_elasped_avg * 1000.0
                 ));
+                ui.label(format!("{:.6}%", state.song_state.cpu_usage * 100.0));
             });
         });
 
@@ -202,12 +203,16 @@ impl TrackView {
                 } else {
                     state.cursor_track -= 1;
                 }
+                state.selected_tracks.clear();
+                state.selected_tracks.push(state.cursor_track);
             } else if input.key_pressed(Key::L) {
                 if state.cursor_track + 1 == state.song.tracks.len() {
                     state.cursor_track = 0;
                 } else {
                     state.cursor_track += 1;
                 }
+                state.selected_tracks.clear();
+                state.selected_tracks.push(state.cursor_track);
             }
         }
 
