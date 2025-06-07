@@ -98,8 +98,9 @@ impl TrackView {
             ui.separator();
 
             with_font_mono(ui, |ui| {
-                // TODO
-                let line_range = 0..0x30;
+                let line_start = (state.cursor_line as i64 - 0x0f).max(0) as usize;
+                let line_end = line_start + 0x20;
+                let line_range = line_start..line_end;
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(" ");
@@ -108,7 +109,7 @@ impl TrackView {
                                 .fill(if line == state.song_state.line_play {
                                     Color32::DARK_GREEN
                                 } else if state.song_state.loop_range.contains(&line) {
-                                    Color32::DARK_GRAY
+                                    Color32::from_rgb(0x22, 0x22, 0x22)
                                 } else {
                                     Color32::BLACK
                                 })
