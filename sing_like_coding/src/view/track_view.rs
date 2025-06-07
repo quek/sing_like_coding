@@ -99,7 +99,7 @@ impl TrackView {
 
             with_font_mono(ui, |ui| {
                 // TODO
-                let line_range = 0..0x100;
+                let line_range = 0..0x30;
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(" ");
