@@ -47,7 +47,7 @@ impl AppState {
                 line: 0,
                 delay: 0,
                 channel: 0,
-                key: 64,
+                key: 60,
                 velocity: 100.0,
             },
             route: Route::Track,

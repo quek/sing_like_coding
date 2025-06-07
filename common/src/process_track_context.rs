@@ -11,7 +11,7 @@ pub struct ProcessTrackContext {
     pub bpm: f64,
     pub steady_time: i64,
     pub play_position: Range<i64>,
-    pub on_key: Option<i16>,
+    pub on_keys: Vec<Option<i16>>,
     pub event_list_input: Vec<Event>,
     pub plugins: Vec<PluginRef>,
 }

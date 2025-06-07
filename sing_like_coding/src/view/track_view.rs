@@ -36,10 +36,10 @@ impl TrackView {
             ui.horizontal(|ui| {
                 ui.heading("Sing Like Coding");
                 ui.label(format!(
-                    "{:.6}ms",
+                    "{:.3}ms",
                     state.song_state.process_elasped_avg * 1000.0
                 ));
-                ui.label(format!("{:.6}%", state.song_state.cpu_usage * 100.0));
+                ui.label(format!("{:.3}%", state.song_state.cpu_usage * 100.0));
             });
         });
 
