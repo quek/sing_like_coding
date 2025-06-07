@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use super::track::Track;
+use crate::app_state::Cursor;
+
+use super::{note::Note, track::Track};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Song {
@@ -24,5 +26,12 @@ impl Song {
         let mut track = Track::new();
         track.name = format!("T{:02X}", self.tracks.len() + 1);
         self.tracks.push(track);
+    }
+
+    pub fn note(&self, cursor: &Cursor) -> Option<&Note> {
+        self.tracks
+            .get(cursor.track)
+            .and_then(|x| x.lanes.get(cursor.lane))
+            .and_then(|x| x.note(cursor.line))
     }
 }

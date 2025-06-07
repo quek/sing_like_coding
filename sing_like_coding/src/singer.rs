@@ -8,6 +8,7 @@ use std::{
 };
 
 use crate::{
+    app_state::Cursor,
     model::{note::Note, song::Song},
     util::next_id,
     view::main_view::ViewMsg,
@@ -23,13 +24,13 @@ use rayon::prelude::*;
 use shared_memory::{Shmem, ShmemConf, ShmemError};
 
 #[derive(Debug)]
-pub enum SingerMsg {
+pub enum SingerCommand {
     Play,
     Stop,
     Loop,
     Song,
-    Note(usize, Note),
-    NoteDelete(usize, usize),
+    Note(Cursor, Note),
+    NoteDelete(Cursor),
     #[allow(dead_code)]
     NoteOn(usize, i16, i16, f64, u32),
     #[allow(dead_code)]
@@ -222,7 +223,7 @@ impl Singer {
         self.all_notef_off_p = true;
     }
 
-    pub fn start_listener(singer: Arc<Mutex<Self>>, receiver: Receiver<SingerMsg>) {
+    pub fn start_listener(singer: Arc<Mutex<Self>>, receiver: Receiver<SingerCommand>) {
         log::debug!("Song::start_listener");
         tokio::spawn(async move {
             singer_loop(singer, receiver).await.unwrap();
@@ -251,7 +252,7 @@ impl Singer {
 
 async fn singer_loop(
     singer: Arc<Mutex<Singer>>,
-    receiver: Receiver<SingerMsg>,
+    receiver: Receiver<SingerCommand>,
 ) -> anyhow::Result<()> {
     {
         let singer = singer.lock().unwrap();
@@ -262,39 +263,47 @@ async fn singer_loop(
     while let Ok(msg) = receiver.recv() {
         log::debug!("Song 受信 {:?}", msg);
         match msg {
-            SingerMsg::Play => {
+            SingerCommand::Play => {
                 let mut singer = singer.lock().unwrap();
                 singer.play();
                 singer.send_state();
             }
-            SingerMsg::Stop => {
+            SingerCommand::Stop => {
                 let mut singer = singer.lock().unwrap();
                 singer.stop();
                 singer.send_state();
             }
-            SingerMsg::Loop => {
+            SingerCommand::Loop => {
                 let mut singer = singer.lock().unwrap();
                 singer.loop_p = !singer.loop_p;
                 singer.send_state();
             }
-            SingerMsg::Song => singer.lock().unwrap().send_song(),
-            SingerMsg::Note(track_index, note) => {
+            SingerCommand::Song => singer.lock().unwrap().send_song(),
+            SingerCommand::Note(cursor, note) => {
                 let mut singer = singer.lock().unwrap();
                 let song = &mut singer.song;
-                if let Some(track) = song.tracks.get_mut(track_index) {
-                    track.notes.insert(note.line, note);
+                if let Some(Some(lane)) = song
+                    .tracks
+                    .get_mut(cursor.track)
+                    .map(|x| x.lanes.get_mut(cursor.lane))
+                {
+                    lane.notes.insert(note.line, note);
                     singer.send_song();
                 }
             }
-            SingerMsg::NoteDelete(track_index, line) => {
+            SingerCommand::NoteDelete(cursor) => {
                 let mut singer = singer.lock().unwrap();
                 let song = &mut singer.song;
-                if let Some(track) = song.tracks.get_mut(track_index) {
-                    track.notes.remove(&line);
+                if let Some(Some(lane)) = song
+                    .tracks
+                    .get_mut(cursor.track)
+                    .map(|x| x.lanes.get_mut(cursor.lane))
+                {
+                    lane.notes.remove(&cursor.line);
                     singer.send_song();
                 }
             }
-            SingerMsg::PluginLoad(track_index, description) => {
+            SingerCommand::PluginLoad(track_index, description) => {
                 log::debug!("will send MainToPlugin::Load {:?}", description);
 
                 let mut singer = singer.lock().unwrap();
@@ -332,19 +341,19 @@ async fn singer_loop(
 
                 singer.send_song();
             }
-            SingerMsg::NoteOn(track_index, key, _channel, velocity, _time) => {
+            SingerCommand::NoteOn(track_index, key, _channel, velocity, _time) => {
                 let mut singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
                     .event_list_input
                     .push(Event::NoteOn(key, velocity));
             }
-            SingerMsg::NoteOff(track_index, key, _channel, _velocity, _time) => {
+            SingerCommand::NoteOff(track_index, key, _channel, _velocity, _time) => {
                 let mut singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
                     .event_list_input
                     .push(Event::NoteOff(key));
             }
-            SingerMsg::TrackAdd => {
+            SingerCommand::TrackAdd => {
                 let mut singer = singer.lock().unwrap();
                 singer.add_track();
                 singer.send_song();

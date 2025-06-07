@@ -1,15 +1,14 @@
 use anyhow::Result;
 use common::{event::Event, module::Module, process_track_context::ProcessTrackContext};
-use eframe::egui::ahash::HashMap;
 use serde::{Deserialize, Serialize};
 
-use crate::model::note::Note;
+use super::lane::Lane;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
     pub name: String,
     pub modules: Vec<Module>,
-    pub notes: HashMap<usize, Note>,
+    pub lanes: Vec<Lane>,
 }
 
 impl Track {
@@ -17,7 +16,7 @@ impl Track {
         Self {
             name: "T01".to_string(),
             modules: vec![],
-            notes: Default::default(),
+            lanes: vec![Lane::new()],
         }
     }
 
@@ -25,16 +24,18 @@ impl Track {
         let line_start = context.play_position.start / 0x100;
         let line_end = context.play_position.end / 0x100;
         for line in line_start..=line_end {
-            if let Some(note) = self.notes.get(&(line as usize)) {
-                let time = note.line * 0x100 + note.delay as usize;
-                if context.play_position.contains(&(time as i64)) {
-                    if let Some(key) = context.on_key {
-                        context.event_list_input.push(Event::NoteOff(key));
+            for lane in self.lanes.iter() {
+                if let Some(note) = lane.notes.get(&(line as usize)) {
+                    let time = note.line * 0x100 + note.delay as usize;
+                    if context.play_position.contains(&(time as i64)) {
+                        if let Some(key) = context.on_key {
+                            context.event_list_input.push(Event::NoteOff(key));
+                        }
+                        context
+                            .event_list_input
+                            .push(Event::NoteOn(note.key, note.velocity));
+                        context.on_key = Some(note.key);
                     }
-                    context
-                        .event_list_input
-                        .push(Event::NoteOn(note.key, note.velocity));
-                    context.on_key = Some(note.key);
                 }
             }
         }
@@ -80,14 +81,5 @@ impl Track {
         context.plugins[module_index].process()?;
 
         Ok(())
-    }
-
-    pub fn note(&self, line: usize) -> Option<&Note> {
-        self.notes.get(&line)
-    }
-
-    #[allow(dead_code)]
-    pub fn note_mut(&mut self, line: usize) -> Option<&mut Note> {
-        self.notes.get_mut(&line)
     }
 }

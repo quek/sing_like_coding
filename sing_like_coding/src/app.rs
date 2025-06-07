@@ -10,7 +10,7 @@ use eframe::egui;
 use crate::app_state::AppState;
 use crate::communicator::Communicator;
 use crate::device::Device;
-use crate::singer::{Singer, SingerMsg};
+use crate::singer::{Singer, SingerCommand};
 use crate::view::main_view::{MainView, ViewMsg};
 
 pub fn main() -> eframe::Result {
@@ -56,7 +56,7 @@ impl Default for AppMain {
         let mut device = Device::open_default(singer).unwrap();
         device.start().unwrap();
         let device = Some(device);
-        view_sender.send(SingerMsg::Song).unwrap();
+        view_sender.send(SingerCommand::Song).unwrap();
 
         let app_state = Arc::new(Mutex::new(AppState::new(view_sender, sender_to_loop)));
         let view = MainView::new(app_state.clone(), song_receiver);

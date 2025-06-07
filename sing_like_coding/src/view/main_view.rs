@@ -10,7 +10,7 @@ use crate::{
     app_state::AppState,
     device::Device,
     model::song::Song,
-    singer::{SingerMsg, SongState},
+    singer::{SingerCommand, SongState},
 };
 
 use super::{
@@ -85,7 +85,7 @@ impl MainView {
                     for track_index in &state.selected_tracks {
                         state
                             .view_sender
-                            .send(SingerMsg::PluginLoad(*track_index, description.clone()))
+                            .send(SingerCommand::PluginLoad(*track_index, description.clone()))
                             .unwrap();
                     }
 
@@ -110,9 +110,9 @@ impl MainView {
             state.route = Route::Command;
         } else if input.key_pressed(Key::Space) {
             state.view_sender.send(if state.song_state.play_p {
-                SingerMsg::Stop
+                SingerCommand::Stop
             } else {
-                SingerMsg::Play
+                SingerCommand::Play
             })?;
         }
 

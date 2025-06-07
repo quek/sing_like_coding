@@ -6,7 +6,7 @@ use crate::{
     app_state::AppState,
     command::{track_add::TrackAdd, Command},
     device::Device,
-    singer::SingerMsg,
+    singer::SingerCommand,
     util::with_font_mono,
 };
 
@@ -57,15 +57,15 @@ impl TrackView {
 
             ui.horizontal(|ui| -> anyhow::Result<()> {
                 if ui.button("Play").clicked() {
-                    state.view_sender.send(SingerMsg::Play)?;
+                    state.view_sender.send(SingerCommand::Play)?;
                 }
                 if ui.button("Stop").clicked() {
-                    state.view_sender.send(SingerMsg::Stop)?;
+                    state.view_sender.send(SingerCommand::Stop)?;
                 }
                 ui.label(format!("Line {:04}", state.song_state.line_play));
                 let mut loop_p = state.song_state.loop_p;
                 if ui.toggle_value(&mut loop_p, "Loop").clicked() {
-                    state.view_sender.send(SingerMsg::Loop)?;
+                    state.view_sender.send(SingerCommand::Loop)?;
                 }
                 Ok(())
             });
@@ -107,7 +107,7 @@ impl TrackView {
             ui.separator();
 
             with_font_mono(ui, |ui| {
-                let line_start = (state.cursor_line as i64 - 0x0f).max(0) as usize;
+                let line_start = (state.cursor.line as i64 - 0x0f).max(0) as usize;
                 let line_end = line_start + 0x20;
                 let line_range = line_start..line_end;
                 ui.horizontal(|ui| {
@@ -139,33 +139,44 @@ impl TrackView {
                                     .show(ui, |ui| {
                                         ui.add(Label::new(format!("{:<9}", track.name)).truncate());
                                     });
-                                for line in line_range.clone() {
-                                    let color = if state.cursor_track == track_index
-                                        && state.cursor_line == line
-                                    {
-                                        Color32::YELLOW
-                                    } else if line == state.song_state.line_play {
-                                        Color32::DARK_GREEN
-                                    } else if state.selected_cells.contains(&(track_index, line)) {
-                                        Color32::LIGHT_BLUE
-                                    } else {
-                                        Color32::BLACK
-                                    };
-                                    Frame::NONE.fill(color).show(ui, |ui| {
-                                        let text = track.note(line).map_or(
-                                            "--- -- --".to_string(),
-                                            |note| {
-                                                format!(
-                                                    "{:<3} {:02X} {:02X}",
-                                                    note.note_name(),
-                                                    note.velocity as i32,
-                                                    note.delay
-                                                )
-                                            },
-                                        );
-                                        ui.label(text);
-                                    });
-                                }
+                                ui.horizontal(|ui| -> anyhow::Result<()> {
+                                    for lane in track.lanes.iter() {
+                                        ui.vertical(|ui| -> anyhow::Result<()> {
+                                            for line in line_range.clone() {
+                                                let color = if state.cursor.track == track_index
+                                                    && state.cursor.line == line
+                                                {
+                                                    Color32::YELLOW
+                                                } else if line == state.song_state.line_play {
+                                                    Color32::DARK_GREEN
+                                                } else if state
+                                                    .selected_cells
+                                                    .contains(&(track_index, line))
+                                                {
+                                                    Color32::LIGHT_BLUE
+                                                } else {
+                                                    Color32::BLACK
+                                                };
+                                                Frame::NONE.fill(color).show(ui, |ui| {
+                                                    let text = lane.note(line).map_or(
+                                                        "--- -- --".to_string(),
+                                                        |note| {
+                                                            format!(
+                                                                "{:<3} {:02X} {:02X}",
+                                                                note.note_name(),
+                                                                note.velocity as i32,
+                                                                note.delay
+                                                            )
+                                                        },
+                                                    );
+                                                    ui.label(text);
+                                                });
+                                            }
+                                            Ok(())
+                                        });
+                                    }
+                                    Ok(())
+                                });
                             });
 
                             Frame::NONE
@@ -247,31 +258,17 @@ impl TrackView {
         } else if input.is(Modifier::CA, Key::L) {
             note_update(0, 0, 0x10, state);
         } else if input.is(Modifier::None, Key::J) {
-            state.cursor_line += 1;
+            state.cursor_down();
         } else if input.is(Modifier::None, Key::K) {
-            if state.cursor_line != 0 {
-                state.cursor_line -= 1;
-            }
+            state.cursor_up();
         } else if input.is(Modifier::None, Key::H) {
-            if state.cursor_track == 0 {
-                state.cursor_track = state.song.tracks.len() - 1;
-            } else {
-                state.cursor_track -= 1;
-            }
-            state.selected_tracks.clear();
-            state.selected_tracks.push(state.cursor_track);
+            state.cursor_left();
         } else if input.is(Modifier::None, Key::L) {
-            if state.cursor_track + 1 == state.song.tracks.len() {
-                state.cursor_track = 0;
-            } else {
-                state.cursor_track += 1;
-            }
-            state.selected_tracks.clear();
-            state.selected_tracks.push(state.cursor_track);
+            state.cursor_right();
         } else if input.is(Modifier::None, Key::Delete) {
             state
                 .view_sender
-                .send(SingerMsg::NoteDelete(state.cursor_track, state.cursor_line))
+                .send(SingerCommand::NoteDelete(state.cursor.clone()))
                 .unwrap();
         }
 
@@ -280,7 +277,7 @@ impl TrackView {
 }
 
 fn note_update(key_delta: i16, velociy_delta: i16, delay_delta: i16, state: &mut AppState) {
-    if let Some(note) = state.song.tracks[state.cursor_track].note(state.cursor_line) {
+    if let Some(note) = state.song.note(&state.cursor) {
         let mut note = note.clone();
         note.key = (note.key + key_delta).clamp(0, 127);
         note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
@@ -289,9 +286,9 @@ fn note_update(key_delta: i16, velociy_delta: i16, delay_delta: i16, state: &mut
     }
 
     let mut note = state.note_last.clone();
-    note.line = state.cursor_line;
+    note.line = state.cursor.line;
     state
         .view_sender
-        .send(SingerMsg::Note(state.cursor_track, note))
+        .send(SingerCommand::Note(state.cursor.clone(), note))
         .unwrap();
 }
