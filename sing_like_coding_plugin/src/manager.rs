@@ -8,9 +8,11 @@ use anyhow::Result;
 use common::{
     clap_manager::ClapManager,
     protocol::{MainToPlugin, PluginToMain},
+    str::to_pcstr,
 };
 use windows::Win32::{
-    Foundation::{LPARAM, WPARAM},
+    Foundation::{HANDLE, LPARAM, WPARAM},
+    System::Threading::{CreateEventA, SetEvent},
     UI::WindowsAndMessaging::{
         DispatchMessageW, PeekMessageW, PostThreadMessageW, TranslateMessage, MSG, WM_NULL,
     },
@@ -24,41 +26,38 @@ pub struct Manager {
     receiver_from_loop: Receiver<MainToPlugin>,
     sender_from_plugin: Sender<PluginPtr>,
     receiver_from_plugin: Receiver<PluginPtr>,
+    event_quit: HANDLE,
     plugins: Vec<Vec<Host>>,
     clap_manager: ClapManager,
 }
 
-/*
-
-fn do_callback_plugins(&mut self) -> Result<()> {
-       let mut state = self.state.lock().unwrap();
-       let callback_plugins = &mut state.callback_plugins;
-       for plugin in callback_plugins.iter() {
-           let plugin = unsafe { &*plugin.0 };
-           log::debug!("will on_main_thread");
-           unsafe { plugin.on_main_thread.unwrap()(plugin) };
-           log::debug!("did on_main_thread");
-       }
-       callback_plugins.clear();
-       Ok(())
-   }
-*/
+pub const EVENT_QUIT_NAME: &str = "SingLikeCoding.Plugin.Quit";
 
 impl Manager {
     pub fn new(
         sender_to_loop: Sender<PluginToMain>,
         receiver_from_loop: Receiver<MainToPlugin>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let (sender_from_plugin, receiver_from_plugin) = channel();
+        let (event_quit_name, _x) = to_pcstr(EVENT_QUIT_NAME)?;
+        let event_quit = unsafe {
+            CreateEventA(
+                None,
+                true.into(),  // 手動リセット
+                false.into(), // 初期非シグナル
+                event_quit_name,
+            )?
+        };
 
-        Self {
+        Ok(Self {
             sender_to_loop,
             receiver_from_loop,
             sender_from_plugin,
             receiver_from_plugin,
+            event_quit,
             plugins: vec![],
             clap_manager: ClapManager::new(),
-        }
+        })
     }
 
     pub fn run(&mut self) -> Result<()> {
@@ -105,6 +104,7 @@ impl Manager {
                     MainToPlugin::Quit => {
                         log::debug!("$$$$ quit");
                         self.sender_to_loop.send(PluginToMain::Quit)?;
+                        unsafe { SetEvent(self.event_quit) }?;
                         sleep(Duration::from_millis(1000));
                         return Ok(());
                     }

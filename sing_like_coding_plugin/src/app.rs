@@ -11,7 +11,7 @@ use crate::manager::Manager;
 pub fn main() {
     let (sender_to_loop, receiver_from_main) = channel();
     let (sender_to_main, receiver_from_loop) = channel();
-    let mut plugin_host = Manager::new(sender_to_loop, receiver_from_loop);
+    let mut plugin_host = Manager::new(sender_to_loop, receiver_from_loop).unwrap();
     log::debug!("$$$$$$$ before thread::spawn");
     tokio::spawn(async move {
         log::debug!("$$$$$$$ before receive_from_main_process");

@@ -37,7 +37,7 @@ impl EventListInput {
     }
 
     extern "C" fn get(list: *const clap_input_events, index: u32) -> *const clap_event_header {
-        log::debug!("EventList get {index}");
+        // log::debug!("EventList get {index}");
         let this = unsafe { &*((*list).ctx as *const Self) };
         this.events
             .get(index as usize)

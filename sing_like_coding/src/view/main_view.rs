@@ -150,10 +150,8 @@ pub fn loop_receive_from_audio_thread(
                     dbg!("Song end");
                 }
                 ViewMsg::State(song_state) => {
-                    dbg!("State start...");
                     state.lock().unwrap().song_state = song_state;
                     gui_context.request_repaint();
-                    dbg!("State end");
                 }
                 ViewMsg::Quit => return,
             }

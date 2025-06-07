@@ -4,17 +4,19 @@ use common::{
     plugin::description::Description,
     process_data::ProcessData,
     shmem::{event_request_name, event_response_name, process_data_name},
+    str::to_pcstr,
 };
 use shared_memory::ShmemConf;
 use windows::Win32::{
+    Foundation::{WAIT_EVENT, WAIT_OBJECT_0},
     Storage::FileSystem::SYNCHRONIZE,
     System::Threading::{
-        OpenEventA, SetEvent, WaitForSingleObject, EVENT_MODIFY_STATE, INFINITE,
-        SYNCHRONIZATION_ACCESS_RIGHTS,
+        OpenEventA, SetEvent, WaitForMultipleObjects, WaitForSingleObject, EVENT_MODIFY_STATE,
+        INFINITE, SYNCHRONIZATION_ACCESS_RIGHTS,
     },
 };
 
-use crate::{plugin::Plugin, plugin_ptr::PluginPtr};
+use crate::{manager::EVENT_QUIT_NAME, plugin::Plugin, plugin_ptr::PluginPtr};
 
 pub struct Host {
     pub plugin: Pin<Box<Plugin>>,
@@ -56,15 +58,31 @@ async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
         )?
     };
 
+    let (event_quit_name, _x) = to_pcstr(EVENT_QUIT_NAME)?;
+    let event_quit = unsafe {
+        OpenEventA(
+            SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE.0),
+            false,
+            event_quit_name,
+        )?
+    };
+
+    let events_wait = [event_request, event_quit];
+
     let (event_name, _x) = event_response_name(id);
     let event_response = unsafe { OpenEventA(EVENT_MODIFY_STATE, false, event_name)? };
 
     let plugin = unsafe { plugin_ptr.as_mut() };
     loop {
         // log::debug!("$$$$ host will WaitForSingleObject process request");
-        unsafe { WaitForSingleObject(event_request, INFINITE) };
-        // log::debug!("$$$$ before plugin.process");
-        plugin.process(process_data)?;
-        unsafe { SetEvent(event_response) }?;
+        let event = unsafe { WaitForMultipleObjects(&events_wait, false.into(), INFINITE) };
+        if event == WAIT_OBJECT_0 {
+            plugin.process(process_data)?;
+            unsafe { SetEvent(event_response) }?;
+        } else if event == WAIT_EVENT(1) {
+            return Ok(());
+        } else {
+            return Err(anyhow::anyhow!("WaitForMultipleObjects failed"));
+        }
     }
 }
