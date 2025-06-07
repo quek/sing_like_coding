@@ -1,12 +1,12 @@
 use anyhow::Result;
 use common::protocol::MainToPlugin;
-use eframe::egui::{Button, CentralPanel, Color32, Frame, Key, TopBottomPanel, Ui};
+use eframe::egui::{CentralPanel, Color32, Frame, Key, Label, TopBottomPanel, Ui};
 
 use crate::{app_state::AppState, device::Device, singer::SingerMsg, util::with_font_mono};
 
 use super::main_view::Route;
 
-const DEFAULT_TRACK_WIDTH: f32 = 36.0;
+const DEFAULT_TRACK_WIDTH: f32 = 64.0;
 
 pub struct TrackView {}
 
@@ -149,20 +149,35 @@ impl TrackView {
                                 }
                             });
 
-                            for (module_index, module) in track.modules.iter_mut().enumerate() {
-                                if ui.button(&module.name).clicked() {
-                                    state
-                                        .sender_to_loop
-                                        .send(MainToPlugin::GuiOpen(track_index, module_index))?;
-                                }
-                            }
+                            Frame::NONE
+                                .fill(Color32::BLACK)
+                                .show(ui, |ui| -> anyhow::Result<()> {
+                                    for (module_index, module) in
+                                        track.modules.iter_mut().enumerate()
+                                    {
+                                        if ui
+                                            .add_sized(
+                                                [DEFAULT_TRACK_WIDTH, 0.0],
+                                                Label::new(&module.name).truncate(),
+                                            )
+                                            .clicked()
+                                        {
+                                            state.sender_to_loop.send(MainToPlugin::GuiOpen(
+                                                track_index,
+                                                module_index,
+                                            ))?;
+                                        }
+                                    }
 
-                            if ui
-                                .add_sized([DEFAULT_TRACK_WIDTH, 0.0], Button::new("+"))
-                                .clicked()
-                            {
-                                state.route = Route::PluginSelect;
-                            }
+                                    if ui
+                                        .add_sized([DEFAULT_TRACK_WIDTH, 0.0], Label::new("+"))
+                                        .clicked()
+                                    {
+                                        state.route = Route::PluginSelect;
+                                    }
+
+                                    Ok(())
+                                });
 
                             Ok(())
                         });
