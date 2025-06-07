@@ -268,6 +268,11 @@ impl TrackView {
             }
             state.selected_tracks.clear();
             state.selected_tracks.push(state.cursor_track);
+        } else if input.is(Modifier::None, Key::Delete) {
+            state
+                .view_sender
+                .send(SingerMsg::NoteDelete(state.cursor_track, state.cursor_line))
+                .unwrap();
         }
 
         Ok(())

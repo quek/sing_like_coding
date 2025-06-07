@@ -29,6 +29,7 @@ pub enum SingerMsg {
     Loop,
     Song,
     Note(usize, Note),
+    NoteDelete(usize, usize),
     #[allow(dead_code)]
     NoteOn(usize, i16, i16, f64, u32),
     #[allow(dead_code)]
@@ -282,6 +283,14 @@ async fn singer_loop(
                 let song = &mut singer.song;
                 if let Some(track) = song.tracks.get_mut(track_index) {
                     track.notes.insert(note.line, note);
+                    singer.send_song();
+                }
+            }
+            SingerMsg::NoteDelete(track_index, line) => {
+                let mut singer = singer.lock().unwrap();
+                let song = &mut singer.song;
+                if let Some(track) = song.tracks.get_mut(track_index) {
+                    track.notes.remove(&line);
                     singer.send_song();
                 }
             }
