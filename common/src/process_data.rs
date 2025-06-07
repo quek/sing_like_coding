@@ -53,6 +53,10 @@ impl ProcessData {
         }
     }
 
+    pub fn prepare(&mut self) {
+        self.nevents_input = 0;
+    }
+
     pub fn note_on(&mut self, key: i16, velocity: f64, channel: i16, time: u32) {
         if self.nevents_input == MAX_EVENTS {
             panic!();

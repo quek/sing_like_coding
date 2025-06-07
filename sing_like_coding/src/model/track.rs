@@ -48,10 +48,10 @@ impl Track {
 
     fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
         let data = context.plugins[module_index].process_data();
-        for event in &context.event_list_input {
+        for event in context.event_list_input.drain(..) {
             match event {
-                Event::NoteOn(key, velocity) => data.note_on(*key, *velocity, 0, 0),
-                Event::NoteOff(key) => data.note_off(*key, 0, 0),
+                Event::NoteOn(key, velocity) => data.note_on(key, velocity, 0, 0),
+                Event::NoteOff(key) => data.note_off(key, 0, 0),
             }
         }
 

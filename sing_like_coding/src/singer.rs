@@ -121,6 +121,7 @@ impl Singer {
                 process_data.play_p = if self.play_p { 1 } else { 0 };
                 process_data.bpm = self.song.bpm;
                 process_data.steady_time = self.steady_time;
+                process_data.prepare();
             }
         }
 
