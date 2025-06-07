@@ -53,6 +53,7 @@ pub struct Singer {
     pub play_position: Range<i64>,
     pub loop_p: bool,
     pub loop_range: Range<usize>,
+    all_notef_off_p: bool,
     pub song: Song,
     song_sender: Sender<ViewMsg>,
     pub sender_to_loop: Sender<MainToPlugin>,
@@ -79,6 +80,7 @@ impl Singer {
             play_position: (0..0),
             loop_p: true,
             loop_range: (0..0x20),
+            all_notef_off_p: false,
             song,
             song_sender,
             sender_to_loop,
@@ -159,7 +161,11 @@ impl Singer {
             context.steady_time = self.steady_time;
             context.play_position = self.play_position.clone();
             context.prepare();
+            if self.all_notef_off_p {
+                context.event_list_input.push(Event::NoteAllOff);
+            }
         }
+        self.all_notef_off_p = false;
 
         self.song
             .tracks
@@ -212,6 +218,7 @@ impl Singer {
             return;
         }
         self.play_p = false;
+        self.all_notef_off_p = true;
     }
 
     pub fn start_listener(singer: Arc<Mutex<Self>>, receiver: Receiver<SingerMsg>) {

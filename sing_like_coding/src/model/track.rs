@@ -23,8 +23,7 @@ impl Track {
 
     pub fn compute_midi(&self, context: &mut ProcessTrackContext) {
         let line_start = context.play_position.start / 0x100;
-        let line_end = context.play_position.start / 0x100;
-
+        let line_end = context.play_position.end / 0x100;
         for line in line_start..=line_end {
             if let Some(note) = self.notes.get(&(line as usize)) {
                 let time = note.line * 0x100 + note.delay as usize;
@@ -32,7 +31,6 @@ impl Track {
                     if let Some(key) = context.on_key {
                         context.event_list_input.push(Event::NoteOff(key));
                     }
-                    // TODO time
                     context
                         .event_list_input
                         .push(Event::NoteOn(note.key, note.velocity));
@@ -58,6 +56,7 @@ impl Track {
             match event {
                 Event::NoteOn(key, velocity) => data.note_on(key, velocity, 0, 0),
                 Event::NoteOff(key) => data.note_off(key, 0, 0),
+                Event::NoteAllOff => data.note_all_off(),
             }
         }
 

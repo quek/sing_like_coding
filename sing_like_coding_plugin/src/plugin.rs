@@ -511,6 +511,11 @@ impl Plugin {
                         event.time,
                     );
                 }
+                EventKind::NoteAllOff => {
+                    if let Some(key) = self.on_key {
+                        self.event_list_input.note_off(key, channel, 0.0, time)
+                    }
+                }
             }
         }
         let in_events = self.event_list_input.as_clap_input_events();
