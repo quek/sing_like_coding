@@ -46,14 +46,19 @@ impl TrackView {
 
             ui.separator();
 
-            ui.horizontal(|ui| {
+            ui.horizontal(|ui| -> anyhow::Result<()> {
                 if ui.button("Play").clicked() {
-                    state.view_sender.send(SingerMsg::Play).unwrap();
+                    state.view_sender.send(SingerMsg::Play)?;
                 }
                 if ui.button("Stop").clicked() {
-                    state.view_sender.send(SingerMsg::Stop).unwrap();
+                    state.view_sender.send(SingerMsg::Stop)?;
                 }
-                ui.label(format!("line {}", state.song_state.line_play));
+                ui.label(format!("Line {:04}", state.song_state.line_play));
+                let mut loop_p = state.song_state.loop_p;
+                if ui.toggle_value(&mut loop_p, "Loop").clicked() {
+                    state.view_sender.send(SingerMsg::Loop)?;
+                }
+                Ok(())
             });
 
             // ui.separator();
@@ -102,6 +107,8 @@ impl TrackView {
                             Frame::NONE
                                 .fill(if line == state.song_state.line_play {
                                     Color32::DARK_GREEN
+                                } else if state.song_state.loop_range.contains(&line) {
+                                    Color32::DARK_GRAY
                                 } else {
                                     Color32::BLACK
                                 })

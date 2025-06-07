@@ -26,6 +26,7 @@ use shared_memory::{Shmem, ShmemConf, ShmemError};
 pub enum SingerMsg {
     Play,
     Stop,
+    Loop,
     Song,
     Note(usize, usize, i16),
     #[allow(dead_code)]
@@ -244,6 +245,12 @@ async fn singer_loop(
     singer: Arc<Mutex<Singer>>,
     receiver: Receiver<SingerMsg>,
 ) -> anyhow::Result<()> {
+    {
+        let singer = singer.lock().unwrap();
+        singer.send_song();
+        singer.send_state();
+    }
+
     while let Ok(msg) = receiver.recv() {
         log::debug!("Song 受信 {:?}", msg);
         match msg {
@@ -255,6 +262,11 @@ async fn singer_loop(
             SingerMsg::Stop => {
                 let mut singer = singer.lock().unwrap();
                 singer.stop();
+                singer.send_state();
+            }
+            SingerMsg::Loop => {
+                let mut singer = singer.lock().unwrap();
+                singer.loop_p = !singer.loop_p;
                 singer.send_state();
             }
             SingerMsg::Song => singer.lock().unwrap().send_song(),
