@@ -2,7 +2,13 @@ use anyhow::Result;
 use common::protocol::MainToPlugin;
 use eframe::egui::{CentralPanel, Color32, Frame, Key, Label, TopBottomPanel, Ui};
 
-use crate::{app_state::AppState, device::Device, singer::SingerMsg, util::with_font_mono};
+use crate::{
+    app_state::AppState,
+    command::{track_add::TrackAdd, Command},
+    device::Device,
+    singer::SingerMsg,
+    util::with_font_mono,
+};
 
 use super::main_view::Route;
 
@@ -212,6 +218,8 @@ impl TrackView {
                 note_update(-12, state);
             } else if input.key_pressed(Key::L) {
                 note_update(12, state);
+            } else if input.key_pressed(Key::T) {
+                TrackAdd {}.call(state)?;
             }
         } else if !input.modifiers.ctrl && !input.modifiers.alt && !input.modifiers.shift {
             if input.key_pressed(Key::J) {

@@ -1,5 +1,7 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::thread::sleep;
+use std::time::Duration;
 
 use anyhow::Result;
 use common::protocol::MainToPlugin;
@@ -85,6 +87,7 @@ impl eframe::App for AppMain {
             .send(MainToPlugin::Quit)
             .unwrap();
         log::debug!("#### on_exit did send MainToPlugin::Quit");
+        sleep(Duration::from_millis(100));
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
