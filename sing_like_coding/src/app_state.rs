@@ -71,20 +71,30 @@ impl AppState {
     }
 
     pub fn cursor_left(&mut self) {
-        if self.cursor.track == 0 {
-            self.cursor.track = self.song.tracks.len() - 1;
+        if self.cursor.lane == 0 {
+            if self.cursor.track == 0 {
+                self.cursor.track = self.song.tracks.len() - 1;
+            } else {
+                self.cursor.track -= 1;
+            }
+            self.cursor.lane = self.song.tracks[self.cursor.track].lanes.len() - 1;
         } else {
-            self.cursor.track -= 1;
+            self.cursor.lane -= 1;
         }
         self.selected_tracks.clear();
         self.selected_tracks.push(self.cursor.track);
     }
 
     pub fn cursor_right(&mut self) {
-        if self.cursor.track + 1 == self.song.tracks.len() {
-            self.cursor.track = 0;
+        if self.cursor.lane == self.song.tracks[self.cursor.track].lanes.len() - 1 {
+            self.cursor.lane = 0;
+            if self.cursor.track + 1 == self.song.tracks.len() {
+                self.cursor.track = 0;
+            } else {
+                self.cursor.track += 1;
+            }
         } else {
-            self.cursor.track += 1;
+            self.cursor.lane += 1;
         }
         self.selected_tracks.clear();
         self.selected_tracks.push(self.cursor.track);

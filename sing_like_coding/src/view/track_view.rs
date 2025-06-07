@@ -140,10 +140,11 @@ impl TrackView {
                                         ui.add(Label::new(format!("{:<9}", track.name)).truncate());
                                     });
                                 ui.horizontal(|ui| -> anyhow::Result<()> {
-                                    for lane in track.lanes.iter() {
+                                    for lane_index in 0..track.lanes.len() {
                                         ui.vertical(|ui| -> anyhow::Result<()> {
                                             for line in line_range.clone() {
                                                 let color = if state.cursor.track == track_index
+                                                    && state.cursor.lane == lane_index
                                                     && state.cursor.line == line
                                                 {
                                                     Color32::YELLOW
@@ -158,17 +159,16 @@ impl TrackView {
                                                     Color32::BLACK
                                                 };
                                                 Frame::NONE.fill(color).show(ui, |ui| {
-                                                    let text = lane.note(line).map_or(
-                                                        "--- -- --".to_string(),
-                                                        |note| {
+                                                    let text = track.lanes[lane_index]
+                                                        .note(line)
+                                                        .map_or("--- -- --".to_string(), |note| {
                                                             format!(
                                                                 "{:<3} {:02X} {:02X}",
                                                                 note.note_name(),
                                                                 note.velocity as i32,
                                                                 note.delay
                                                             )
-                                                        },
-                                                    );
+                                                        });
                                                     ui.label(text);
                                                 });
                                             }
@@ -241,6 +241,10 @@ impl TrackView {
             note_update(12, 0, 0, state);
         } else if input.is(Modifier::C, Key::T) {
             TrackAdd {}.call(state)?;
+        } else if input.is(Modifier::CS, Key::T) {
+            state
+                .view_sender
+                .send(SingerCommand::LaneAdd(state.cursor.track))?;
         } else if input.is(Modifier::A, Key::J) {
             note_update(0, -1, 0, state);
         } else if input.is(Modifier::A, Key::K) {

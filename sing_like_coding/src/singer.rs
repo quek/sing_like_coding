@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     app_state::Cursor,
-    model::{note::Note, song::Song},
+    model::{lane::Lane, note::Note, song::Song},
     util::next_id,
     view::main_view::ViewMsg,
 };
@@ -37,6 +37,7 @@ pub enum SingerCommand {
     NoteOff(usize, i16, i16, f64, u32),
     PluginLoad(usize, Description),
     TrackAdd,
+    LaneAdd(usize),
 }
 
 #[derive(Debug, Default)]
@@ -357,6 +358,13 @@ async fn singer_loop(
                 let mut singer = singer.lock().unwrap();
                 singer.add_track();
                 singer.send_song();
+            }
+            SingerCommand::LaneAdd(track_index) => {
+                let mut singer = singer.lock().unwrap();
+                if let Some(track) = singer.song.tracks.get_mut(track_index) {
+                    track.lanes.push(Lane::new());
+                    singer.send_song();
+                }
             }
         }
     }
