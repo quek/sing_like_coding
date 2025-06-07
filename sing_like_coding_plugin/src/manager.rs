@@ -1,6 +1,6 @@
 use std::{
     sync::mpsc::{channel, Receiver, Sender},
-    thread::sleep,
+    thread::{self, sleep},
     time::Duration,
 };
 
@@ -125,6 +125,10 @@ impl Manager {
                     let _ = DispatchMessageW(&win_msg);
                 }
             };
+
+            // plugin.on_main_thread と PeekMessageW は同じスレッドである必要がるため
+            // スレッドを分けるのが面倒なためスリープしちゃう
+            thread::sleep(Duration::from_millis(1000 / 60));
         }
     }
 }
