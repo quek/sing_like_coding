@@ -93,13 +93,14 @@ impl TrackView {
             ui.separator();
 
             with_font_mono(ui, |ui| {
-                let nlines = state.song.nlines;
+                // TODO
+                let line_range = 0..0x100;
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        ui.label(format!("{:02X}", nlines));
-                        for line in 0..nlines {
+                        ui.label(" ");
+                        for line in line_range.clone() {
                             Frame::NONE
-                                .fill(if line == state.song_state.line_play % 0x0F {
+                                .fill(if line == state.song_state.line_play {
                                     Color32::DARK_GREEN
                                 } else {
                                     Color32::BLACK
@@ -109,13 +110,7 @@ impl TrackView {
                                 });
                         }
                     });
-                    for (track_index, (track, line_buffer)) in state
-                        .song
-                        .tracks
-                        .iter_mut()
-                        .zip(state.line_buffers.iter_mut())
-                        .enumerate()
-                    {
+                    for (track_index, track) in state.song.tracks.iter_mut().enumerate() {
                         ui.vertical(|ui| -> anyhow::Result<()> {
                             with_font_mono(ui, |ui| {
                                 Frame::NONE
@@ -127,12 +122,12 @@ impl TrackView {
                                     .show(ui, |ui| {
                                         ui.label(&track.name);
                                     });
-                                for line in 0..nlines {
+                                for line in line_range.clone() {
                                     let color = if state.cursor_track == track_index
                                         && state.cursor_line == line
                                     {
                                         Color32::YELLOW
-                                    } else if line == state.song_state.line_play % 0x0f {
+                                    } else if line == state.song_state.line_play {
                                         Color32::DARK_GREEN
                                     } else if state.selected_cells.contains(&(track_index, line)) {
                                         Color32::LIGHT_BLUE
@@ -140,10 +135,9 @@ impl TrackView {
                                         Color32::BLACK
                                     };
                                     Frame::NONE.fill(color).show(ui, |ui| {
-                                        let mut text = line_buffer[line].as_str();
-                                        if text.is_empty() {
-                                            text = "---";
-                                        }
+                                        let text = track
+                                            .note(line)
+                                            .map_or("---".to_string(), |note| note.note_name());
                                         ui.label(text);
                                     });
                                 }
@@ -213,15 +207,9 @@ impl TrackView {
             }
         } else if !input.modifiers.ctrl && !input.modifiers.alt && !input.modifiers.shift {
             if input.key_pressed(Key::J) {
-                if state.cursor_line + 1 == state.song.nlines {
-                    state.cursor_line = 0;
-                } else {
-                    state.cursor_line += 1;
-                }
+                state.cursor_line += 1;
             } else if input.key_pressed(Key::K) {
-                if state.cursor_line == 0 {
-                    state.cursor_line = state.song.nlines - 1;
-                } else {
+                if state.cursor_line != 0 {
                     state.cursor_line -= 1;
                 }
             } else if input.key_pressed(Key::H) {

@@ -130,23 +130,9 @@ pub fn loop_receive_from_audio_thread(
         while let Ok(command) = receiver.recv() {
             match command {
                 ViewMsg::Song(song) => {
-                    dbg!("Song start...");
                     let mut state = state.lock().unwrap();
-                    state.line_buffers.clear();
-                    for track in song.tracks.iter() {
-                        let mut xs = vec![];
-                        for line in 0..song.nlines {
-                            if let Some(note) = track.note(line) {
-                                xs.push(note.note_name());
-                            } else {
-                                xs.push("".to_string());
-                            }
-                        }
-                        state.line_buffers.push(xs);
-                    }
                     state.song = song;
                     gui_context.request_repaint();
-                    dbg!("Song end");
                 }
                 ViewMsg::State(song_state) => {
                     state.lock().unwrap().song_state = song_state;

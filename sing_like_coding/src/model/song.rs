@@ -7,7 +7,6 @@ pub struct Song {
     pub bpm: f64,
     pub sample_rate: f64,
     pub lpb: u16,
-    pub nlines: usize,
     pub tracks: Vec<Track>,
 }
 
@@ -17,7 +16,6 @@ impl Song {
             bpm: 128.0,
             sample_rate: 48000.0,
             lpb: 4,
-            nlines: 16,
             tracks: vec![],
         }
     }

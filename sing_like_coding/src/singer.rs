@@ -40,6 +40,8 @@ pub enum SingerMsg {
 pub struct SongState {
     pub play_p: bool,
     pub line_play: usize,
+    pub loop_p: bool,
+    pub loop_range: Range<usize>,
     pub process_elasped_avg: f64,
     pub cpu_usage: f64,
 }
@@ -48,6 +50,8 @@ pub struct Singer {
     pub steady_time: i64,
     pub play_p: bool,
     pub play_position: Range<i64>,
+    pub loop_p: bool,
+    pub loop_range: Range<usize>,
     pub song: Song,
     song_sender: Sender<ViewMsg>,
     pub sender_to_loop: Sender<MainToPlugin>,
@@ -72,6 +76,8 @@ impl Singer {
             steady_time: 0,
             play_p: false,
             play_position: (0..0),
+            loop_p: true,
+            loop_range: (0..0x20),
             song,
             song_sender,
             sender_to_loop,
@@ -101,9 +107,11 @@ impl Singer {
 
         let line = (self.play_position.start / 0x100) as usize;
         if self.line_play != line {
+            self.line_play = line;
             self.send_state();
+        } else {
+            self.line_play = line;
         }
-        self.line_play = line;
 
         if !self.play_p {
             return;
@@ -113,9 +121,9 @@ impl Singer {
         self.play_position.end =
             self.play_position.start + (sec_per_frame / sec_per_delay).round() as i64;
 
-        // TODO DELET THIS BLOC
+        // TODO DELET THIS BLOCK
         {
-            if self.play_position.start > 0x0e * 0x100 {
+            if self.play_position.end > 0x20 * 0x100 {
                 self.play_position = 0..0;
             }
         }
@@ -223,6 +231,8 @@ impl Singer {
             .send(ViewMsg::State(SongState {
                 play_p: self.play_p,
                 line_play: self.line_play,
+                loop_p: self.loop_p,
+                loop_range: self.loop_range.clone(),
                 process_elasped_avg: self.process_elasped_avg,
                 cpu_usage: self.cpu_usage,
             }))
