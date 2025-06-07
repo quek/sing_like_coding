@@ -56,7 +56,11 @@ impl Track {
             match event {
                 Event::NoteOn(key, velocity) => data.note_on(key, velocity, 0, 0),
                 Event::NoteOff(key) => data.note_off(key, 0, 0),
-                Event::NoteAllOff => data.note_all_off(),
+                Event::NoteAllOff => {
+                    if let Some(key) = context.on_key.take() {
+                        data.note_off(key, 0, 0);
+                    }
+                }
             }
         }
 

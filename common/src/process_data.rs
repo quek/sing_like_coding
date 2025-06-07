@@ -30,7 +30,6 @@ pub struct Event {
 pub enum EventKind {
     NoteOn = 1,
     NoteOff = 2,
-    NoteAllOff = 3,
 }
 
 impl ProcessData {
@@ -79,14 +78,6 @@ impl ProcessData {
         self.events_input[self.nevents_input].velocity = 0.0;
         self.events_input[self.nevents_input].channel = channel;
         self.events_input[self.nevents_input].time = time;
-        self.nevents_input += 1;
-    }
-
-    pub fn note_all_off(&mut self) {
-        if self.nevents_input == MAX_EVENTS {
-            panic!();
-        }
-        self.events_input[self.nevents_input].kind = EventKind::NoteOff;
         self.nevents_input += 1;
     }
 }

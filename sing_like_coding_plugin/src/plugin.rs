@@ -66,7 +66,6 @@ pub struct Plugin {
     host_latency: clap_host_latency,
     host_log: clap_host_log,
     host_params: clap_host_params,
-    on_key: Option<i16>,
 }
 
 pub const NAME: &CStr = cstr!("Sing Like Coding");
@@ -132,7 +131,6 @@ impl Plugin {
             host_latency,
             host_log,
             host_params,
-            on_key: None,
         });
 
         let ptr = this.as_mut().get_mut() as *mut _ as *mut c_void;
@@ -488,20 +486,14 @@ impl Plugin {
 
         for i in 0..context.nevents_input {
             let event = &context.events_input[i];
-            let channel = 0;
-            let time = 0;
             match &event.kind {
                 EventKind::NoteOn => {
-                    if let Some(key) = self.on_key {
-                        self.event_list_input.note_off(key, channel, 0.0, time)
-                    }
                     self.event_list_input.note_on(
                         event.key,
                         event.channel,
                         event.velocity,
                         event.time,
                     );
-                    self.on_key = Some(event.key);
                 }
                 EventKind::NoteOff => {
                     self.event_list_input.note_off(
@@ -510,11 +502,6 @@ impl Plugin {
                         event.velocity,
                         event.time,
                     );
-                }
-                EventKind::NoteAllOff => {
-                    if let Some(key) = self.on_key {
-                        self.event_list_input.note_off(key, channel, 0.0, time)
-                    }
                 }
             }
         }
