@@ -8,6 +8,8 @@ pub struct ProcessData {
     pub nframes: usize,
     pub play_p: u8,
     pub bpm: f64,
+    pub lpb: u16,
+    pub sample_rate: f64,
     pub steady_time: i64,
     pub nevents_input: usize,
     pub events_input: [Event; MAX_EVENTS],
@@ -22,7 +24,7 @@ pub struct Event {
     pub key: i16,
     pub velocity: f64,
     pub channel: i16,
-    pub time: u32,
+    pub delay: u8,
 }
 
 #[repr(u8)]
@@ -39,6 +41,8 @@ impl ProcessData {
             nframes: MAX_FRAMES,
             play_p: 0,
             bpm: 120.0,
+            lpb: 4,
+            sample_rate: 48000.0,
             steady_time: 0,
             nevents_input: 0,
             events_input: [Event {
@@ -46,7 +50,7 @@ impl ProcessData {
                 key: 0,
                 velocity: 0.0,
                 channel: 0,
-                time: 0,
+                delay: 0,
             }; MAX_EVENTS],
             buffer_in: [[0.0; MAX_FRAMES]; MAX_CANNELS],
             buffer_out: [[0.0; MAX_FRAMES]; MAX_CANNELS],
@@ -57,7 +61,7 @@ impl ProcessData {
         self.nevents_input = 0;
     }
 
-    pub fn note_on(&mut self, key: i16, velocity: f64, channel: i16, time: u32) {
+    pub fn note_on(&mut self, key: i16, velocity: f64, channel: i16, delay: u8) {
         if self.nevents_input == MAX_EVENTS {
             panic!();
         }
@@ -65,11 +69,11 @@ impl ProcessData {
         self.events_input[self.nevents_input].key = key;
         self.events_input[self.nevents_input].velocity = velocity;
         self.events_input[self.nevents_input].channel = channel;
-        self.events_input[self.nevents_input].time = time;
+        self.events_input[self.nevents_input].delay = delay;
         self.nevents_input += 1;
     }
 
-    pub fn note_off(&mut self, key: i16, channel: i16, time: u32) {
+    pub fn note_off(&mut self, key: i16, channel: i16, delay: u8) {
         if self.nevents_input == MAX_EVENTS {
             panic!();
         }
@@ -77,7 +81,7 @@ impl ProcessData {
         self.events_input[self.nevents_input].key = key;
         self.events_input[self.nevents_input].velocity = 0.0;
         self.events_input[self.nevents_input].channel = channel;
-        self.events_input[self.nevents_input].time = time;
+        self.events_input[self.nevents_input].delay = delay;
         self.nevents_input += 1;
     }
 }

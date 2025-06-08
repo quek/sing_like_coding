@@ -21,23 +21,36 @@ impl Track {
     }
 
     pub fn compute_midi(&self, context: &mut ProcessTrackContext) {
-        let line_start = context.play_position.start / 0x100;
-        let line_end = context.play_position.end / 0x100;
-        for line in line_start..=line_end {
-            for (lane_index, lane) in self.lanes.iter().enumerate() {
-                if let Some(note) = lane.notes.get(&(line as usize)) {
-                    let time = note.line * 0x100 + note.delay as usize;
-                    if context.play_position.contains(&(time as i64)) {
-                        if let Some(Some(key)) = context.on_keys.get(lane_index) {
-                            context.event_list_input.push(Event::NoteOff(*key));
+        let ranges = if context.play_position.start < context.play_position.end {
+            vec![context.play_position.clone()]
+        } else {
+            vec![
+                context.play_position.start..context.loop_range.end,
+                context.loop_range.start..context.play_position.end,
+            ]
+        };
+        for range in ranges {
+            let line_start = range.start / 0x100;
+            let line_end = range.end / 0x100;
+            for line in line_start..=line_end {
+                for (lane_index, lane) in self.lanes.iter().enumerate() {
+                    if let Some(note) = lane.notes.get(&line) {
+                        let time = note.line * 0x100 + note.delay as usize;
+                        if range.contains(&time) {
+                            let delay = 0; // TODO
+                            if let Some(Some(key)) = context.on_keys.get(lane_index) {
+                                context.event_list_input.push(Event::NoteOff(*key, delay));
+                            }
+                            context.event_list_input.push(Event::NoteOn(
+                                note.key,
+                                note.velocity,
+                                delay,
+                            ));
+                            if context.on_keys.len() <= lane_index {
+                                context.on_keys.resize_with(lane_index + 1, || None);
+                            }
+                            context.on_keys[lane_index] = Some(note.key);
                         }
-                        context
-                            .event_list_input
-                            .push(Event::NoteOn(note.key, note.velocity));
-                        if context.on_keys.len() <= lane_index {
-                            context.on_keys.resize_with(lane_index + 1, || None);
-                        }
-                        context.on_keys[lane_index] = Some(note.key);
                     }
                 }
             }
@@ -58,8 +71,8 @@ impl Track {
         let data = context.plugins[module_index].process_data();
         for event in context.event_list_input.drain(..) {
             match event {
-                Event::NoteOn(key, velocity) => data.note_on(key, velocity, 0, 0),
-                Event::NoteOff(key) => data.note_off(key, 0, 0),
+                Event::NoteOn(key, velocity, delay) => data.note_on(key, velocity, 0, delay),
+                Event::NoteOff(key, delay) => data.note_off(key, 0, delay),
                 Event::NoteAllOff => {
                     for key in context.on_keys.drain(..).filter_map(|x| x) {
                         data.note_off(key, 0, 0);

@@ -117,8 +117,8 @@ impl TrackView {
                             Frame::NONE
                                 .fill(if line == state.song_state.line_play {
                                     Color32::DARK_GREEN
-                                } else if state.song_state.loop_range.contains(&line) {
-                                    Color32::from_rgb(0x22, 0x22, 0x22)
+                                } else if state.song_state.loop_range.contains(&(line * 0x100)) {
+                                    Color32::from_rgb(0x00, 0x30, 0x00)
                                 } else {
                                     Color32::BLACK
                                 })

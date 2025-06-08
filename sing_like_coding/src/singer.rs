@@ -32,9 +32,9 @@ pub enum SingerCommand {
     Note(Cursor, Note),
     NoteDelete(Cursor),
     #[allow(dead_code)]
-    NoteOn(usize, i16, i16, f64, u32),
+    NoteOn(usize, i16, i16, f64, u8),
     #[allow(dead_code)]
-    NoteOff(usize, i16, i16, f64, u32),
+    NoteOff(usize, i16, i16, f64, u8),
     PluginLoad(usize, Description),
     TrackAdd,
     LaneAdd(usize),
@@ -53,7 +53,7 @@ pub struct SongState {
 pub struct Singer {
     pub steady_time: i64,
     pub play_p: bool,
-    pub play_position: Range<i64>,
+    pub play_position: Range<usize>,
     pub loop_p: bool,
     pub loop_range: Range<usize>,
     all_notef_off_p: bool,
@@ -80,9 +80,9 @@ impl Singer {
         let mut this = Self {
             steady_time: 0,
             play_p: false,
-            play_position: (0..0),
+            play_position: 0..0,
             loop_p: true,
-            loop_range: (0..0x20),
+            loop_range: 0..(0x100 * 0x20),
             all_notef_off_p: false,
             song,
             song_sender,
@@ -122,15 +122,16 @@ impl Singer {
         if !self.play_p {
             return;
         }
+
         let sec_per_frame = frames_count as f64 / self.song.sample_rate;
         let sec_per_delay = 60.0 / (self.song.bpm * self.song.lpb as f64 * 256.0);
         self.play_position.end =
-            self.play_position.start + (sec_per_frame / sec_per_delay).round() as i64;
+            self.play_position.start + (sec_per_frame / sec_per_delay).round() as usize;
 
-        // TODO DELET THIS BLOCK
-        {
-            if self.play_position.end > 0x20 * 0x100 {
-                self.play_position = 0..0;
+        if self.loop_p {
+            if self.play_position.end > self.loop_range.end {
+                let overflow = self.play_position.end - self.loop_range.end;
+                self.play_position.end = self.loop_range.start + overflow;
             }
         }
     }
@@ -151,6 +152,8 @@ impl Singer {
                 process_data.nframes = nframes;
                 process_data.play_p = if self.play_p { 1 } else { 0 };
                 process_data.bpm = self.song.bpm;
+                process_data.lpb = self.song.lpb;
+                process_data.sample_rate = self.song.sample_rate;
                 process_data.steady_time = self.steady_time;
                 process_data.prepare();
             }
@@ -163,6 +166,7 @@ impl Singer {
             context.bpm = self.song.bpm;
             context.steady_time = self.steady_time;
             context.play_position = self.play_position.clone();
+            context.loop_range = self.loop_range.clone();
             context.prepare();
             if self.all_notef_off_p {
                 context.event_list_input.push(Event::NoteAllOff);
@@ -342,17 +346,17 @@ async fn singer_loop(
 
                 singer.send_song();
             }
-            SingerCommand::NoteOn(track_index, key, _channel, velocity, _time) => {
+            SingerCommand::NoteOn(track_index, key, _channel, velocity, time) => {
                 let mut singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
                     .event_list_input
-                    .push(Event::NoteOn(key, velocity));
+                    .push(Event::NoteOn(key, velocity, time));
             }
-            SingerCommand::NoteOff(track_index, key, _channel, _velocity, _time) => {
+            SingerCommand::NoteOff(track_index, key, _channel, _velocity, time) => {
                 let mut singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
                     .event_list_input
-                    .push(Event::NoteOff(key));
+                    .push(Event::NoteOff(key, time));
             }
             SingerCommand::TrackAdd => {
                 let mut singer = singer.lock().unwrap();

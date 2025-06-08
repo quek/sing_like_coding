@@ -484,6 +484,8 @@ impl Plugin {
             None
         };
 
+        let samples_per_delay =
+            (context.sample_rate * 60.0) / (context.bpm * context.lpb as f64 * 256.0);
         for i in 0..context.nevents_input {
             let event = &context.events_input[i];
             match &event.kind {
@@ -492,7 +494,7 @@ impl Plugin {
                         event.key,
                         event.channel,
                         event.velocity,
-                        event.time,
+                        (event.delay as f64 * samples_per_delay).round() as u32,
                     );
                 }
                 EventKind::NoteOff => {
@@ -500,7 +502,7 @@ impl Plugin {
                         event.key,
                         event.channel,
                         event.velocity,
-                        event.time,
+                        (event.delay as f64 * samples_per_delay).round() as u32,
                     );
                 }
             }
