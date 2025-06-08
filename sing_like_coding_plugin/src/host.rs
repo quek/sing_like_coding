@@ -3,22 +3,23 @@ use std::{path::Path, pin::Pin, sync::mpsc::Sender};
 use common::{
     plugin::description::Description,
     process_data::ProcessData,
-    shmem::{event_request_name, event_response_name, process_data_name},
+    shmem::{event_quit_name, event_request_name, event_response_name, process_data_name},
     str::to_pcstr,
 };
 use shared_memory::ShmemConf;
 use windows::Win32::{
-    Foundation::{WAIT_EVENT, WAIT_OBJECT_0},
+    Foundation::{HANDLE, WAIT_EVENT, WAIT_OBJECT_0},
     Storage::FileSystem::SYNCHRONIZE,
     System::Threading::{
-        OpenEventA, SetEvent, WaitForMultipleObjects, EVENT_MODIFY_STATE, INFINITE,
+        CreateEventA, OpenEventA, SetEvent, WaitForMultipleObjects, EVENT_MODIFY_STATE, INFINITE,
         SYNCHRONIZATION_ACCESS_RIGHTS,
     },
 };
 
-use crate::{manager::EVENT_QUIT_NAME, plugin::Plugin, plugin_ptr::PluginPtr};
+use crate::{manager::EVENT_QUIT_ALL_NAME, plugin::Plugin, plugin_ptr::PluginPtr};
 
 pub struct Host {
+    event_quit: HANDLE,
     pub plugin: Pin<Box<Plugin>>,
 }
 
@@ -28,6 +29,10 @@ impl Host {
         description: &Description,
         sender: Sender<PluginPtr>,
     ) -> anyhow::Result<Self> {
+        let (event_quit_name, _x) = event_quit_name(id);
+        let event_quit =
+            unsafe { CreateEventA(None, false.into(), false.into(), event_quit_name)? };
+
         let mut plugin = Plugin::new(sender);
         plugin.load(Path::new(&description.path), description.index);
         plugin.start()?;
@@ -38,11 +43,16 @@ impl Host {
             process_loop(id, plugin_ptr).await.unwrap();
         });
 
-        Ok(Self { plugin })
+        Ok(Self { event_quit, plugin })
     }
 
     pub fn load(&mut self, state: Vec<u8>) -> anyhow::Result<()> {
         self.plugin.state_load(state)
+    }
+
+    pub fn unload(&mut self) -> anyhow::Result<()> {
+        unsafe { SetEvent(self.event_quit) }?;
+        Ok(())
     }
 
     pub fn save(&mut self) -> anyhow::Result<Vec<u8>> {
@@ -66,7 +76,7 @@ async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
         )?
     };
 
-    let (event_quit_name, _x) = to_pcstr(EVENT_QUIT_NAME)?;
+    let (event_quit_name, _x) = event_quit_name(id);
     let event_quit = unsafe {
         OpenEventA(
             SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE.0),
@@ -75,7 +85,16 @@ async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
         )?
     };
 
-    let events_wait = [event_request, event_quit];
+    let (event_quit_all_name, _x) = to_pcstr(EVENT_QUIT_ALL_NAME)?;
+    let event_quit_all = unsafe {
+        OpenEventA(
+            SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE.0),
+            false,
+            event_quit_all_name,
+        )?
+    };
+
+    let events_wait = [event_request, event_quit, event_quit_all];
 
     let (event_name, _x) = event_response_name(id);
     let event_response = unsafe { OpenEventA(EVENT_MODIFY_STATE, false, event_name)? };
@@ -87,7 +106,7 @@ async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
         if event == WAIT_OBJECT_0 {
             plugin.process(process_data)?;
             unsafe { SetEvent(event_response) }?;
-        } else if event == WAIT_EVENT(1) {
+        } else if event == WAIT_EVENT(1) || event == WAIT_EVENT(2) {
             return Ok(());
         } else {
             return Err(anyhow::anyhow!("WaitForMultipleObjects failed"));

@@ -17,6 +17,10 @@ pub fn event_response_name(id: usize) -> (PCSTR, CString) {
     to_pcstr(&format!("SingLikeCoding.Process.Response.{}", id)).unwrap()
 }
 
+pub fn event_quit_name(id: usize) -> (PCSTR, CString) {
+    to_pcstr(&format!("SingLikeCoding.Process.Quit.{}", id)).unwrap()
+}
+
 pub const SHMEM_NAME: &str = "MySharedMemory";
 pub const EVENT_NAME: &str = "MyPluginEvent";
 

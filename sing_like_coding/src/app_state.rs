@@ -126,6 +126,7 @@ impl AppState {
     pub fn received_from_plugin_process(&mut self, message: PluginToMain) -> anyhow::Result<()> {
         match message {
             PluginToMain::DidLoad => (),
+            PluginToMain::DidUnload(_track_index, _module_index) => (),
             PluginToMain::DidGuiOpen => (),
             PluginToMain::DidScan => {
                 self.clap_manager.load()?;
@@ -161,6 +162,12 @@ impl AppState {
     }
 
     pub fn song_open_did(&mut self, song: Song) -> anyhow::Result<()> {
+        for track_index in 0..self.song.tracks.len() {
+            for module_index in 0..self.song.tracks[track_index].modules.len() {
+                self.sender_to_loop
+                    .send(MainToPlugin::Unload(track_index, module_index))?;
+            }
+        }
         self.song = song;
         Ok(())
     }
