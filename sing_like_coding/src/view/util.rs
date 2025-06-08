@@ -29,7 +29,7 @@ impl<'a> LabelBuilder<'a> {
 
     pub fn build(self) -> Response {
         Frame::NONE
-            .fill(Color32::BLACK)
+            .fill(self.bg_color)
             .show(self.ui, |ui| -> Response {
                 let label = eframe::egui::Label::new(self.text).truncate();
                 if let Some(size) = self.size {
