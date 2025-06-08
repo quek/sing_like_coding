@@ -13,6 +13,7 @@ use crate::{
 use super::{
     main_view::Route,
     shortcut_key::{Modifier, ShortcutKey},
+    util::LabelBuilder,
 };
 
 const DEFAULT_TRACK_WIDTH: f32 = 64.0;
@@ -158,19 +159,18 @@ impl TrackView {
                                                 } else {
                                                     Color32::BLACK
                                                 };
-                                                Frame::NONE.fill(color).show(ui, |ui| {
-                                                    let text = track.lanes[lane_index]
-                                                        .note(line)
-                                                        .map_or("--- -- --".to_string(), |note| {
-                                                            format!(
-                                                                "{:<3} {:02X} {:02X}",
-                                                                note.note_name(),
-                                                                note.velocity as i32,
-                                                                note.delay
-                                                            )
-                                                        });
-                                                    ui.label(text);
-                                                });
+                                                let text = track.lanes[lane_index]
+                                                    .note(line)
+                                                    .map_or("--- -- --".to_string(), |note| {
+                                                        format!(
+                                                            "{:<3} {:02X} {:02X}",
+                                                            note.note_name(),
+                                                            note.velocity as i32,
+                                                            note.delay
+                                                        )
+                                                    });
+
+                                                LabelBuilder::new(ui, text).bg_color(color).build();
                                             }
                                             Ok(())
                                         });
@@ -179,45 +179,36 @@ impl TrackView {
                                 });
                             });
 
-                            Frame::NONE
-                                .fill(Color32::BLACK)
-                                .show(ui, |ui| -> anyhow::Result<()> {
-                                    for (module_index, module) in
-                                        track.modules.iter_mut().enumerate()
-                                    {
-                                        let label = ui.add_sized(
-                                            [DEFAULT_TRACK_WIDTH, 0.0],
-                                            Label::new(&module.name).truncate(),
-                                        );
-                                        label.context_menu(|ui: &mut Ui| {
-                                            if ui.button("Delete").clicked() {
-                                                state
-                                                    .view_sender
-                                                    .send(SingerCommand::PluginDelete(
-                                                        track_index,
-                                                        module_index,
-                                                    ))
-                                                    .unwrap();
-                                                ui.close_menu();
-                                            }
-                                        });
-                                        if label.clicked() {
-                                            state.sender_to_loop.send(MainToPlugin::GuiOpen(
+                            for (module_index, module) in track.modules.iter_mut().enumerate() {
+                                let label = LabelBuilder::new(ui, &module.name)
+                                    .size([DEFAULT_TRACK_WIDTH, 0.0])
+                                    .build();
+                                if label.clicked() {
+                                    state
+                                        .sender_to_loop
+                                        .send(MainToPlugin::GuiOpen(track_index, module_index))?;
+                                }
+                                label.context_menu(|ui: &mut Ui| {
+                                    if ui.button("Delete").clicked() {
+                                        state
+                                            .view_sender
+                                            .send(SingerCommand::PluginDelete(
                                                 track_index,
                                                 module_index,
-                                            ))?;
-                                        }
+                                            ))
+                                            .unwrap();
+                                        ui.close_menu();
                                     }
-
-                                    if ui
-                                        .add_sized([DEFAULT_TRACK_WIDTH, 0.0], Label::new("+"))
-                                        .clicked()
-                                    {
-                                        state.route = Route::PluginSelect;
-                                    }
-
-                                    Ok(())
                                 });
+                            }
+
+                            if LabelBuilder::new(ui, "+")
+                                .size([DEFAULT_TRACK_WIDTH, 0.0])
+                                .build()
+                                .clicked()
+                            {
+                                state.route = Route::PluginSelect;
+                            }
 
                             Ok(())
                         });
