@@ -41,18 +41,20 @@ impl Track {
                         let time = note.line * 0x100 + note.delay as usize;
                         if range.contains(&time) {
                             let delay = 0; // TODO
-                            if let Some(Some(key)) = context.on_keys.get(lane_index) {
+                            if let Some(Some(key)) = context.on_keys.get(lane_index).take() {
                                 context.event_list_input.push(Event::NoteOff(*key, delay));
                             }
-                            context.event_list_input.push(Event::NoteOn(
-                                note.key,
-                                note.velocity,
-                                delay,
-                            ));
-                            if context.on_keys.len() <= lane_index {
-                                context.on_keys.resize_with(lane_index + 1, || None);
+                            if !note.off {
+                                context.event_list_input.push(Event::NoteOn(
+                                    note.key,
+                                    note.velocity,
+                                    delay,
+                                ));
+                                if context.on_keys.len() <= lane_index {
+                                    context.on_keys.resize_with(lane_index + 1, || None);
+                                }
+                                context.on_keys[lane_index] = Some(note.key);
                             }
-                            context.on_keys[lane_index] = Some(note.key);
                         }
                     }
                 }

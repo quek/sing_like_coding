@@ -162,12 +162,20 @@ impl TrackView {
                                                 let text = track.lanes[lane_index]
                                                     .note(line)
                                                     .map_or("--- -- --".to_string(), |note| {
-                                                        format!(
-                                                            "{:<3} {:02X} {:02X}",
-                                                            note.note_name(),
-                                                            note.velocity as i32,
-                                                            note.delay
-                                                        )
+                                                        if note.off {
+                                                            format!(
+                                                                "{:<3}    {:02X}",
+                                                                note.note_name(),
+                                                                note.delay
+                                                            )
+                                                        } else {
+                                                            format!(
+                                                                "{:<3} {:02X} {:02X}",
+                                                                note.note_name(),
+                                                                note.velocity as i32,
+                                                                note.delay
+                                                            )
+                                                        }
                                                     });
 
                                                 LabelBuilder::new(ui, text).bg_color(color).build();
@@ -233,13 +241,13 @@ impl TrackView {
         }
 
         if input.is(Modifier::C, Key::J) {
-            note_update(-1, 0, 0, state);
+            note_update(-1, 0, 0, false, state);
         } else if input.is(Modifier::C, Key::K) {
-            note_update(1, 0, 0, state);
+            note_update(1, 0, 0, false, state);
         } else if input.is(Modifier::C, Key::H) {
-            note_update(-12, 0, 0, state);
+            note_update(-12, 0, 0, false, state);
         } else if input.is(Modifier::C, Key::L) {
-            note_update(12, 0, 0, state);
+            note_update(12, 0, 0, false, state);
         } else if input.is(Modifier::C, Key::T) {
             TrackAdd {}.call(state)?;
         } else if input.is(Modifier::CS, Key::T) {
@@ -247,21 +255,21 @@ impl TrackView {
                 .view_sender
                 .send(SingerCommand::LaneAdd(state.cursor.track))?;
         } else if input.is(Modifier::A, Key::J) {
-            note_update(0, -1, 0, state);
+            note_update(0, -1, 0, false, state);
         } else if input.is(Modifier::A, Key::K) {
-            note_update(0, 1, 0, state);
+            note_update(0, 1, 0, false, state);
         } else if input.is(Modifier::A, Key::H) {
-            note_update(0, -0x10, 0, state);
+            note_update(0, -0x10, 0, false, state);
         } else if input.is(Modifier::A, Key::L) {
-            note_update(0, 0x10, 0, state);
+            note_update(0, 0x10, 0, false, state);
         } else if input.is(Modifier::CA, Key::J) {
-            note_update(0, 0, -1, state);
+            note_update(0, 0, -1, false, state);
         } else if input.is(Modifier::CA, Key::K) {
-            note_update(0, 0, 1, state);
+            note_update(0, 0, 1, false, state);
         } else if input.is(Modifier::CA, Key::H) {
-            note_update(0, 0, -0x10, state);
+            note_update(0, 0, -0x10, false, state);
         } else if input.is(Modifier::CA, Key::L) {
-            note_update(0, 0, 0x10, state);
+            note_update(0, 0, 0x10, false, state);
         } else if input.is(Modifier::None, Key::J) {
             state.cursor_down();
         } else if input.is(Modifier::None, Key::K) {
@@ -270,6 +278,8 @@ impl TrackView {
             state.cursor_left();
         } else if input.is(Modifier::None, Key::L) {
             state.cursor_right();
+        } else if input.is(Modifier::None, Key::Period) {
+            note_update(0, 0, 0, true, state);
         } else if input.is(Modifier::None, Key::Delete) {
             state
                 .view_sender
@@ -281,17 +291,26 @@ impl TrackView {
     }
 }
 
-fn note_update(key_delta: i16, velociy_delta: i16, delay_delta: i16, state: &mut AppState) {
+fn note_update(
+    key_delta: i16,
+    velociy_delta: i16,
+    delay_delta: i16,
+    off: bool,
+    state: &mut AppState,
+) {
     if let Some(note) = state.song.note(&state.cursor) {
-        let mut note = note.clone();
-        note.key = (note.key + key_delta).clamp(0, 127);
-        note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
-        note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
-        state.note_last = note;
+        if !note.off {
+            let mut note = note.clone();
+            note.key = (note.key + key_delta).clamp(0, 127);
+            note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
+            note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
+            state.note_last = note;
+        }
     }
 
     let mut note = state.note_last.clone();
     note.line = state.cursor.line;
+    note.off = off;
     state
         .view_sender
         .send(SingerCommand::Note(state.cursor.clone(), note))

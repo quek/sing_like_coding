@@ -65,6 +65,7 @@ impl AppState {
                 channel: 0,
                 key: 60,
                 velocity: 100.0,
+                off: false,
             },
             route: Route::Track,
             selected_cells: vec![(0, 0)],

@@ -7,11 +7,16 @@ pub struct Note {
     pub channel: i16,
     pub key: i16,
     pub velocity: f64,
+    pub off: bool,
 }
 
 impl Note {
     pub fn note_name(&self) -> String {
-        midi_to_note_name(self.key).unwrap()
+        if self.off {
+            "OFF".to_string()
+        } else {
+            midi_to_note_name(self.key).unwrap()
+        }
     }
 
     #[allow(dead_code)]
