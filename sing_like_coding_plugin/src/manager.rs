@@ -82,11 +82,7 @@ impl Manager {
                         self.sender_to_loop.send(PluginToMain::DidLoad)?;
                     }
                     MainToPlugin::GuiOpen(track_index, module_index) => {
-                        if let Some(Some(host)) = self
-                            .plugins
-                            .get_mut(track_index)
-                            .map(|x| x.get_mut(module_index))
-                        {
+                        if let Some(host) = self.host(track_index, module_index) {
                             if host.plugin.gui_open_p {
                                 host.plugin.gui_close()?;
                             } else {
@@ -94,6 +90,24 @@ impl Manager {
                             }
                         }
                         self.sender_to_loop.send(PluginToMain::DidGuiOpen)?;
+                    }
+                    MainToPlugin::StateLoad(track_index, module_index, state) => {
+                        if let Some(host) = self.host(track_index, module_index) {
+                            host.load(state)?;
+                        }
+                        self.sender_to_loop.send(PluginToMain::DidStateLoad)?;
+                    }
+                    MainToPlugin::StateSave(track_index, module_index) => {
+                        let state = if let Some(host) = self.host(track_index, module_index) {
+                            host.save()?
+                        } else {
+                            vec![]
+                        };
+                        self.sender_to_loop.send(PluginToMain::DidStateSave(
+                            track_index,
+                            module_index,
+                            state,
+                        ))?;
                     }
                     MainToPlugin::Scan => {
                         log::debug!("clap_manager.scan() start...");
@@ -130,5 +144,11 @@ impl Manager {
             // スレッドを分けるのが面倒なためスリープしちゃう
             thread::sleep(Duration::from_millis(1000 / 60));
         }
+    }
+
+    fn host(&mut self, track_index: usize, module_index: usize) -> Option<&mut Host> {
+        self.plugins
+            .get_mut(track_index)
+            .and_then(|x| x.get_mut(module_index))
     }
 }

@@ -28,6 +28,7 @@ use clap_sys::{
         params::{
             clap_host_params, clap_param_clear_flags, clap_param_rescan_flags, CLAP_EXT_PARAMS,
         },
+        state::{clap_plugin_state, CLAP_EXT_STATE},
     },
     factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID},
     host::clap_host,
@@ -41,6 +42,7 @@ use common::{
     process_data::{EventKind, ProcessData},
 };
 use libloading::{Library, Symbol};
+use stream::{IStream, OStream};
 use window::{create_handler, destroy_handler};
 
 use crate::{
@@ -48,6 +50,7 @@ use crate::{
     plugin_ptr::PluginPtr,
 };
 
+mod stream;
 mod window;
 
 pub struct Plugin {
@@ -55,6 +58,7 @@ pub struct Plugin {
     lib: Option<Library>,
     pub plugin: Option<*const clap_plugin>,
     gui: Option<*const clap_plugin_gui>,
+    state: Option<*const clap_plugin_state>,
     pub gui_open_p: bool,
     window_handler: Option<*mut c_void>,
     process_start_p: bool,
@@ -120,6 +124,7 @@ impl Plugin {
             lib: None,
             plugin: None,
             gui: None,
+            state: None,
             gui_open_p: false,
             window_handler: None,
             process_start_p: false,
@@ -322,6 +327,12 @@ impl Plugin {
                 as *const clap_plugin_gui;
             if !gui.is_null() {
                 self.gui = Some(gui);
+            }
+
+            let state = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_STATE.as_ptr())
+                as *const clap_plugin_state;
+            if !state.is_null() {
+                self.state = Some(state);
             }
 
             self.plugin = Some(plugin);
@@ -568,6 +579,30 @@ impl Plugin {
         };
         self.process_start_p = false;
         Ok(())
+    }
+
+    pub fn state_load(&mut self, state: Vec<u8>) -> anyhow::Result<()> {
+        let istream = IStream::new(state);
+        if let Some(state) = &self.state {
+            unsafe {
+                let plugin = &*(self.plugin.unwrap());
+                let state = &**state;
+                state.load.unwrap()(plugin, istream.as_raw());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn state_save(&mut self) -> anyhow::Result<Vec<u8>> {
+        let ostream = OStream::new();
+        if let Some(state) = &self.state {
+            unsafe {
+                let plugin = &*(self.plugin.unwrap());
+                let state = &**state;
+                state.save.unwrap()(plugin, ostream.as_raw());
+            }
+        }
+        Ok(ostream.into_inner())
     }
 }
 

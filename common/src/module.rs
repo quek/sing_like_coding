@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct Module {
     pub id: String,
     pub name: String,
-    pub state: Option<String>,
+    pub state: Option<Vec<u8>>,
 }
 
 impl Module {

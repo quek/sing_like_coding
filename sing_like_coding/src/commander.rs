@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    command::{plugin_load::PluginLoad, plugin_scan::PluginScan, track_add::TrackAdd, Command},
+    command::{self, Command},
     util::is_subsequence_case_insensitive,
 };
 
@@ -13,9 +13,11 @@ impl Commander {
     pub fn new() -> Self {
         Self {
             commands: vec![
-                Arc::new(Mutex::new(PluginLoad::new())),
-                Arc::new(Mutex::new(PluginScan::new())),
-                Arc::new(Mutex::new(TrackAdd::new())),
+                Arc::new(Mutex::new(command::plugin_load::PluginLoad::new())),
+                Arc::new(Mutex::new(command::plugin_scan::PluginScan::new())),
+                Arc::new(Mutex::new(command::track_add::TrackAdd::new())),
+                Arc::new(Mutex::new(command::song_open::SongOpen::new())),
+                Arc::new(Mutex::new(command::song_save::SongSave::new())),
             ],
         }
     }

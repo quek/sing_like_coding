@@ -2,6 +2,7 @@ use std::sync::mpsc::Sender;
 
 use common::{
     clap_manager::ClapManager,
+    module::Module,
     protocol::{MainToPlugin, PluginToMain},
 };
 use eframe::egui;
@@ -100,12 +101,25 @@ impl AppState {
         self.selected_tracks.push(self.cursor.track);
     }
 
+    pub fn module_mut(&mut self, track_index: usize, module_index: usize) -> Option<&mut Module> {
+        self.song
+            .tracks
+            .get_mut(track_index)
+            .and_then(|x| x.modules.get_mut(module_index))
+    }
+
     pub fn received_from_plugin_process(&mut self, message: PluginToMain) -> anyhow::Result<()> {
         match message {
             PluginToMain::DidLoad => (),
             PluginToMain::DidGuiOpen => (),
             PluginToMain::DidScan => {
                 self.clap_manager.load()?;
+            }
+            PluginToMain::DidStateLoad => (),
+            PluginToMain::DidStateSave(track_index, module_index, state) => {
+                if let Some(module) = self.module_mut(track_index, module_index) {
+                    module.state = Some(state);
+                }
             }
             PluginToMain::Quit => (),
         }

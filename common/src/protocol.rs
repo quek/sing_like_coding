@@ -7,6 +7,8 @@ use crate::audio_buffer::AudioBuffer;
 pub enum MainToPlugin {
     Load(usize, String, usize),
     GuiOpen(usize, usize),
+    StateLoad(usize, usize, Vec<u8>),
+    StateSave(usize, usize),
     Scan,
     Quit,
 }
@@ -15,6 +17,8 @@ pub enum MainToPlugin {
 pub enum PluginToMain {
     DidLoad,
     DidGuiOpen,
+    DidStateLoad,
+    DidStateSave(usize, usize, Vec<u8>),
     DidScan,
     Quit,
 }

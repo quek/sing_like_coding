@@ -40,6 +40,14 @@ impl Host {
 
         Ok(Self { plugin })
     }
+
+    pub fn load(&mut self, state: Vec<u8>) -> anyhow::Result<()> {
+        self.plugin.state_load(state)
+    }
+
+    pub fn save(&mut self) -> anyhow::Result<Vec<u8>> {
+        self.plugin.state_save()
+    }
 }
 
 async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
