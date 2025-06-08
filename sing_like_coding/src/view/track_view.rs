@@ -185,13 +185,23 @@ impl TrackView {
                                     for (module_index, module) in
                                         track.modules.iter_mut().enumerate()
                                     {
-                                        if ui
-                                            .add_sized(
-                                                [DEFAULT_TRACK_WIDTH, 0.0],
-                                                Label::new(&module.name).truncate(),
-                                            )
-                                            .clicked()
-                                        {
+                                        let label = ui.add_sized(
+                                            [DEFAULT_TRACK_WIDTH, 0.0],
+                                            Label::new(&module.name).truncate(),
+                                        );
+                                        label.context_menu(|ui: &mut Ui| {
+                                            if ui.button("Delete").clicked() {
+                                                state
+                                                    .view_sender
+                                                    .send(SingerCommand::PluginDelete(
+                                                        track_index,
+                                                        module_index,
+                                                    ))
+                                                    .unwrap();
+                                                ui.close_menu();
+                                            }
+                                        });
+                                        if label.clicked() {
                                             state.sender_to_loop.send(MainToPlugin::GuiOpen(
                                                 track_index,
                                                 module_index,

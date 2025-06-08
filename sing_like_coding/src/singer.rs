@@ -37,6 +37,7 @@ pub enum SingerCommand {
     #[allow(dead_code)]
     NoteOff(usize, i16, i16, f64, u8),
     PluginLoad(usize, Description),
+    PluginDelete(usize, usize),
     TrackAdd,
     LaneAdd(usize),
     SongFile(String),
@@ -350,6 +351,19 @@ async fn singer_loop(
                     description.id.clone(),
                     description.name.clone(),
                 ));
+
+                singer.send_song();
+            }
+            SingerCommand::PluginDelete(track_index, module_index) => {
+                let mut singer = singer.lock().unwrap();
+                singer.song.tracks[track_index].modules.remove(module_index);
+                singer.process_track_contexts[track_index]
+                    .plugins
+                    .remove(module_index);
+                singer.shmems[track_index].remove(module_index);
+                singer
+                    .sender_to_loop
+                    .send(MainToPlugin::Unload(track_index, module_index))?;
 
                 singer.send_song();
             }
