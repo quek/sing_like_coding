@@ -1,4 +1,14 @@
-use std::{env::current_exe, fs::File, io::Write, sync::mpsc::Sender};
+use std::{
+    env::current_exe,
+    fs::File,
+    io::Write,
+    path::PathBuf,
+    sync::{
+        mpsc::{Receiver, Sender},
+        Arc, Mutex,
+    },
+    thread,
+};
 
 use common::{
     clap_manager::ClapManager,
@@ -34,6 +44,7 @@ pub struct AppState {
     pub view_sender: Sender<SingerCommand>,
     pub sender_to_loop: Sender<MainToPlugin>,
     nmodules_saving: usize,
+    pub song_open_p: bool,
 }
 
 impl AppState {
@@ -61,6 +72,7 @@ impl AppState {
             view_sender,
             sender_to_loop,
             nmodules_saving: 0,
+            song_open_p: false,
         }
     }
 
@@ -135,6 +147,24 @@ impl AppState {
         Ok(())
     }
 
+    pub fn song_open(&mut self) -> anyhow::Result<()> {
+        if let Some(path) = FileDialog::new()
+            .set_directory(song_directory())
+            .pick_file()
+        {
+            self.song_open_p = true;
+            self.view_sender.send(SingerCommand::SongOpen(
+                path.to_str().map(|s| s.to_string()).unwrap(),
+            ))?;
+        }
+        Ok(())
+    }
+
+    pub fn song_open_did(&mut self, song: Song) -> anyhow::Result<()> {
+        self.song = song;
+        Ok(())
+    }
+
     pub fn song_save(&mut self) -> anyhow::Result<()> {
         self.nmodules_saving = 0;
         for track_index in 0..self.song.tracks.len() {
@@ -154,11 +184,8 @@ impl AppState {
         let song_file = if let Some(song_file) = &self.song_state.song_file {
             song_file.into()
         } else {
-            let exe_path = current_exe().unwrap();
-            let dir = exe_path.parent().unwrap();
-            let default_dir = dir.join("user").join("song");
             if let Some(path) = FileDialog::new()
-                .set_directory(default_dir)
+                .set_directory(song_directory())
                 .set_file_name(&self.song.name)
                 .save_file()
             {
@@ -175,4 +202,45 @@ impl AppState {
         file.write_all(json.as_bytes()).unwrap();
         Ok(())
     }
+}
+
+#[derive(Debug)]
+pub enum AppStateCommand {
+    Song(Song),
+    State(SongState),
+    Quit,
+}
+
+pub fn loop_receive_from_audio_thread(
+    state: Arc<Mutex<AppState>>,
+    receiver: Receiver<AppStateCommand>,
+    gui_context: &eframe::egui::Context,
+) {
+    let gui_context = gui_context.clone();
+    thread::spawn(move || {
+        while let Ok(command) = receiver.recv() {
+            match command {
+                AppStateCommand::Song(song) => {
+                    let mut state = state.lock().unwrap();
+                    if state.song_open_p {
+                        state.song_open_did(song).unwrap();
+                    } else {
+                        state.song = song;
+                    }
+                    gui_context.request_repaint();
+                }
+                AppStateCommand::State(song_state) => {
+                    state.lock().unwrap().song_state = song_state;
+                    gui_context.request_repaint();
+                }
+                AppStateCommand::Quit => return,
+            }
+        }
+    });
+}
+
+fn song_directory() -> PathBuf {
+    let exe_path = current_exe().unwrap();
+    let dir = exe_path.parent().unwrap();
+    dir.join("user").join("song")
 }

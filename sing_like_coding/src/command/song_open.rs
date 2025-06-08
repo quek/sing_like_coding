@@ -5,7 +5,8 @@ use super::Command;
 pub struct SongOpen {}
 
 impl Command for SongOpen {
-    fn call(&mut self, _state: &mut AppState) -> anyhow::Result<()> {
+    fn call(&mut self, state: &mut AppState) -> anyhow::Result<()> {
+        state.song_open()?;
         Ok(())
     }
 

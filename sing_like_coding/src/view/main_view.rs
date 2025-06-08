@@ -1,28 +1,17 @@
-use std::{
-    sync::{mpsc::Receiver, Arc, Mutex},
-    thread,
-};
+use std::sync::{mpsc::Receiver, Arc, Mutex};
 
 use anyhow::Result;
 use eframe::egui::Key;
 
 use crate::{
-    app_state::AppState,
+    app_state::{loop_receive_from_audio_thread, AppState, AppStateCommand},
     device::Device,
-    model::song::Song,
-    singer::{SingerCommand, SongState},
+    singer::SingerCommand,
 };
 
 use super::{
     command_view::CommandView, plugin_select_view::PluginSelectView, track_view::TrackView,
 };
-
-#[derive(Debug)]
-pub enum ViewMsg {
-    Song(Song),
-    State(SongState),
-    Quit,
-}
 
 #[derive(Debug)]
 pub enum Route {
@@ -37,11 +26,11 @@ pub struct MainView {
     track_view: TrackView,
     command_view: CommandView,
     plugin_select_view: Option<PluginSelectView>,
-    song_receiver: Option<Receiver<ViewMsg>>,
+    song_receiver: Option<Receiver<AppStateCommand>>,
 }
 
 impl MainView {
-    pub fn new(app_state: Arc<Mutex<AppState>>, song_receiver: Receiver<ViewMsg>) -> Self {
+    pub fn new(app_state: Arc<Mutex<AppState>>, song_receiver: Receiver<AppStateCommand>) -> Self {
         Self {
             gui_context: None,
             state: app_state,
@@ -118,28 +107,4 @@ impl MainView {
 
         Ok(())
     }
-}
-
-pub fn loop_receive_from_audio_thread(
-    state: Arc<Mutex<AppState>>,
-    receiver: Receiver<ViewMsg>,
-    gui_context: &eframe::egui::Context,
-) {
-    let gui_context = gui_context.clone();
-    thread::spawn(move || {
-        while let Ok(command) = receiver.recv() {
-            match command {
-                ViewMsg::Song(song) => {
-                    let mut state = state.lock().unwrap();
-                    state.song = song;
-                    gui_context.request_repaint();
-                }
-                ViewMsg::State(song_state) => {
-                    state.lock().unwrap().song_state = song_state;
-                    gui_context.request_repaint();
-                }
-                ViewMsg::Quit => return,
-            }
-        }
-    });
 }

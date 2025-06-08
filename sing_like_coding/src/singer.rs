@@ -1,4 +1,6 @@
 use std::{
+    fs::File,
+    io::BufReader,
     ops::Range,
     sync::{
         mpsc::{Receiver, Sender},
@@ -8,10 +10,9 @@ use std::{
 };
 
 use crate::{
-    app_state::Cursor,
+    app_state::{AppStateCommand, Cursor},
     model::{lane::Lane, note::Note, song::Song},
     util::next_id,
-    view::main_view::ViewMsg,
 };
 
 use anyhow::Result;
@@ -39,6 +40,7 @@ pub enum SingerCommand {
     TrackAdd,
     LaneAdd(usize),
     SongFile(String),
+    SongOpen(String),
 }
 
 #[derive(Debug, Default)]
@@ -61,7 +63,7 @@ pub struct Singer {
     pub loop_range: Range<usize>,
     all_notef_off_p: bool,
     pub song: Song,
-    song_sender: Sender<ViewMsg>,
+    song_sender: Sender<AppStateCommand>,
     pub sender_to_loop: Sender<MainToPlugin>,
     line_play: usize,
     process_track_contexts: Vec<ProcessTrackContext>,
@@ -78,7 +80,7 @@ unsafe impl Send for Singer {}
 unsafe impl Sync for Singer {}
 
 impl Singer {
-    pub fn new(song_sender: Sender<ViewMsg>, sender_to_loop: Sender<MainToPlugin>) -> Self {
+    pub fn new(song_sender: Sender<AppStateCommand>, sender_to_loop: Sender<MainToPlugin>) -> Self {
         let song = Song::new();
         let mut this = Self {
             song_file: None,
@@ -241,13 +243,13 @@ impl Singer {
 
     fn send_song(&self) {
         self.song_sender
-            .send(ViewMsg::Song(self.song.clone()))
+            .send(AppStateCommand::Song(self.song.clone()))
             .unwrap();
     }
 
     fn send_state(&self) {
         self.song_sender
-            .send(ViewMsg::State(SongState {
+            .send(AppStateCommand::State(SongState {
                 song_file: self.song_file.clone(),
                 play_p: self.play_p,
                 line_play: self.line_play,
@@ -378,6 +380,15 @@ async fn singer_loop(
             SingerCommand::SongFile(song_file) => {
                 let mut singer = singer.lock().unwrap();
                 singer.song_file = Some(song_file);
+                singer.send_state();
+            }
+            SingerCommand::SongOpen(song_file) => {
+                let mut singer = singer.lock().unwrap();
+                let file = File::open(&song_file)?;
+                let reader = BufReader::new(file);
+                singer.song = serde_json::from_reader(reader)?;
+                singer.song_file = Some(song_file);
+                singer.send_song();
                 singer.send_state();
             }
         }

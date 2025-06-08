@@ -7,11 +7,11 @@ use anyhow::Result;
 use common::protocol::MainToPlugin;
 use eframe::egui;
 
-use crate::app_state::AppState;
+use crate::app_state::{AppState, AppStateCommand};
 use crate::communicator::Communicator;
 use crate::device::Device;
 use crate::singer::{Singer, SingerCommand};
-use crate::view::main_view::{MainView, ViewMsg};
+use crate::view::main_view::MainView;
 
 pub fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -35,7 +35,7 @@ struct AppMain {
     state: Arc<Mutex<AppState>>,
     device: Option<Device>,
     view: MainView,
-    song_sender: Sender<ViewMsg>,
+    song_sender: Sender<AppStateCommand>,
 }
 
 pub enum Msg {
@@ -79,7 +79,7 @@ impl Default for AppMain {
 
 impl eframe::App for AppMain {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        self.song_sender.send(ViewMsg::Quit).unwrap();
+        self.song_sender.send(AppStateCommand::Quit).unwrap();
         self.state
             .lock()
             .unwrap()
