@@ -19,9 +19,10 @@ use eframe::egui;
 use rfd::FileDialog;
 
 use crate::{
+    command::{track_add::TrackAdd, Command},
     model::{note::Note, song::Song},
     singer::{SingerCommand, SongState},
-    view::main_view::Route,
+    view::{main_view::Route, track_view::UiCommand},
 };
 
 #[derive(Clone, Debug)]
@@ -151,6 +152,26 @@ impl AppState {
         Ok(())
     }
 
+    pub fn run_ui_command(&mut self, command: &UiCommand) -> anyhow::Result<()> {
+        match command {
+            UiCommand::NoteUpdate(key_delta, velociy_delta, delay_delta, off) => {
+                note_update(*key_delta, *velociy_delta, *delay_delta, *off, self);
+            }
+            UiCommand::NoteDelte => self
+                .view_sender
+                .send(SingerCommand::NoteDelete(self.cursor.clone()))?,
+            UiCommand::TrackAdd => TrackAdd {}.call(self)?,
+            UiCommand::LaneAdd => self
+                .view_sender
+                .send(SingerCommand::LaneAdd(self.cursor.track))?,
+            UiCommand::CursorUp => self.cursor_up(),
+            UiCommand::CursorDown => self.cursor_down(),
+            UiCommand::CursorLeft => self.cursor_left(),
+            UiCommand::CursorRight => self.cursor_right(),
+        }
+        Ok(())
+    }
+
     pub fn song_open(&mut self) -> anyhow::Result<()> {
         if let Some(path) = FileDialog::new()
             .set_directory(song_directory())
@@ -248,4 +269,30 @@ fn song_directory() -> PathBuf {
     let exe_path = current_exe().unwrap();
     let dir = exe_path.parent().unwrap();
     dir.join("user").join("song")
+}
+
+fn note_update(
+    key_delta: i16,
+    velociy_delta: i16,
+    delay_delta: i16,
+    off: bool,
+    state: &mut AppState,
+) {
+    if let Some(note) = state.song.note(&state.cursor) {
+        if !note.off {
+            let mut note = note.clone();
+            note.key = (note.key + key_delta).clamp(0, 127);
+            note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
+            note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
+            state.note_last = note;
+        }
+    }
+
+    let mut note = state.note_last.clone();
+    note.line = state.cursor.line;
+    note.off = off;
+    state
+        .view_sender
+        .send(SingerCommand::Note(state.cursor.clone(), note))
+        .unwrap();
 }

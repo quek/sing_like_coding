@@ -1,14 +1,10 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 use common::protocol::MainToPlugin;
 use eframe::egui::{CentralPanel, Color32, Frame, Key, Label, TopBottomPanel, Ui};
 
-use crate::{
-    app_state::AppState,
-    command::{track_add::TrackAdd, Command},
-    device::Device,
-    singer::SingerCommand,
-    util::with_font_mono,
-};
+use crate::{app_state::AppState, device::Device, singer::SingerCommand, util::with_font_mono};
 
 use super::{
     main_view::Route,
@@ -18,11 +14,70 @@ use super::{
 
 const DEFAULT_TRACK_WIDTH: f32 = 64.0;
 
-pub struct TrackView {}
+pub struct TrackView {
+    shortcut_map: HashMap<(Modifier, Key), UiCommand>,
+}
 
 impl TrackView {
     pub fn new() -> Self {
-        Self {}
+        let shortcut_map = [
+            (
+                (Modifier::C, Key::J),
+                UiCommand::NoteUpdate(-1, 0, 0, false),
+            ),
+            ((Modifier::C, Key::K), UiCommand::NoteUpdate(1, 0, 0, false)),
+            (
+                (Modifier::C, Key::H),
+                UiCommand::NoteUpdate(-12, 0, 0, false),
+            ),
+            (
+                (Modifier::C, Key::L),
+                UiCommand::NoteUpdate(12, 0, 0, false),
+            ),
+            ((Modifier::C, Key::T), UiCommand::TrackAdd),
+            ((Modifier::CS, Key::T), UiCommand::LaneAdd),
+            (
+                (Modifier::A, Key::J),
+                UiCommand::NoteUpdate(0, -1, 0, false),
+            ),
+            ((Modifier::A, Key::K), UiCommand::NoteUpdate(0, 1, 0, false)),
+            (
+                (Modifier::A, Key::H),
+                UiCommand::NoteUpdate(0, -0x10, 0, false),
+            ),
+            (
+                (Modifier::A, Key::L),
+                UiCommand::NoteUpdate(0, 0x10, 0, false),
+            ),
+            (
+                (Modifier::CA, Key::J),
+                UiCommand::NoteUpdate(0, 0, -1, false),
+            ),
+            (
+                (Modifier::CA, Key::K),
+                UiCommand::NoteUpdate(0, 0, 1, false),
+            ),
+            (
+                (Modifier::CA, Key::H),
+                UiCommand::NoteUpdate(0, 0, -0x10, false),
+            ),
+            (
+                (Modifier::CA, Key::L),
+                UiCommand::NoteUpdate(0, 0, 0x10, false),
+            ),
+            ((Modifier::None, Key::J), UiCommand::CursorDown),
+            ((Modifier::None, Key::K), UiCommand::CursorUp),
+            ((Modifier::None, Key::H), UiCommand::CursorLeft),
+            ((Modifier::None, Key::L), UiCommand::CursorRight),
+            (
+                (Modifier::None, Key::Period),
+                UiCommand::NoteUpdate(0, 0, 0, true),
+            ),
+            ((Modifier::None, Key::Delete), UiCommand::NoteDelte),
+        ];
+        let shortcut_map: HashMap<_, _> = shortcut_map.into_iter().collect();
+
+        Self { shortcut_map }
     }
 
     pub fn view(
@@ -240,79 +295,31 @@ impl TrackView {
             return Ok(());
         }
 
-        if input.is(Modifier::C, Key::J) {
-            note_update(-1, 0, 0, false, state);
-        } else if input.is(Modifier::C, Key::K) {
-            note_update(1, 0, 0, false, state);
-        } else if input.is(Modifier::C, Key::H) {
-            note_update(-12, 0, 0, false, state);
-        } else if input.is(Modifier::C, Key::L) {
-            note_update(12, 0, 0, false, state);
-        } else if input.is(Modifier::C, Key::T) {
-            TrackAdd {}.call(state)?;
-        } else if input.is(Modifier::CS, Key::T) {
-            state
-                .view_sender
-                .send(SingerCommand::LaneAdd(state.cursor.track))?;
-        } else if input.is(Modifier::A, Key::J) {
-            note_update(0, -1, 0, false, state);
-        } else if input.is(Modifier::A, Key::K) {
-            note_update(0, 1, 0, false, state);
-        } else if input.is(Modifier::A, Key::H) {
-            note_update(0, -0x10, 0, false, state);
-        } else if input.is(Modifier::A, Key::L) {
-            note_update(0, 0x10, 0, false, state);
-        } else if input.is(Modifier::CA, Key::J) {
-            note_update(0, 0, -1, false, state);
-        } else if input.is(Modifier::CA, Key::K) {
-            note_update(0, 0, 1, false, state);
-        } else if input.is(Modifier::CA, Key::H) {
-            note_update(0, 0, -0x10, false, state);
-        } else if input.is(Modifier::CA, Key::L) {
-            note_update(0, 0, 0x10, false, state);
-        } else if input.is(Modifier::None, Key::J) {
-            state.cursor_down();
-        } else if input.is(Modifier::None, Key::K) {
-            state.cursor_up();
-        } else if input.is(Modifier::None, Key::H) {
-            state.cursor_left();
-        } else if input.is(Modifier::None, Key::L) {
-            state.cursor_right();
-        } else if input.is(Modifier::None, Key::Period) {
-            note_update(0, 0, 0, true, state);
-        } else if input.is(Modifier::None, Key::Delete) {
-            state
-                .view_sender
-                .send(SingerCommand::NoteDelete(state.cursor.clone()))
-                .unwrap();
+        for (key, value) in self.shortcut_map.iter() {
+            if input.is(key.0, key.1) {
+                state.run_ui_command(value)?;
+            }
         }
 
         Ok(())
     }
 }
 
-fn note_update(
-    key_delta: i16,
-    velociy_delta: i16,
-    delay_delta: i16,
-    off: bool,
-    state: &mut AppState,
-) {
-    if let Some(note) = state.song.note(&state.cursor) {
-        if !note.off {
-            let mut note = note.clone();
-            note.key = (note.key + key_delta).clamp(0, 127);
-            note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
-            note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
-            state.note_last = note;
-        }
-    }
+// #[derive(Default)]
+// pub struct NoteUpdate {
+//     pub key_delta: i16,
+//     pub velociy_delta: i16,
+//     pub delay_delta: i16,
+//     pub off: bool,
+// }
 
-    let mut note = state.note_last.clone();
-    note.line = state.cursor.line;
-    note.off = off;
-    state
-        .view_sender
-        .send(SingerCommand::Note(state.cursor.clone(), note))
-        .unwrap();
+pub enum UiCommand {
+    NoteUpdate(i16, i16, i16, bool),
+    NoteDelte,
+    TrackAdd,
+    LaneAdd,
+    CursorUp,
+    CursorDown,
+    CursorLeft,
+    CursorRight,
 }

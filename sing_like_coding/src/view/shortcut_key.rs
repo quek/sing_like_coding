@@ -1,6 +1,7 @@
 use eframe::egui::{InputState, Key};
 
 #[allow(dead_code)]
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub enum Modifier {
     None,
     C,
