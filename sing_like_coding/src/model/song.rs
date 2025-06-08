@@ -1,3 +1,4 @@
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 
 use crate::app_state::Cursor;
@@ -6,6 +7,7 @@ use super::{note::Note, track::Track};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Song {
+    pub name: String,
     pub bpm: f64,
     pub sample_rate: f64,
     pub lpb: u16,
@@ -15,6 +17,7 @@ pub struct Song {
 impl Song {
     pub fn new() -> Self {
         Self {
+            name: Local::now().format("%Y%m%d.json").to_string(),
             bpm: 128.0,
             sample_rate: 48000.0,
             lpb: 4,

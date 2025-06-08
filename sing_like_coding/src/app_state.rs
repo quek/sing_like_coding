@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use std::{env::current_exe, fs::File, io::Write, sync::mpsc::Sender};
 
 use common::{
     clap_manager::ClapManager,
@@ -6,6 +6,7 @@ use common::{
     protocol::{MainToPlugin, PluginToMain},
 };
 use eframe::egui;
+use rfd::FileDialog;
 
 use crate::{
     model::{note::Note, song::Song},
@@ -32,6 +33,7 @@ pub struct AppState {
     pub song_state: SongState,
     pub view_sender: Sender<SingerCommand>,
     pub sender_to_loop: Sender<MainToPlugin>,
+    nmodules_saving: usize,
 }
 
 impl AppState {
@@ -58,6 +60,7 @@ impl AppState {
             song_state: SongState::default(),
             view_sender,
             sender_to_loop,
+            nmodules_saving: 0,
         }
     }
 
@@ -120,9 +123,56 @@ impl AppState {
                 if let Some(module) = self.module_mut(track_index, module_index) {
                     module.state = Some(state);
                 }
+                if self.nmodules_saving > 0 {
+                    self.nmodules_saving -= 1;
+                    if self.nmodules_saving == 0 {
+                        self.song_save_file()?;
+                    }
+                }
             }
             PluginToMain::Quit => (),
         }
+        Ok(())
+    }
+
+    pub fn song_save(&mut self) -> anyhow::Result<()> {
+        self.nmodules_saving = 0;
+        for track_index in 0..self.song.tracks.len() {
+            for module_index in 0..self.song.tracks[track_index].modules.len() {
+                self.sender_to_loop
+                    .send(MainToPlugin::StateSave(track_index, module_index))?;
+                self.nmodules_saving += 1;
+            }
+        }
+        if self.nmodules_saving == 0 {
+            self.song_save_file()?;
+        }
+        Ok(())
+    }
+
+    fn song_save_file(&mut self) -> anyhow::Result<()> {
+        let song_file = if let Some(song_file) = &self.song_state.song_file {
+            song_file.into()
+        } else {
+            let exe_path = current_exe().unwrap();
+            let dir = exe_path.parent().unwrap();
+            let default_dir = dir.join("user").join("song");
+            if let Some(path) = FileDialog::new()
+                .set_directory(default_dir)
+                .set_file_name(&self.song.name)
+                .save_file()
+            {
+                self.view_sender.send(SingerCommand::SongFile(
+                    path.to_str().map(|s| s.to_string()).unwrap(),
+                ))?;
+                path
+            } else {
+                return Ok(());
+            }
+        };
+        let mut file = File::create(&song_file).unwrap();
+        let json = serde_json::to_string_pretty(&self.song).unwrap();
+        file.write_all(json.as_bytes()).unwrap();
         Ok(())
     }
 }

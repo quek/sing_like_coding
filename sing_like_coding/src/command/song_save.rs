@@ -5,8 +5,8 @@ use super::Command;
 pub struct SongSave {}
 
 impl Command for SongSave {
-    fn call(&mut self, _state: &mut AppState) -> anyhow::Result<()> {
-        Ok(())
+    fn call(&mut self, state: &mut AppState) -> anyhow::Result<()> {
+        state.song_save()
     }
 
     fn name(&self) -> &str {

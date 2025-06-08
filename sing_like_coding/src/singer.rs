@@ -38,10 +38,12 @@ pub enum SingerCommand {
     PluginLoad(usize, Description),
     TrackAdd,
     LaneAdd(usize),
+    SongFile(String),
 }
 
 #[derive(Debug, Default)]
 pub struct SongState {
+    pub song_file: Option<String>,
     pub play_p: bool,
     pub line_play: usize,
     pub loop_p: bool,
@@ -51,6 +53,7 @@ pub struct SongState {
 }
 
 pub struct Singer {
+    pub song_file: Option<String>,
     pub steady_time: i64,
     pub play_p: bool,
     pub play_position: Range<usize>,
@@ -78,6 +81,7 @@ impl Singer {
     pub fn new(song_sender: Sender<ViewMsg>, sender_to_loop: Sender<MainToPlugin>) -> Self {
         let song = Song::new();
         let mut this = Self {
+            song_file: None,
             steady_time: 0,
             play_p: false,
             play_position: 0..0,
@@ -244,6 +248,7 @@ impl Singer {
     fn send_state(&self) {
         self.song_sender
             .send(ViewMsg::State(SongState {
+                song_file: self.song_file.clone(),
                 play_p: self.play_p,
                 line_play: self.line_play,
                 loop_p: self.loop_p,
@@ -369,6 +374,11 @@ async fn singer_loop(
                     track.lanes.push(Lane::new());
                     singer.send_song();
                 }
+            }
+            SingerCommand::SongFile(song_file) => {
+                let mut singer = singer.lock().unwrap();
+                singer.song_file = Some(song_file);
+                singer.send_state();
             }
         }
     }
