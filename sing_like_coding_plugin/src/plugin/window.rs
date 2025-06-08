@@ -26,6 +26,7 @@ pub fn create_handler(
     width: u32,
     height: u32,
     host_data: *mut c_void,
+    hwnd: isize,
 ) -> *mut c_void {
     unsafe {
         let class_name = to_wide("SingLikeCodingPluginClass");
@@ -49,7 +50,7 @@ pub fn create_handler(
             CW_USEDEFAULT,
             width as i32,
             height as i32,
-            None,
+            Some(HWND(hwnd as *mut c_void)),
             None,
             Some(hinstance.into()),
             Some(host_data),

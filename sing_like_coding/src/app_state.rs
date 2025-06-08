@@ -32,6 +32,7 @@ pub struct Cursor {
 }
 
 pub struct AppState {
+    pub hwnd: isize,
     pub gui_context: Option<egui::Context>,
     pub clap_manager: ClapManager,
     pub cursor: Cursor,
@@ -50,6 +51,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(view_sender: Sender<SingerCommand>, sender_to_loop: Sender<MainToPlugin>) -> Self {
         Self {
+            hwnd: 0,
             gui_context: None,
             clap_manager: ClapManager::new(),
             cursor: Cursor {
@@ -156,6 +158,7 @@ impl AppState {
             self.song_open_p = true;
             self.view_sender.send(SingerCommand::SongOpen(
                 path.to_str().map(|s| s.to_string()).unwrap(),
+                self.hwnd,
             ))?;
         }
         Ok(())

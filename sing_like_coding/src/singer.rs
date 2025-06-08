@@ -36,12 +36,12 @@ pub enum SingerCommand {
     NoteOn(usize, i16, i16, f64, u8),
     #[allow(dead_code)]
     NoteOff(usize, i16, i16, f64, u8),
-    PluginLoad(usize, Description),
+    PluginLoad(usize, Description, isize),
     PluginDelete(usize, usize),
     TrackAdd,
     LaneAdd(usize),
     SongFile(String),
-    SongOpen(String),
+    SongOpen(String, isize),
 }
 
 #[derive(Debug, Default)]
@@ -141,6 +141,7 @@ impl Singer {
         track_index: usize,
         description: &Description,
         gui_open_p: bool,
+        hwnd: isize,
     ) -> Result<usize> {
         let id = next_id();
 
@@ -168,6 +169,7 @@ impl Singer {
             description.id.clone(),
             track_index,
             gui_open_p,
+            hwnd,
         ))?;
 
         self.song.tracks[track_index].modules.push(Module::new(
@@ -297,7 +299,7 @@ impl Singer {
         Ok(())
     }
 
-    pub fn song_open(&mut self, song_file: String) -> anyhow::Result<()> {
+    pub fn song_open(&mut self, song_file: String, hwnd: isize) -> anyhow::Result<()> {
         let file = File::open(&song_file)?;
         let reader = BufReader::new(file);
         let song = serde_json::from_reader(reader)?;
@@ -316,7 +318,7 @@ impl Singer {
                     .id
                     .clone();
                 let description = clap_manager.description(&module_id);
-                xs.push((track_index, description, module_id));
+                xs.push((track_index, description));
             }
         }
 
@@ -324,14 +326,8 @@ impl Singer {
             self.song.tracks[track_index].modules.clear();
         }
 
-        for (track_index, description, module_id) in xs {
-            let id = self.plugin_load(track_index, description.unwrap(), false)?;
-            self.sender_to_loop.send(MainToPlugin::Load(
-                id,
-                module_id.clone(),
-                track_index,
-                false,
-            ))?;
+        for (track_index, description) in xs {
+            self.plugin_load(track_index, description.unwrap(), false, hwnd)?;
         }
 
         self.song_file = Some(song_file);
@@ -434,11 +430,11 @@ async fn singer_loop(
                     singer.send_song();
                 }
             }
-            SingerCommand::PluginLoad(track_index, description) => {
+            SingerCommand::PluginLoad(track_index, description, hwnd) => {
                 log::debug!("will send MainToPlugin::Load {:?}", description);
 
                 let mut singer = singer.lock().unwrap();
-                singer.plugin_load(track_index, &description, true)?;
+                singer.plugin_load(track_index, &description, true, hwnd)?;
 
                 singer.send_song();
             }
@@ -477,10 +473,10 @@ async fn singer_loop(
                 singer.song_file = Some(song_file);
                 singer.send_state();
             }
-            SingerCommand::SongOpen(song_file) => {
+            SingerCommand::SongOpen(song_file, hwnd) => {
                 let mut singer = singer.lock().unwrap();
                 singer.song_close()?;
-                singer.song_open(song_file)?;
+                singer.song_open(song_file, hwnd)?;
                 singer.send_song();
                 singer.send_state();
             }

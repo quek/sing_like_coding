@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow::Result;
 use common::protocol::MainToPlugin;
 use eframe::egui;
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 use crate::app_state::{AppState, AppStateCommand};
 use crate::communicator::Communicator;
@@ -90,9 +91,12 @@ impl eframe::App for AppMain {
         sleep(Duration::from_millis(100));
     }
 
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if self.state.lock().unwrap().gui_context.is_none() {
             self.state.lock().unwrap().gui_context = Some(ctx.clone());
+        }
+        if self.state.lock().unwrap().hwnd == 0 {
+            self.state.lock().unwrap().hwnd = get_hwnd(frame);
         }
         let _ = self.view.view(ctx, &mut self.device);
     }
@@ -106,4 +110,13 @@ async fn send_to_plugin_process(
     plugin_comminicator.run().await?;
 
     Ok(())
+}
+
+fn get_hwnd(frame: &eframe::Frame) -> isize {
+    if let Ok(window_handle) = frame.window_handle() {
+        if let RawWindowHandle::Win32(h) = window_handle.as_raw() {
+            return isize::from(h.hwnd);
+        }
+    }
+    0
 }

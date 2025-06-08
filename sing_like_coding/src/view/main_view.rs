@@ -74,7 +74,11 @@ impl MainView {
                     for track_index in &state.selected_tracks {
                         state
                             .view_sender
-                            .send(SingerCommand::PluginLoad(*track_index, description.clone()))
+                            .send(SingerCommand::PluginLoad(
+                                *track_index,
+                                description.clone(),
+                                state.hwnd,
+                            ))
                             .unwrap();
                     }
 

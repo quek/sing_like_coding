@@ -70,6 +70,7 @@ pub struct Plugin {
     host_latency: clap_host_latency,
     host_log: clap_host_log,
     host_params: clap_host_params,
+    hwnd: isize,
 }
 
 pub const NAME: &CStr = cstr!("Sing Like Coding");
@@ -78,7 +79,7 @@ pub const URL: &CStr = cstr!("https://github.com/quek/sing_like_coding");
 pub const VERSION: &CStr = cstr!("0.0.1");
 
 impl Plugin {
-    pub fn new(sender_to_view: Sender<PluginPtr>) -> Pin<Box<Self>> {
+    pub fn new(sender_to_view: Sender<PluginPtr>, hwnd: isize) -> Pin<Box<Self>> {
         let clap_host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: null_mut::<c_void>(),
@@ -136,6 +137,7 @@ impl Plugin {
             host_latency,
             host_log,
             host_params,
+            hwnd,
         });
 
         let ptr = this.as_mut().get_mut() as *mut _ as *mut c_void;
@@ -397,7 +399,13 @@ impl Plugin {
                 panic!("GUI get_size failed");
             }
 
-            let window_handler = create_handler(resizable, width, height, self.clap_host.host_data);
+            let window_handler = create_handler(
+                resizable,
+                width,
+                height,
+                self.clap_host.host_data,
+                self.hwnd,
+            );
             self.window_handler = Some(window_handler.clone());
             let parent_window = clap_window_handle {
                 win32: window_handler,

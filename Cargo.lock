@@ -3396,6 +3396,7 @@ dependencies = [
  "libloading",
  "log",
  "miow",
+ "raw-window-handle",
  "rayon",
  "rfd",
  "serde",

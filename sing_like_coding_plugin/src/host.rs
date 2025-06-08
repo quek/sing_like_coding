@@ -29,12 +29,13 @@ impl Host {
         description: &Description,
         sender: Sender<PluginPtr>,
         gui_open_p: bool,
+        hwnd: isize,
     ) -> anyhow::Result<Self> {
         let (event_quit_name, _x) = event_quit_name(id);
         let event_quit =
             unsafe { CreateEventA(None, false.into(), false.into(), event_quit_name)? };
 
-        let mut plugin = Plugin::new(sender);
+        let mut plugin = Plugin::new(sender, hwnd);
         plugin.load(Path::new(&description.path), description.index);
         plugin.start()?;
         if gui_open_p {
