@@ -86,9 +86,12 @@ impl Track {
             let prev = &mut left[module_index - 1];
             let curr = &mut right[0];
 
+            curr.process_data().constant_mask_in = prev.process_data().constant_mask_out;
+
             let buffer_out = &prev.process_data().buffer_out;
             let buffer_in = &mut curr.process_data().buffer_in;
 
+            // TODO constant_mask が立っている場合
             for ch in 0..context.nchannels {
                 buffer_in[ch].copy_from_slice(&buffer_out[ch]);
             }

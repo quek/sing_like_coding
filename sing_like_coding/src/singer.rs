@@ -225,12 +225,23 @@ impl Singer {
             .process_track_contexts
             .iter_mut()
             .filter_map(|x| x.plugins.last_mut())
-            .map(|plugin_ref: &mut PluginRef| &plugin_ref.process_data().buffer_out)
+            .map(|plugin_ref: &mut PluginRef| {
+                let constant_mask = plugin_ref.process_data().constant_mask_out;
+                (&plugin_ref.process_data().buffer_out, constant_mask)
+            })
             .collect::<Vec<_>>();
         for channel in 0..nchannels {
             for frame in 0..nframes {
-                output[nchannels * frame + channel] =
-                    buffers.iter().map(|buffer| buffer[channel][frame]).sum();
+                output[nchannels * frame + channel] = buffers
+                    .iter()
+                    .map(|(buffer, constant_mask)| {
+                        if (constant_mask & (1 << channel)) == 0 {
+                            buffer[channel][frame]
+                        } else {
+                            buffer[channel][0]
+                        }
+                    })
+                    .sum();
             }
         }
 

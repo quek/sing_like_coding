@@ -450,7 +450,7 @@ impl Plugin {
             data64: null_mut::<*mut f64>(),
             channel_count: context.nchannels as u32,
             latency: 0,
-            constant_mask: 0,
+            constant_mask: context.constant_mask_in,
         };
         let mut audio_inputs = [audio_input];
 
@@ -538,6 +538,8 @@ impl Plugin {
         if status == CLAP_PROCESS_ERROR {
             panic!("process returns CLAP_PROCESS_ERROR");
         }
+
+        context.constant_mask_out = audio_output.constant_mask;
 
         // TODO out_events
         self.event_list_input.clear();

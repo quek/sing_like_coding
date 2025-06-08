@@ -1,4 +1,4 @@
-pub const MAX_CANNELS: usize = 2;
+pub const MAX_CHANNELS: usize = 2;
 pub const MAX_FRAMES: usize = 2048;
 pub const MAX_EVENTS: usize = 64;
 
@@ -13,8 +13,10 @@ pub struct ProcessData {
     pub steady_time: i64,
     pub nevents_input: usize,
     pub events_input: [Event; MAX_EVENTS],
-    pub buffer_in: [[f32; MAX_FRAMES]; MAX_CANNELS],
-    pub buffer_out: [[f32; MAX_FRAMES]; MAX_CANNELS],
+    pub buffer_in: [[f32; MAX_FRAMES]; MAX_CHANNELS],
+    pub buffer_out: [[f32; MAX_FRAMES]; MAX_CHANNELS],
+    pub constant_mask_in: u64,
+    pub constant_mask_out: u64,
 }
 
 #[repr(C)]
@@ -37,7 +39,7 @@ pub enum EventKind {
 impl ProcessData {
     pub fn new() -> Self {
         Self {
-            nchannels: MAX_CANNELS,
+            nchannels: MAX_CHANNELS,
             nframes: MAX_FRAMES,
             play_p: 0,
             bpm: 120.0,
@@ -52,13 +54,21 @@ impl ProcessData {
                 channel: 0,
                 delay: 0,
             }; MAX_EVENTS],
-            buffer_in: [[0.0; MAX_FRAMES]; MAX_CANNELS],
-            buffer_out: [[0.0; MAX_FRAMES]; MAX_CANNELS],
+            buffer_in: [[0.0; MAX_FRAMES]; MAX_CHANNELS],
+            buffer_out: [[0.0; MAX_FRAMES]; MAX_CHANNELS],
+            constant_mask_in: 0,
+            constant_mask_out: 0,
         }
     }
 
     pub fn prepare(&mut self) {
         self.nevents_input = 0;
+        for channel in 0..MAX_CHANNELS {
+            self.buffer_in[channel][0] = 0.0;
+            self.buffer_out[channel][0] = 0.0;
+            self.constant_mask_in |= 1 << channel;
+            self.constant_mask_out |= 1 << channel;
+        }
     }
 
     pub fn note_on(&mut self, key: i16, velocity: f64, channel: i16, delay: u8) {
