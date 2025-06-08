@@ -21,6 +21,9 @@ impl Track {
     }
 
     pub fn compute_midi(&self, context: &mut ProcessTrackContext) {
+        if !context.play_p {
+            return;
+        }
         let ranges = if context.play_position.start < context.play_position.end {
             vec![context.play_position.clone()]
         } else {
