@@ -67,10 +67,15 @@ impl Manager {
         loop {
             if let Ok(message) = self.receiver_from_loop.try_recv() {
                 match message {
-                    MainToPlugin::Load(id, clap_id, track_index) => {
+                    MainToPlugin::Load(id, clap_id, track_index, gui_open_p) => {
                         log::debug!("will load {id}");
                         let description = self.clap_manager.description(&clap_id).unwrap();
-                        let host = Host::new(id, description, self.sender_from_plugin.clone())?;
+                        let host = Host::new(
+                            id,
+                            description,
+                            self.sender_from_plugin.clone(),
+                            gui_open_p,
+                        )?;
                         loop {
                             if self.hosts.len() > track_index {
                                 break;

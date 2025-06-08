@@ -162,12 +162,6 @@ impl AppState {
     }
 
     pub fn song_open_did(&mut self, song: Song) -> anyhow::Result<()> {
-        for track_index in 0..self.song.tracks.len() {
-            for module_index in 0..self.song.tracks[track_index].modules.len() {
-                self.sender_to_loop
-                    .send(MainToPlugin::Unload(track_index, module_index))?;
-            }
-        }
         self.song = song;
         Ok(())
     }

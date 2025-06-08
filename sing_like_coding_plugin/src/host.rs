@@ -28,6 +28,7 @@ impl Host {
         id: usize,
         description: &Description,
         sender: Sender<PluginPtr>,
+        gui_open_p: bool,
     ) -> anyhow::Result<Self> {
         let (event_quit_name, _x) = event_quit_name(id);
         let event_quit =
@@ -36,7 +37,9 @@ impl Host {
         let mut plugin = Plugin::new(sender);
         plugin.load(Path::new(&description.path), description.index);
         plugin.start()?;
-        plugin.gui_open()?;
+        if gui_open_p {
+            plugin.gui_open()?;
+        }
 
         let plugin_ptr: PluginPtr = (&mut plugin).into();
         tokio::spawn(async move {

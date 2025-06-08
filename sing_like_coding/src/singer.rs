@@ -17,9 +17,9 @@ use crate::{
 
 use anyhow::Result;
 use common::{
-    event::Event, module::Module, plugin::description::Description, plugin_ref::PluginRef,
-    process_data::ProcessData, process_track_context::ProcessTrackContext, protocol::MainToPlugin,
-    shmem::process_data_name,
+    clap_manager::ClapManager, event::Event, module::Module, plugin::description::Description,
+    plugin_ref::PluginRef, process_data::ProcessData, process_track_context::ProcessTrackContext,
+    protocol::MainToPlugin, shmem::process_data_name,
 };
 use rayon::prelude::*;
 use shared_memory::{Shmem, ShmemConf, ShmemError};
@@ -104,15 +104,8 @@ impl Singer {
             process_elasped_last: Instant::now(),
             process_elasped_avg: 0.0,
         };
-        this.add_track();
+        this.track_add();
         this
-    }
-
-    fn add_track(&mut self) {
-        self.song.add_track();
-        self.process_track_contexts
-            .push(ProcessTrackContext::default());
-        self.shmems.push(vec![]);
     }
 
     fn compute_play_position(&mut self, frames_count: usize) {
@@ -141,6 +134,47 @@ impl Singer {
                 self.play_position.end = self.loop_range.start + overflow;
             }
         }
+    }
+
+    pub fn plugin_load(
+        &mut self,
+        track_index: usize,
+        description: &Description,
+        gui_open_p: bool,
+    ) -> Result<usize> {
+        let id = next_id();
+
+        let shmem_name = process_data_name(id);
+        let shmem = ShmemConf::new()
+            .size(size_of::<ProcessData>())
+            .os_id(dbg!(&shmem_name))
+            .create();
+        let shmem = match shmem {
+            Ok(s) => s,
+            Err(ShmemError::MappingIdExists) => ShmemConf::new()
+                .os_id(&shmem_name)
+                .open()
+                .expect("failed to open existing shared memory"),
+            Err(e) => panic!("Unexpected shared memory error: {:?}", e),
+        };
+
+        self.process_track_contexts[track_index]
+            .plugins
+            .push(PluginRef::new(id, shmem.as_ptr() as *mut ProcessData)?);
+        self.shmems[track_index].push(shmem);
+
+        self.sender_to_loop.send(MainToPlugin::Load(
+            id,
+            description.id.clone(),
+            track_index,
+            gui_open_p,
+        ))?;
+
+        self.song.tracks[track_index].modules.push(Module::new(
+            description.id.clone(),
+            description.name.clone(),
+        ));
+        Ok(id)
     }
 
     pub fn process(&mut self, output: &mut [f32], nchannels: usize) -> Result<()> {
@@ -227,6 +261,72 @@ impl Singer {
         self.play_p = true;
     }
 
+    pub fn plugin_delete(&mut self, track_index: usize, module_index: usize) -> anyhow::Result<()> {
+        self.song.tracks[track_index].modules.remove(module_index);
+        self.process_track_contexts[track_index]
+            .plugins
+            .remove(module_index);
+        self.shmems[track_index].remove(module_index);
+        self.sender_to_loop
+            .send(MainToPlugin::Unload(track_index, module_index))?;
+        Ok(())
+    }
+
+    pub fn song_close(&mut self) -> anyhow::Result<()> {
+        for track_index in 0..self.song.tracks.len() {
+            for module_index in 0..self.song.tracks[track_index].modules.len() {
+                self.plugin_delete(track_index, module_index)?;
+            }
+        }
+        self.song = Song::new();
+        self.process_track_contexts.clear();
+        self.shmems.clear();
+        self.track_add();
+
+        Ok(())
+    }
+
+    pub fn song_open(&mut self, song_file: String) -> anyhow::Result<()> {
+        let file = File::open(&song_file)?;
+        let reader = BufReader::new(file);
+        let song = serde_json::from_reader(reader)?;
+
+        self.song = song;
+
+        let clap_manager = ClapManager::new();
+        let mut xs = vec![];
+        for track_index in 0..self.song.tracks.len() {
+            self.process_track_contexts
+                .push(ProcessTrackContext::default());
+            self.shmems.push(vec![]);
+
+            for module_index in 0..self.song.tracks[track_index].modules.len() {
+                let module_id = self.song.tracks[track_index].modules[module_index]
+                    .id
+                    .clone();
+                let description = clap_manager.description(&module_id);
+                xs.push((track_index, description, module_id));
+            }
+        }
+
+        for track_index in 0..self.song.tracks.len() {
+            self.song.tracks[track_index].modules.clear();
+        }
+
+        for (track_index, description, module_id) in xs {
+            let id = self.plugin_load(track_index, description.unwrap(), false)?;
+            self.sender_to_loop.send(MainToPlugin::Load(
+                id,
+                module_id.clone(),
+                track_index,
+                false,
+            ))?;
+        }
+
+        self.song_file = Some(song_file);
+        Ok(())
+    }
+
     pub fn stop(&mut self) {
         if !self.play_p {
             return;
@@ -260,6 +360,13 @@ impl Singer {
                 cpu_usage: self.cpu_usage,
             }))
             .unwrap();
+    }
+
+    fn track_add(&mut self) {
+        self.song.add_track();
+        self.process_track_contexts
+            .push(ProcessTrackContext::default());
+        self.shmems.push(vec![]);
     }
 }
 
@@ -320,50 +427,13 @@ async fn singer_loop(
                 log::debug!("will send MainToPlugin::Load {:?}", description);
 
                 let mut singer = singer.lock().unwrap();
-                let id = next_id();
-
-                let shmem_name = process_data_name(id);
-                let shmem = ShmemConf::new()
-                    .size(size_of::<ProcessData>())
-                    .os_id(dbg!(&shmem_name))
-                    .create();
-                let shmem = match shmem {
-                    Ok(s) => s,
-                    Err(ShmemError::MappingIdExists) => ShmemConf::new()
-                        .os_id(&shmem_name)
-                        .open()
-                        .expect("failed to open existing shared memory"),
-                    Err(e) => panic!("Unexpected shared memory error: {:?}", e),
-                };
-
-                singer.process_track_contexts[track_index]
-                    .plugins
-                    .push(PluginRef::new(id, shmem.as_ptr() as *mut ProcessData)?);
-                singer.shmems[track_index].push(shmem);
-
-                singer.sender_to_loop.send(MainToPlugin::Load(
-                    id,
-                    description.id.clone(),
-                    track_index,
-                ))?;
-
-                singer.song.tracks[track_index].modules.push(Module::new(
-                    description.id.clone(),
-                    description.name.clone(),
-                ));
+                singer.plugin_load(track_index, &description, true)?;
 
                 singer.send_song();
             }
             SingerCommand::PluginDelete(track_index, module_index) => {
                 let mut singer = singer.lock().unwrap();
-                singer.song.tracks[track_index].modules.remove(module_index);
-                singer.process_track_contexts[track_index]
-                    .plugins
-                    .remove(module_index);
-                singer.shmems[track_index].remove(module_index);
-                singer
-                    .sender_to_loop
-                    .send(MainToPlugin::Unload(track_index, module_index))?;
+                singer.plugin_delete(track_index, module_index)?;
 
                 singer.send_song();
             }
@@ -381,7 +451,7 @@ async fn singer_loop(
             }
             SingerCommand::TrackAdd => {
                 let mut singer = singer.lock().unwrap();
-                singer.add_track();
+                singer.track_add();
                 singer.send_song();
             }
             SingerCommand::LaneAdd(track_index) => {
@@ -398,10 +468,8 @@ async fn singer_loop(
             }
             SingerCommand::SongOpen(song_file) => {
                 let mut singer = singer.lock().unwrap();
-                let file = File::open(&song_file)?;
-                let reader = BufReader::new(file);
-                singer.song = serde_json::from_reader(reader)?;
-                singer.song_file = Some(song_file);
+                singer.song_close()?;
+                singer.song_open(song_file)?;
                 singer.send_song();
                 singer.send_state();
             }
