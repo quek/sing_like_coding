@@ -8,7 +8,7 @@ use crate::{app_state::AppState, device::Device, singer::SingerCommand, util::wi
 
 use super::{
     main_view::Route,
-    shortcut_key::{Modifier, ShortcutKey},
+    shortcut_key::{shortcut_key, Modifier},
     util::LabelBuilder,
 };
 
@@ -289,15 +289,14 @@ impl TrackView {
         gui_context: &eframe::egui::Context,
         state: &mut AppState,
     ) -> Result<()> {
-        let input = gui_context.input(|i| i.clone());
         let focused = gui_context.memory(|memory| memory.focused());
         if focused.is_some() {
             return Ok(());
         }
 
-        for (key, value) in self.shortcut_map.iter() {
-            if input.is(key.0, key.1) {
-                state.run_ui_command(value)?;
+        if let Some(key) = shortcut_key(gui_context) {
+            if let Some(command) = self.shortcut_map.get(&key) {
+                state.run_ui_command(command)?;
             }
         }
 
