@@ -1,7 +1,7 @@
 use anyhow::Result;
 use eframe::egui::Key;
 
-use crate::{app_state::AppState, device::Device, singer::SingerCommand, song_state::SongState};
+use crate::{app_state::AppState, device::Device, singer::SingerCommand};
 
 use super::{
     command_view::CommandView, plugin_select_view::PluginSelectView, track_view::TrackView,
@@ -15,7 +15,6 @@ pub enum Route {
 }
 
 pub struct MainView {
-    gui_context: Option<eframe::egui::Context>,
     track_view: TrackView,
     command_view: CommandView,
     plugin_select_view: Option<PluginSelectView>,
@@ -24,7 +23,6 @@ pub struct MainView {
 impl MainView {
     pub fn new() -> Self {
         Self {
-            gui_context: None,
             track_view: TrackView::new(),
             command_view: CommandView::new(),
             plugin_select_view: None,
@@ -36,7 +34,6 @@ impl MainView {
         gui_context: &eframe::egui::Context,
         device: &mut Option<Device>,
         state: &mut AppState,
-        song_state: &SongState,
     ) -> Result<()> {
         self.process_shortcut(state, gui_context)?;
 
@@ -93,7 +90,7 @@ impl MainView {
         if input.modifiers.ctrl && input.key_pressed(eframe::egui::Key::Space) {
             state.route = Route::Command;
         } else if input.key_pressed(Key::Space) {
-            state.view_sender.send(if state.xsong_state.play_p {
+            state.view_sender.send(if state.song_state.play_p {
                 SingerCommand::Stop
             } else {
                 SingerCommand::Play

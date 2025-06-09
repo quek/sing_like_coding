@@ -4,7 +4,6 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use common::protocol::{MainToPlugin, PluginToMain};
-use common::shmem::{open_shared_memory, SONG_STATE_NAME};
 use eframe::egui;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -12,7 +11,6 @@ use crate::app_state::{AppState, AppStateCommand};
 use crate::communicator::Communicator;
 use crate::device::Device;
 use crate::singer::{Singer, SingerCommand};
-use crate::song_state::SongState;
 use crate::view::main_view::MainView;
 
 pub fn main() -> eframe::Result {
@@ -34,12 +32,11 @@ pub fn main() -> eframe::Result {
 }
 
 struct AppMain<'a> {
-    state: AppState,
+    state: AppState<'a>,
     device: Option<Device>,
     singer: Arc<Mutex<Singer>>,
     view: MainView,
     song_sender: Sender<AppStateCommand>,
-    song_state: &'a SongState,
     receiver_main_thread_to_communicator: Option<Receiver<MainToPlugin>>,
     sender_communicator_to_main_thread: Option<Sender<PluginToMain>>,
 }
@@ -60,9 +57,6 @@ impl<'a> Default for AppMain<'a> {
             sender_to_loop.clone(),
         )));
         Singer::start_listener(singer.clone(), view_receiver);
-
-        let song_state_shmem = open_shared_memory::<SongState>(SONG_STATE_NAME).unwrap();
-        let song_state = unsafe { &*(song_state_shmem.as_ptr() as *const SongState) };
 
         let mut device = Device::open_default(singer.clone()).unwrap();
         device.start().unwrap();
@@ -90,7 +84,6 @@ impl<'a> Default for AppMain<'a> {
             singer,
             view,
             song_sender: sender_to_app_state,
-            song_state,
             receiver_main_thread_to_communicator: Some(receiver_from_main),
             sender_communicator_to_main_thread: Some(sender_communicator_to_main_thread),
         }
@@ -124,9 +117,7 @@ impl<'a> eframe::App for AppMain<'a> {
 
             self.state.hwnd = get_hwnd(frame);
         }
-        let _ = self
-            .view
-            .view(ctx, &mut self.device, &mut self.state, self.song_state);
+        let _ = self.view.view(ctx, &mut self.device, &mut self.state);
     }
 }
 

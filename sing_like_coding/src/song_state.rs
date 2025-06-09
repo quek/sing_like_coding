@@ -2,7 +2,7 @@ pub const MAX_PATH_LEN: usize = 1024;
 
 #[repr(C)]
 pub struct SongState {
-    pub song_file: [u8; MAX_PATH_LEN],
+    song_file: [u8; MAX_PATH_LEN],
     pub play_p: bool,
     pub line_play: usize,
     pub loop_p: bool,
@@ -13,7 +13,7 @@ pub struct SongState {
 }
 
 impl SongState {
-    pub fn get_song_file_str(&self) -> Option<String> {
+    pub fn get_song_file(&self) -> Option<String> {
         let nul_pos = self
             .song_file
             .iter()

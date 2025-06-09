@@ -51,17 +51,6 @@ pub enum SingerCommand {
     SongOpen(String, isize),
 }
 
-#[derive(Debug, Default)]
-pub struct XSongState {
-    pub song_file: Option<String>,
-    pub play_p: bool,
-    pub line_play: usize,
-    pub loop_p: bool,
-    pub loop_range: Range<usize>,
-    pub process_elasped_avg: f64,
-    pub cpu_usage: f64,
-}
-
 pub struct Singer {
     pub song_file: Option<String>,
     pub steady_time: i64,
@@ -71,7 +60,7 @@ pub struct Singer {
     pub loop_range: Range<usize>,
     all_notef_off_p: bool,
     pub song: Song,
-    song_state_shmem: Shmem,
+    _song_state_shmem: Shmem,
     song_state_ptr: *mut SongState,
     song_sender: Sender<AppStateCommand>,
     pub sender_to_loop: Sender<MainToPlugin>,
@@ -104,7 +93,7 @@ impl Singer {
             loop_range: 0..(0x100 * 0x20),
             all_notef_off_p: false,
             song,
-            song_state_shmem,
+            _song_state_shmem: song_state_shmem,
             song_state_ptr,
             song_sender,
             sender_to_loop,
@@ -338,6 +327,7 @@ impl Singer {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn song_state(&self) -> &SongState {
         unsafe { &*(self.song_state_ptr) }
     }
@@ -378,21 +368,7 @@ impl Singer {
         state.loop_end = self.loop_range.end;
         state.process_elasped_avg = self.process_elasped_avg;
         state.cpu_usage = self.cpu_usage;
-
-        {
-            self.song_sender
-                .send(AppStateCommand::State(XSongState {
-                    song_file: self.song_file.clone(),
-                    play_p: self.play_p,
-                    line_play: self.line_play,
-                    loop_p: self.loop_p,
-                    loop_range: self.loop_range.clone(),
-                    process_elasped_avg: self.process_elasped_avg,
-                    cpu_usage: self.cpu_usage,
-                }))
-                .unwrap();
-            self.gui_context.as_ref().map(|x| x.request_repaint());
-        }
+        self.gui_context.as_ref().map(|x| x.request_repaint());
     }
 
     fn track_add(&mut self) {

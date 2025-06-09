@@ -10,14 +10,17 @@ use common::{
     clap_manager::ClapManager,
     module::Module,
     protocol::{MainToPlugin, PluginToMain},
+    shmem::{open_shared_memory, SONG_STATE_NAME},
 };
 use eframe::egui;
 use rfd::FileDialog;
+use shared_memory::Shmem;
 
 use crate::{
     command::{track_add::TrackAdd, Command},
     model::{note::Note, song::Song},
-    singer::{SingerCommand, XSongState},
+    singer::SingerCommand,
+    song_state::SongState,
     view::{main_view::Route, track_view::UiCommand},
 };
 
@@ -28,7 +31,7 @@ pub struct Cursor {
     pub line: usize,
 }
 
-pub struct AppState {
+pub struct AppState<'a> {
     pub hwnd: isize,
     pub gui_context: Option<egui::Context>,
     pub clap_manager: ClapManager,
@@ -38,23 +41,26 @@ pub struct AppState {
     pub selected_cells: Vec<(usize, usize)>,
     pub selected_tracks: Vec<usize>,
     pub song: Song,
-    pub xsong_state: XSongState,
-    // song_state_ptr: *mut SongState,
     pub view_sender: Sender<SingerCommand>,
     pub sender_to_loop: Sender<MainToPlugin>,
     receiver_communicator_to_main_thread: Receiver<PluginToMain>,
     receiver_from_singer: Receiver<AppStateCommand>,
     nmodules_saving: usize,
     pub song_open_p: bool,
+    _song_state_shmem: Shmem,
+    pub song_state: &'a SongState,
 }
 
-impl AppState {
+impl<'a> AppState<'a> {
     pub fn new(
         view_sender: Sender<SingerCommand>,
         sender_to_loop: Sender<MainToPlugin>,
         receiver_communicator_to_main_thread: Receiver<PluginToMain>,
         receiver_from_singer: Receiver<AppStateCommand>,
     ) -> Self {
+        let song_state_shmem = open_shared_memory::<SongState>(SONG_STATE_NAME).unwrap();
+        let song_state = unsafe { &*(song_state_shmem.as_ptr() as *const SongState) };
+
         Self {
             hwnd: 0,
             gui_context: None,
@@ -76,14 +82,14 @@ impl AppState {
             selected_cells: vec![(0, 0)],
             selected_tracks: vec![0],
             song: Song::new(),
-            xsong_state: XSongState::default(),
-            // song_state_ptr: null_mut(),
             view_sender,
             sender_to_loop,
             receiver_communicator_to_main_thread,
             receiver_from_singer,
             nmodules_saving: 0,
             song_open_p: false,
+            _song_state_shmem: song_state_shmem,
+            song_state,
         }
     }
 
@@ -143,9 +149,6 @@ impl AppState {
                     } else {
                         self.song = song;
                     }
-                }
-                AppStateCommand::State(song_state) => {
-                    self.xsong_state = song_state;
                 }
                 AppStateCommand::Quit => (),
             }
@@ -236,7 +239,7 @@ impl AppState {
     }
 
     fn song_save_file(&mut self) -> anyhow::Result<()> {
-        let song_file = if let Some(song_file) = &self.xsong_state.song_file {
+        let song_file = if let Some(song_file) = &self.song_state.get_song_file() {
             song_file.into()
         } else {
             if let Some(path) = FileDialog::new()
@@ -262,7 +265,6 @@ impl AppState {
 #[derive(Debug)]
 pub enum AppStateCommand {
     Song(Song),
-    State(XSongState),
     Quit,
 }
 
