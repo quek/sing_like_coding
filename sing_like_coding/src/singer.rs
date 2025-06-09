@@ -366,6 +366,15 @@ impl Singer {
     }
 
     fn send_state(&self) {
+        let state = self.song_state_mut();
+        state.set_song_file(&self.song_file.clone().unwrap_or_default());
+        state.play_p = self.play_p;
+        state.line_play = self.line_play;
+        state.loop_p = self.loop_p;
+        state.loop_start = self.loop_range.start;
+        state.loop_end = self.loop_range.end;
+        state.process_elasped_avg = self.process_elasped_avg;
+        state.cpu_usage = self.cpu_usage;
         self.song_sender
             .send(AppStateCommand::State(XSongState {
                 song_file: self.song_file.clone(),
