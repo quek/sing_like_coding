@@ -50,7 +50,12 @@ impl PluginRef {
         Ok(())
     }
 
-    pub fn process_data(&mut self) -> &mut ProcessData {
+    pub fn process_data(&self) -> &ProcessData {
+        let x: &ProcessData = unsafe { &*(self.ptr) };
+        x
+    }
+
+    pub fn process_data_mut(&mut self) -> &mut ProcessData {
         let x: &mut ProcessData = unsafe { &mut *(self.ptr) };
         x
     }

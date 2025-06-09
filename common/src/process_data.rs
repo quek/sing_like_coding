@@ -63,17 +63,16 @@ impl ProcessData {
         }
     }
 
-    pub fn peak(&self) -> Vec<f32> {
-        (0..self.nchannels)
-            .into_iter()
-            .map(|channel| {
-                linear_to_db(
-                    self.buffer_out[channel]
-                        .iter()
-                        .fold(0.0, |acc: f32, x| acc.max(x.abs())),
-                )
-            })
-            .collect::<Vec<_>>()
+    pub fn peak(&self, channel: usize) -> f32 {
+        if self.constant_mask_out & (1 << channel) == 0 {
+            linear_to_db(
+                self.buffer_out[channel]
+                    .iter()
+                    .fold(0.0, |acc: f32, x| acc.max(x.abs())),
+            )
+        } else {
+            self.buffer_out[channel][0].abs()
+        }
     }
 
     pub fn prepare(&mut self) {

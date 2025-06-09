@@ -275,6 +275,17 @@ impl TrackView {
                                 state.route = Route::PluginSelect;
                             }
 
+                            for channel in 0..2 {
+                                LabelBuilder::new(
+                                    ui,
+                                    format!(
+                                        "{:.2}dB",
+                                        state.song_state.tracks[track_index].peaks[channel]
+                                    ),
+                                )
+                                .build();
+                            }
+
                             Ok(())
                         });
                     }

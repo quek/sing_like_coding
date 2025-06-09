@@ -1,4 +1,7 @@
+use common::process_data::MAX_CHANNELS;
+
 pub const MAX_PATH_LEN: usize = 1024;
+pub const MAX_TRACKS: usize = 0xff;
 
 #[repr(C)]
 pub struct SongState {
@@ -10,6 +13,7 @@ pub struct SongState {
     pub loop_end: usize,
     pub process_elasped_avg: f64,
     pub cpu_usage: f64,
+    pub tracks: [TrackState; MAX_TRACKS],
 }
 
 impl SongState {
@@ -30,4 +34,9 @@ impl SongState {
         self.song_file[..len].copy_from_slice(&bytes[..len]);
         self.song_file[len] = 0; // null 終端
     }
+}
+
+#[repr(C)]
+pub struct TrackState {
+    pub peaks: [f32; MAX_CHANNELS],
 }

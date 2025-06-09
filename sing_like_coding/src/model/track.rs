@@ -72,12 +72,8 @@ impl Track {
         Ok(())
     }
 
-    fn peak(samples: &[f32]) -> f32 {
-        samples.iter().copied().fold(0.0, |a, b| a.max(b.abs()))
-    }
-
     fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
-        let data = context.plugins[module_index].process_data();
+        let data = context.plugins[module_index].process_data_mut();
         for event in context.event_list_input.drain(..) {
             match event {
                 Event::NoteOn(key, velocity, delay) => data.note_on(key, velocity, 0, delay),
@@ -95,11 +91,11 @@ impl Track {
             let prev = &mut left[module_index - 1];
             let curr = &mut right[0];
 
-            let constant_mask = prev.process_data().constant_mask_out;
-            curr.process_data().constant_mask_in = constant_mask;
+            let constant_mask = prev.process_data_mut().constant_mask_out;
+            curr.process_data_mut().constant_mask_in = constant_mask;
 
-            let buffer_out = &prev.process_data().buffer_out;
-            let buffer_in = &mut curr.process_data().buffer_in;
+            let buffer_out = &prev.process_data_mut().buffer_out;
+            let buffer_in = &mut curr.process_data_mut().buffer_in;
 
             for ch in 0..context.nchannels {
                 if (constant_mask & (1 << ch)) == 0 {

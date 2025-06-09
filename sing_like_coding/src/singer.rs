@@ -182,8 +182,8 @@ impl Singer {
 
         for track_index in 0..self.process_track_contexts.len() {
             for module_index in 0..self.process_track_contexts[track_index].plugins.len() {
-                let process_data =
-                    self.process_track_contexts[track_index].plugins[module_index].process_data();
+                let process_data = self.process_track_contexts[track_index].plugins[module_index]
+                    .process_data_mut();
                 process_data.nchannels = nchannels;
                 process_data.nframes = nframes;
                 process_data.play_p = if self.play_p { 1 } else { 0 };
@@ -221,8 +221,8 @@ impl Singer {
             .iter_mut()
             .filter_map(|x| x.plugins.last_mut())
             .map(|plugin_ref: &mut PluginRef| {
-                let constant_mask = plugin_ref.process_data().constant_mask_out;
-                (&plugin_ref.process_data().buffer_out, constant_mask)
+                let constant_mask = plugin_ref.process_data_mut().constant_mask_out;
+                (&plugin_ref.process_data_mut().buffer_out, constant_mask)
             })
             .collect::<Vec<_>>();
         for channel in 0..nchannels {
@@ -239,6 +239,8 @@ impl Singer {
                     .sum();
             }
         }
+
+        self.compute_song_state();
 
         self.steady_time += nframes as i64;
 
@@ -349,6 +351,22 @@ impl Singer {
         tokio::spawn(async move {
             singer_loop(singer, receiver).await.unwrap();
         });
+    }
+
+    fn compute_song_state(&mut self) {
+        let song_state = self.song_state_mut();
+        let process_data_list = self
+            .process_track_contexts
+            .iter()
+            .filter_map(|x| x.plugins.last())
+            .map(|plugin_ref: &PluginRef| plugin_ref.process_data())
+            .collect::<Vec<_>>();
+        for track_index in 0..process_data_list.len() {
+            let process_data = &process_data_list[track_index];
+            for channel in 0..process_data.nchannels {
+                song_state.tracks[track_index].peaks[channel] = process_data.peak(channel);
+            }
+        }
     }
 
     fn send_song(&self) {
