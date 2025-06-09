@@ -78,6 +78,7 @@ pub struct Singer {
     line_play: usize,
     process_track_contexts: Vec<ProcessTrackContext>,
     shmems: Vec<Vec<Shmem>>,
+    pub gui_context: Option<eframe::egui::Context>,
 
     cpu_usages: Vec<f64>,
     cpu_usage: f64,
@@ -110,6 +111,7 @@ impl Singer {
             line_play: 0,
             process_track_contexts: vec![],
             shmems: vec![],
+            gui_context: None,
 
             cpu_usages: vec![],
             cpu_usage: 0.0,
@@ -363,6 +365,7 @@ impl Singer {
         self.song_sender
             .send(AppStateCommand::Song(self.song.clone()))
             .unwrap();
+        self.gui_context.as_ref().map(|x| x.request_repaint());
     }
 
     fn send_state(&self) {
@@ -375,17 +378,21 @@ impl Singer {
         state.loop_end = self.loop_range.end;
         state.process_elasped_avg = self.process_elasped_avg;
         state.cpu_usage = self.cpu_usage;
-        self.song_sender
-            .send(AppStateCommand::State(XSongState {
-                song_file: self.song_file.clone(),
-                play_p: self.play_p,
-                line_play: self.line_play,
-                loop_p: self.loop_p,
-                loop_range: self.loop_range.clone(),
-                process_elasped_avg: self.process_elasped_avg,
-                cpu_usage: self.cpu_usage,
-            }))
-            .unwrap();
+
+        {
+            self.song_sender
+                .send(AppStateCommand::State(XSongState {
+                    song_file: self.song_file.clone(),
+                    play_p: self.play_p,
+                    line_play: self.line_play,
+                    loop_p: self.loop_p,
+                    loop_range: self.loop_range.clone(),
+                    process_elasped_avg: self.process_elasped_avg,
+                    cpu_usage: self.cpu_usage,
+                }))
+                .unwrap();
+            self.gui_context.as_ref().map(|x| x.request_repaint());
+        }
     }
 
     fn track_add(&mut self) {

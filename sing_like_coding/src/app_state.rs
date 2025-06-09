@@ -3,11 +3,7 @@ use std::{
     fs::File,
     io::Write,
     path::PathBuf,
-    sync::{
-        mpsc::{Receiver, Sender},
-        Arc, Mutex,
-    },
-    thread,
+    sync::mpsc::{Receiver, Sender},
 };
 
 use common::{
@@ -47,6 +43,7 @@ pub struct AppState {
     pub view_sender: Sender<SingerCommand>,
     pub sender_to_loop: Sender<MainToPlugin>,
     receiver_communicator_to_main_thread: Receiver<PluginToMain>,
+    receiver_from_singer: Receiver<AppStateCommand>,
     nmodules_saving: usize,
     pub song_open_p: bool,
 }
@@ -56,6 +53,7 @@ impl AppState {
         view_sender: Sender<SingerCommand>,
         sender_to_loop: Sender<MainToPlugin>,
         receiver_communicator_to_main_thread: Receiver<PluginToMain>,
+        receiver_from_singer: Receiver<AppStateCommand>,
     ) -> Self {
         Self {
             hwnd: 0,
@@ -83,6 +81,7 @@ impl AppState {
             view_sender,
             sender_to_loop,
             receiver_communicator_to_main_thread,
+            receiver_from_singer,
             nmodules_saving: 0,
             song_open_p: false,
         }
@@ -135,7 +134,27 @@ impl AppState {
             .and_then(|x| x.modules.get_mut(module_index))
     }
 
-    pub fn receive_communicator_to_main_thread(&mut self) -> anyhow::Result<()> {
+    pub fn receive_from_singer(&mut self) -> anyhow::Result<()> {
+        while let Ok(command) = self.receiver_from_singer.try_recv() {
+            match command {
+                AppStateCommand::Song(song) => {
+                    if self.song_open_p {
+                        self.song_open_did(song).unwrap();
+                    } else {
+                        self.song = song;
+                    }
+                }
+                AppStateCommand::State(song_state) => {
+                    self.xsong_state = song_state;
+                }
+                AppStateCommand::Quit => (),
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn receive_from_communicator(&mut self) -> anyhow::Result<()> {
         while let Ok(message) = self.receiver_communicator_to_main_thread.try_recv() {
             match message {
                 PluginToMain::DidLoad => (),
@@ -245,34 +264,6 @@ pub enum AppStateCommand {
     Song(Song),
     State(XSongState),
     Quit,
-}
-
-pub fn loop_receive_from_audio_thread(
-    state: Arc<Mutex<AppState>>,
-    receiver: Receiver<AppStateCommand>,
-    gui_context: &eframe::egui::Context,
-) {
-    let gui_context = gui_context.clone();
-    thread::spawn(move || {
-        while let Ok(command) = receiver.recv() {
-            match command {
-                AppStateCommand::Song(song) => {
-                    let mut state = state.lock().unwrap();
-                    if state.song_open_p {
-                        state.song_open_did(song).unwrap();
-                    } else {
-                        state.song = song;
-                    }
-                    gui_context.request_repaint();
-                }
-                AppStateCommand::State(song_state) => {
-                    state.lock().unwrap().xsong_state = song_state;
-                    gui_context.request_repaint();
-                }
-                AppStateCommand::Quit => return,
-            }
-        }
-    });
 }
 
 fn song_directory() -> PathBuf {
