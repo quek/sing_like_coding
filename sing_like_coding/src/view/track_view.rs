@@ -93,9 +93,9 @@ impl TrackView {
                 ui.heading("Sing Like Coding");
                 ui.label(format!(
                     "{:.3}ms",
-                    state.song_state.process_elasped_avg * 1000.0
+                    state.xsong_state.process_elasped_avg * 1000.0
                 ));
-                ui.label(format!("{:.3}%", state.song_state.cpu_usage * 100.0));
+                ui.label(format!("{:.3}%", state.xsong_state.cpu_usage * 100.0));
             });
         });
 
@@ -118,8 +118,8 @@ impl TrackView {
                 if ui.button("Stop").clicked() {
                     state.view_sender.send(SingerCommand::Stop)?;
                 }
-                ui.label(format!("Line {:04}", state.song_state.line_play));
-                let mut loop_p = state.song_state.loop_p;
+                ui.label(format!("Line {:04}", state.xsong_state.line_play));
+                let mut loop_p = state.xsong_state.loop_p;
                 if ui.toggle_value(&mut loop_p, "Loop").clicked() {
                     state.view_sender.send(SingerCommand::Loop)?;
                 }
@@ -171,9 +171,9 @@ impl TrackView {
                         ui.label(" ");
                         for line in line_range.clone() {
                             Frame::NONE
-                                .fill(if line == state.song_state.line_play {
+                                .fill(if line == state.xsong_state.line_play {
                                     Color32::DARK_GREEN
-                                } else if state.song_state.loop_range.contains(&(line * 0x100)) {
+                                } else if state.xsong_state.loop_range.contains(&(line * 0x100)) {
                                     Color32::from_rgb(0x00, 0x30, 0x00)
                                 } else {
                                     Color32::BLACK
@@ -204,7 +204,7 @@ impl TrackView {
                                                     && state.cursor.line == line
                                                 {
                                                     Color32::YELLOW
-                                                } else if line == state.song_state.line_play {
+                                                } else if line == state.xsong_state.line_play {
                                                     Color32::DARK_GREEN
                                                 } else if state
                                                     .selected_cells

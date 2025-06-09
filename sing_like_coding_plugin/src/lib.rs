@@ -1,5 +1,5 @@
 pub mod app;
-mod comminicator;
+mod communicator;
 mod event_list;
 mod host;
 mod manager;

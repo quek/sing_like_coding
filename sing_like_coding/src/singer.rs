@@ -12,17 +12,24 @@ use std::{
 use crate::{
     app_state::{AppStateCommand, Cursor},
     model::{lane::Lane, note::Note, song::Song},
+    song_state::SongState,
     util::next_id,
 };
 
 use anyhow::Result;
 use common::{
-    clap_manager::ClapManager, event::Event, module::Module, plugin::description::Description,
-    plugin_ref::PluginRef, process_data::ProcessData, process_track_context::ProcessTrackContext,
-    protocol::MainToPlugin, shmem::process_data_name,
+    clap_manager::ClapManager,
+    event::Event,
+    module::Module,
+    plugin::description::Description,
+    plugin_ref::PluginRef,
+    process_data::ProcessData,
+    process_track_context::ProcessTrackContext,
+    protocol::MainToPlugin,
+    shmem::{create_shared_memory, process_data_name, SONG_STATE_NAME},
 };
 use rayon::prelude::*;
-use shared_memory::{Shmem, ShmemConf, ShmemError};
+use shared_memory::Shmem;
 
 #[derive(Debug)]
 pub enum SingerCommand {
@@ -45,7 +52,7 @@ pub enum SingerCommand {
 }
 
 #[derive(Debug, Default)]
-pub struct SongState {
+pub struct XSongState {
     pub song_file: Option<String>,
     pub play_p: bool,
     pub line_play: usize,
@@ -64,6 +71,8 @@ pub struct Singer {
     pub loop_range: Range<usize>,
     all_notef_off_p: bool,
     pub song: Song,
+    song_state_shmem: Shmem,
+    song_state_ptr: *mut SongState,
     song_sender: Sender<AppStateCommand>,
     pub sender_to_loop: Sender<MainToPlugin>,
     line_play: usize,
@@ -82,6 +91,8 @@ unsafe impl Sync for Singer {}
 
 impl Singer {
     pub fn new(song_sender: Sender<AppStateCommand>, sender_to_loop: Sender<MainToPlugin>) -> Self {
+        let song_state_shmem = create_shared_memory::<SongState>(SONG_STATE_NAME).unwrap();
+        let song_state_ptr = song_state_shmem.as_ptr() as *mut SongState;
         let song = Song::new();
         let mut this = Self {
             song_file: None,
@@ -92,6 +103,8 @@ impl Singer {
             loop_range: 0..(0x100 * 0x20),
             all_notef_off_p: false,
             song,
+            song_state_shmem,
+            song_state_ptr,
             song_sender,
             sender_to_loop,
             line_play: 0,
@@ -146,18 +159,7 @@ impl Singer {
         let id = next_id();
 
         let shmem_name = process_data_name(id);
-        let shmem = ShmemConf::new()
-            .size(size_of::<ProcessData>())
-            .os_id(dbg!(&shmem_name))
-            .create();
-        let shmem = match shmem {
-            Ok(s) => s,
-            Err(ShmemError::MappingIdExists) => ShmemConf::new()
-                .os_id(&shmem_name)
-                .open()
-                .expect("failed to open existing shared memory"),
-            Err(e) => panic!("Unexpected shared memory error: {:?}", e),
-        };
+        let shmem = create_shared_memory::<ProcessData>(&shmem_name)?;
 
         self.process_track_contexts[track_index]
             .plugins
@@ -334,6 +336,14 @@ impl Singer {
         Ok(())
     }
 
+    pub fn song_state(&self) -> &SongState {
+        unsafe { &*(self.song_state_ptr) }
+    }
+
+    pub fn song_state_mut(&self) -> &mut SongState {
+        unsafe { &mut *(self.song_state_ptr) }
+    }
+
     pub fn stop(&mut self) {
         if !self.play_p {
             return;
@@ -357,7 +367,7 @@ impl Singer {
 
     fn send_state(&self) {
         self.song_sender
-            .send(AppStateCommand::State(SongState {
+            .send(AppStateCommand::State(XSongState {
                 song_file: self.song_file.clone(),
                 play_p: self.play_p,
                 line_play: self.line_play,

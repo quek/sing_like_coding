@@ -3,10 +3,12 @@ use std::{path::Path, pin::Pin, sync::mpsc::Sender};
 use common::{
     plugin::description::Description,
     process_data::ProcessData,
-    shmem::{event_quit_name, event_request_name, event_response_name, process_data_name},
+    shmem::{
+        event_quit_name, event_request_name, event_response_name, open_shared_memory,
+        process_data_name,
+    },
     str::to_pcstr,
 };
-use shared_memory::ShmemConf;
 use windows::Win32::{
     Foundation::{HANDLE, WAIT_EVENT, WAIT_OBJECT_0},
     Storage::FileSystem::SYNCHRONIZE,
@@ -65,10 +67,7 @@ impl Host {
 }
 
 async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
-    let shmem = ShmemConf::new()
-        .size(size_of::<ProcessData>())
-        .os_id(process_data_name(id))
-        .open()?;
+    let shmem = open_shared_memory::<ProcessData>(&process_data_name(id))?;
     let process_data: &mut ProcessData = unsafe { &mut *(shmem.as_ptr() as *mut ProcessData) };
 
     let (event_name, _x) = event_request_name(id);

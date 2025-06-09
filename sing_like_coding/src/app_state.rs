@@ -21,7 +21,7 @@ use rfd::FileDialog;
 use crate::{
     command::{track_add::TrackAdd, Command},
     model::{note::Note, song::Song},
-    singer::{SingerCommand, SongState},
+    singer::{SingerCommand, XSongState},
     view::{main_view::Route, track_view::UiCommand},
 };
 
@@ -42,15 +42,21 @@ pub struct AppState {
     pub selected_cells: Vec<(usize, usize)>,
     pub selected_tracks: Vec<usize>,
     pub song: Song,
-    pub song_state: SongState,
+    pub xsong_state: XSongState,
+    // song_state_ptr: *mut SongState,
     pub view_sender: Sender<SingerCommand>,
     pub sender_to_loop: Sender<MainToPlugin>,
+    receiver_communicator_to_main_thread: Receiver<PluginToMain>,
     nmodules_saving: usize,
     pub song_open_p: bool,
 }
 
 impl AppState {
-    pub fn new(view_sender: Sender<SingerCommand>, sender_to_loop: Sender<MainToPlugin>) -> Self {
+    pub fn new(
+        view_sender: Sender<SingerCommand>,
+        sender_to_loop: Sender<MainToPlugin>,
+        receiver_communicator_to_main_thread: Receiver<PluginToMain>,
+    ) -> Self {
         Self {
             hwnd: 0,
             gui_context: None,
@@ -72,9 +78,11 @@ impl AppState {
             selected_cells: vec![(0, 0)],
             selected_tracks: vec![0],
             song: Song::new(),
-            song_state: SongState::default(),
+            xsong_state: XSongState::default(),
+            // song_state_ptr: null_mut(),
             view_sender,
             sender_to_loop,
+            receiver_communicator_to_main_thread,
             nmodules_saving: 0,
             song_open_p: false,
         }
@@ -127,27 +135,29 @@ impl AppState {
             .and_then(|x| x.modules.get_mut(module_index))
     }
 
-    pub fn received_from_plugin_process(&mut self, message: PluginToMain) -> anyhow::Result<()> {
-        match message {
-            PluginToMain::DidLoad => (),
-            PluginToMain::DidUnload(_track_index, _module_index) => (),
-            PluginToMain::DidGuiOpen => (),
-            PluginToMain::DidScan => {
-                self.clap_manager.load()?;
-            }
-            PluginToMain::DidStateLoad => (),
-            PluginToMain::DidStateSave(track_index, module_index, state) => {
-                if let Some(module) = self.module_mut(track_index, module_index) {
-                    module.state = Some(state);
+    pub fn receive_communicator_to_main_thread(&mut self) -> anyhow::Result<()> {
+        while let Ok(message) = self.receiver_communicator_to_main_thread.try_recv() {
+            match message {
+                PluginToMain::DidLoad => (),
+                PluginToMain::DidUnload(_track_index, _module_index) => (),
+                PluginToMain::DidGuiOpen => (),
+                PluginToMain::DidScan => {
+                    self.clap_manager.load()?;
                 }
-                if self.nmodules_saving > 0 {
-                    self.nmodules_saving -= 1;
-                    if self.nmodules_saving == 0 {
-                        self.song_save_file()?;
+                PluginToMain::DidStateLoad => (),
+                PluginToMain::DidStateSave(track_index, module_index, state) => {
+                    if let Some(module) = self.module_mut(track_index, module_index) {
+                        module.state = Some(state);
+                    }
+                    if self.nmodules_saving > 0 {
+                        self.nmodules_saving -= 1;
+                        if self.nmodules_saving == 0 {
+                            self.song_save_file()?;
+                        }
                     }
                 }
+                PluginToMain::Quit => (),
             }
-            PluginToMain::Quit => (),
         }
         Ok(())
     }
@@ -207,7 +217,7 @@ impl AppState {
     }
 
     fn song_save_file(&mut self) -> anyhow::Result<()> {
-        let song_file = if let Some(song_file) = &self.song_state.song_file {
+        let song_file = if let Some(song_file) = &self.xsong_state.song_file {
             song_file.into()
         } else {
             if let Some(path) = FileDialog::new()
@@ -233,7 +243,7 @@ impl AppState {
 #[derive(Debug)]
 pub enum AppStateCommand {
     Song(Song),
-    State(SongState),
+    State(XSongState),
     Quit,
 }
 
@@ -256,7 +266,7 @@ pub fn loop_receive_from_audio_thread(
                     gui_context.request_repaint();
                 }
                 AppStateCommand::State(song_state) => {
-                    state.lock().unwrap().song_state = song_state;
+                    state.lock().unwrap().xsong_state = song_state;
                     gui_context.request_repaint();
                 }
                 AppStateCommand::Quit => return,

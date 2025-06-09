@@ -72,6 +72,10 @@ impl Track {
         Ok(())
     }
 
+    fn peak(samples: &[f32]) -> f32 {
+        samples.iter().copied().fold(0.0, |a, b| a.max(b.abs()))
+    }
+
     fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
         let data = context.plugins[module_index].process_data();
         for event in context.event_list_input.drain(..) {

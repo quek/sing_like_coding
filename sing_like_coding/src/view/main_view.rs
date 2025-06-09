@@ -7,6 +7,7 @@ use crate::{
     app_state::{loop_receive_from_audio_thread, AppState, AppStateCommand},
     device::Device,
     singer::SingerCommand,
+    song_state::SongState,
 };
 
 use super::{
@@ -45,6 +46,7 @@ impl MainView {
         &mut self,
         gui_context: &eframe::egui::Context,
         device: &mut Option<Device>,
+        song_state: &SongState,
     ) -> Result<()> {
         if let Some(receiver) = self.song_receiver.take() {
             loop_receive_from_audio_thread(self.state.clone(), receiver, gui_context);
@@ -54,6 +56,8 @@ impl MainView {
         self.process_shortcut(gui_context)?;
 
         let mut state = self.state.lock().unwrap();
+        state.receive_communicator_to_main_thread()?;
+
         match &state.route {
             Route::Track => self.track_view.view(gui_context, &mut state, device)?,
             Route::Command => self.command_view.view(gui_context, &mut state)?,
@@ -102,7 +106,7 @@ impl MainView {
         if input.modifiers.ctrl && input.key_pressed(eframe::egui::Key::Space) {
             state.route = Route::Command;
         } else if input.key_pressed(Key::Space) {
-            state.view_sender.send(if state.song_state.play_p {
+            state.view_sender.send(if state.xsong_state.play_p {
                 SingerCommand::Stop
             } else {
                 SingerCommand::Play

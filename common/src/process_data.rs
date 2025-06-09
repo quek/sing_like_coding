@@ -1,3 +1,5 @@
+use crate::dsp::linear_to_db;
+
 pub const MAX_CHANNELS: usize = 2;
 pub const MAX_FRAMES: usize = 2048;
 pub const MAX_EVENTS: usize = 64;
@@ -59,6 +61,19 @@ impl ProcessData {
             constant_mask_in: 0,
             constant_mask_out: 0,
         }
+    }
+
+    pub fn peak(&self) -> Vec<f32> {
+        (0..self.nchannels)
+            .into_iter()
+            .map(|channel| {
+                linear_to_db(
+                    self.buffer_out[channel]
+                        .iter()
+                        .fold(0.0, |acc: f32, x| acc.max(x.abs())),
+                )
+            })
+            .collect::<Vec<_>>()
     }
 
     pub fn prepare(&mut self) {

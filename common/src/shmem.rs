@@ -1,9 +1,11 @@
 use std::ffi::CString;
 
-use shared_memory::{Shmem, ShmemConf};
+use shared_memory::{Shmem, ShmemConf, ShmemError};
 use windows::core::PCSTR;
 
-use crate::{audio_buffer::AudioBuffer, str::to_pcstr};
+use crate::str::to_pcstr;
+
+pub const SONG_STATE_NAME: &str = "SingLikeCoding.Song.State";
 
 pub fn process_data_name(id: usize) -> String {
     format!("SingLikeCoding.Process.Data.{}", id)
@@ -21,19 +23,16 @@ pub fn event_quit_name(id: usize) -> (PCSTR, CString) {
     to_pcstr(&format!("SingLikeCoding.Process.Quit.{}", id)).unwrap()
 }
 
-pub const SHMEM_NAME: &str = "MySharedMemory";
-pub const EVENT_NAME: &str = "MyPluginEvent";
-
-pub fn create_shared_memory() -> anyhow::Result<Shmem> {
-    Ok(ShmemConf::new()
-        .size(size_of::<AudioBuffer>())
-        .os_id(SHMEM_NAME)
-        .create()?)
+pub fn create_shared_memory<T>(name: &str) -> anyhow::Result<Shmem> {
+    let shmem = ShmemConf::new().size(size_of::<T>()).os_id(name).create();
+    let shmem = match shmem {
+        Ok(s) => s,
+        Err(ShmemError::MappingIdExists) => open_shared_memory::<T>(name)?,
+        Err(e) => panic!("Unexpected shared memory error: {:?}", e),
+    };
+    Ok(shmem)
 }
 
-pub fn open_shared_memory() -> anyhow::Result<Shmem> {
-    Ok(ShmemConf::new()
-        .size(size_of::<AudioBuffer>())
-        .os_id(SHMEM_NAME)
-        .open()?)
+pub fn open_shared_memory<T>(name: &str) -> anyhow::Result<Shmem> {
+    Ok(ShmemConf::new().size(size_of::<T>()).os_id(name).open()?)
 }

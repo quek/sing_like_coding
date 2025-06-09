@@ -5,7 +5,7 @@ use std::sync::mpsc::Sender;
 use common::protocol::MainToPlugin;
 use common::protocol::PluginToMain;
 
-use crate::comminicator::Communicator;
+use crate::communicator::Communicator;
 use crate::manager::Manager;
 
 pub fn main() {

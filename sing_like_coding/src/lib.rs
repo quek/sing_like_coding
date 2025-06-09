@@ -6,5 +6,6 @@ mod communicator;
 mod device;
 mod model;
 mod singer;
+mod song_state;
 mod util;
 mod view;
