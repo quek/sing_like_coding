@@ -64,15 +64,14 @@ impl ProcessData {
     }
 
     pub fn peak(&self, channel: usize) -> f32 {
-        if self.constant_mask_out & (1 << channel) == 0 {
-            linear_to_db(
-                self.buffer_out[channel]
-                    .iter()
-                    .fold(0.0, |acc: f32, x| acc.max(x.abs())),
-            )
+        let value = if self.constant_mask_out & (1 << channel) == 0 {
+            self.buffer_out[channel][..self.nframes]
+                .iter()
+                .fold(0.0, |acc: f32, x| acc.max(x.abs()))
         } else {
             self.buffer_out[channel][0].abs()
-        }
+        };
+        linear_to_db(value)
     }
 
     pub fn prepare(&mut self) {
