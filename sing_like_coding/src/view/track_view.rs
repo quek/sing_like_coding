@@ -116,17 +116,6 @@ impl TrackView {
         });
 
         CentralPanel::default().show(gui_context, |ui: &mut Ui| -> anyhow::Result<()> {
-            ui.horizontal(|ui| {
-                if ui.button("device start").clicked() {
-                    device.as_mut().unwrap().start().unwrap();
-                }
-                if ui.button("device stop").clicked() {
-                    device.as_mut().unwrap().stop().unwrap();
-                }
-            });
-
-            ui.separator();
-
             ui.horizontal(|ui| -> anyhow::Result<()> {
                 if ui.button("Play").clicked() {
                     state.view_sender.send(SingerCommand::Play)?;
@@ -138,6 +127,12 @@ impl TrackView {
                 let mut loop_p = state.song_state.loop_p;
                 if ui.toggle_value(&mut loop_p, "Loop").clicked() {
                     state.view_sender.send(SingerCommand::Loop)?;
+                }
+                if ui.button("device start").clicked() {
+                    device.as_mut().unwrap().start().unwrap();
+                }
+                if ui.button("device stop").clicked() {
+                    device.as_mut().unwrap().stop().unwrap();
                 }
                 Ok(())
             });
