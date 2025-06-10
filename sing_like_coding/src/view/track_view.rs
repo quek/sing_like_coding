@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use common::{dsp::db_from_norm, protocol::MainToPlugin};
+use common::{
+    dsp::{db_from_norm, db_to_norm},
+    protocol::MainToPlugin,
+};
 use eframe::egui::{CentralPanel, Color32, Frame, Key, Label, TopBottomPanel, Ui};
 
 use crate::{app_state::AppState, device::Device, singer::SingerCommand, util::with_font_mono};
@@ -93,6 +96,8 @@ impl TrackView {
         device: &mut Option<Device>,
     ) -> Result<()> {
         self.process_shortcut(gui_context, state)?;
+
+        let mut commands = vec![];
 
         TopBottomPanel::top("Top").show(gui_context, |ui| {
             ui.horizontal(|ui| {
@@ -191,7 +196,8 @@ impl TrackView {
                                 });
                         }
                     });
-                    for (track_index, track) in state.song.tracks.iter_mut().enumerate() {
+
+                    for (track_index, track) in state.song.tracks.iter().enumerate() {
                         ui.vertical(|ui| -> anyhow::Result<()> {
                             with_font_mono(ui, |ui| {
                                 Frame::NONE
@@ -250,7 +256,7 @@ impl TrackView {
                                 });
                             });
 
-                            for (module_index, module) in track.modules.iter_mut().enumerate() {
+                            for (module_index, module) in track.modules.iter().enumerate() {
                                 let label = LabelBuilder::new(ui, &module.name)
                                     .size([DEFAULT_TRACK_WIDTH, 0.0])
                                     .build();
@@ -287,7 +293,7 @@ impl TrackView {
                                 LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
                             }
 
-                            ui.horizontal(|ui| {
+                            ui.horizontal(|ui| -> anyhow::Result<()> {
                                 let height = 160.0;
 
                                 ui.add(StereoPeakMeter {
@@ -300,12 +306,22 @@ impl TrackView {
 
                                 let mut db_value =
                                     db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
-                                ui.add(DbSlider {
-                                    db_value: &mut db_value,
-                                    min_db: DB_MIN,
-                                    max_db: DB_MAX,
-                                    height,
-                                });
+                                if ui
+                                    .add(DbSlider {
+                                        db_value: &mut db_value,
+                                        min_db: DB_MIN,
+                                        max_db: DB_MAX,
+                                        height,
+                                    })
+                                    .changed()
+                                {
+                                    commands.push(UiCommand::TrackVolume(
+                                        track_index,
+                                        db_to_norm(db_value, DB_MIN, DB_MAX),
+                                    ));
+                                }
+
+                                Ok(())
                             });
 
                             Ok(())
@@ -315,6 +331,10 @@ impl TrackView {
             });
             Ok(())
         });
+
+        for command in commands {
+            state.run_ui_command(&command)?;
+        }
 
         Ok(())
     }
@@ -357,6 +377,7 @@ pub enum UiCommand {
     NoteUpdate(i16, i16, i16, bool),
     NoteDelte,
     TrackAdd,
+    TrackVolume(usize, f32),
     LaneAdd,
     CursorUp,
     CursorDown,

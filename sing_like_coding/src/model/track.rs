@@ -9,7 +9,7 @@ use super::lane::Lane;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
     pub name: String,
-    pub volume: f64,
+    pub volume: f32,
     pub pan: f64,
     pub modules: Vec<Module>,
     pub lanes: Vec<Lane>,
@@ -19,7 +19,7 @@ impl Track {
     pub fn new() -> Self {
         Self {
             name: "T01".to_string(),
-            volume: db_to_norm(0.0, -60.0, 6.0) as f64,
+            volume: db_to_norm(0.0, -60.0, 6.0),
             pan: 0.5,
             modules: vec![],
             lanes: vec![Lane::new()],

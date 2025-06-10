@@ -193,6 +193,9 @@ impl<'a> AppState<'a> {
                 .view_sender
                 .send(SingerCommand::NoteDelete(self.cursor.clone()))?,
             UiCommand::TrackAdd => TrackAdd {}.call(self)?,
+            UiCommand::TrackVolume(track_index, volume) => self
+                .view_sender
+                .send(SingerCommand::TrackVolume(*track_index, *volume))?,
             UiCommand::LaneAdd => self
                 .view_sender
                 .send(SingerCommand::LaneAdd(self.cursor.track))?,

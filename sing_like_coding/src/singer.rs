@@ -46,6 +46,7 @@ pub enum SingerCommand {
     PluginLoad(usize, Description, isize),
     PluginDelete(usize, usize),
     TrackAdd,
+    TrackVolume(usize, f32),
     LaneAdd(usize),
     SongFile(String),
     SongOpen(String, isize),
@@ -485,6 +486,13 @@ async fn singer_loop(
                 let mut singer = singer.lock().unwrap();
                 singer.track_add();
                 singer.send_song();
+            }
+            SingerCommand::TrackVolume(track_index, volume) => {
+                let mut singer = singer.lock().unwrap();
+                if let Some(track) = singer.song.tracks.get_mut(track_index) {
+                    track.volume = volume;
+                    singer.send_song();
+                }
             }
             SingerCommand::LaneAdd(track_index) => {
                 let mut singer = singer.lock().unwrap();

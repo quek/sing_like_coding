@@ -28,7 +28,14 @@ impl<'a> Widget for DbSlider<'a> {
         }
 
         // 背景
-        painter.rect_filled(rect, 0.0, Color32::BLACK);
+        painter.rect_filled(
+            Rect::from_min_max(
+                Pos2::new(rect.min.x + 2.0, rect.min.y),
+                Pos2::new(rect.max.x - 2.0, rect.max.y),
+            ),
+            0.0,
+            Color32::BLACK,
+        );
 
         // スライダーのノブ
         let knob_y = rect.top() + rect.height() * norm_value;
