@@ -9,6 +9,7 @@ use crate::{app_state::AppState, device::Device, singer::SingerCommand, util::wi
 use super::{
     main_view::Route,
     shortcut_key::{shortcut_key, Modifier},
+    stereo_peak_meter::{StereoPeakLevelState, StereoPeakMeter},
     util::LabelBuilder,
 };
 
@@ -16,6 +17,7 @@ const DEFAULT_TRACK_WIDTH: f32 = 64.0;
 
 pub struct TrackView {
     shortcut_map: HashMap<(Modifier, Key), UiCommand>,
+    stereo_peak_level_states: Vec<StereoPeakLevelState>,
 }
 
 impl TrackView {
@@ -77,7 +79,10 @@ impl TrackView {
         ];
         let shortcut_map: HashMap<_, _> = shortcut_map.into_iter().collect();
 
-        Self { shortcut_map }
+        Self {
+            shortcut_map,
+            stereo_peak_level_states: vec![],
+        }
     }
 
     pub fn view(
@@ -286,6 +291,15 @@ impl TrackView {
                                 .build();
                             }
 
+                            let peak_level_state = self.stereo_peak_level_state(track_index);
+                            peak_level_state.update(&state.song_state.tracks[track_index].peaks);
+                            ui.add(StereoPeakMeter {
+                                peak_level_state,
+                                min_db: -60.0,
+                                max_db: 0.0,
+                                show_scale: true,
+                            });
+
                             Ok(())
                         });
                     }
@@ -314,6 +328,12 @@ impl TrackView {
         }
 
         Ok(())
+    }
+
+    fn stereo_peak_level_state(&mut self, track_index: usize) -> &mut StereoPeakLevelState {
+        self.stereo_peak_level_states
+            .resize_with(track_index + 1, Default::default);
+        &mut self.stereo_peak_level_states[track_index]
     }
 }
 
