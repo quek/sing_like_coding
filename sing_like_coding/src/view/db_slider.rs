@@ -11,7 +11,7 @@ pub struct DbSlider<'a> {
 
 impl<'a> Widget for DbSlider<'a> {
     fn ui(self, ui: &mut Ui) -> Response {
-        let width = 24.0;
+        let width = 12.0;
         let (rect, response) =
             ui.allocate_exact_size(Vec2::new(width, self.height), Sense::click_and_drag());
         let painter = ui.painter_at(rect);
@@ -28,25 +28,28 @@ impl<'a> Widget for DbSlider<'a> {
         }
 
         // 背景
-        painter.rect_filled(rect, 4.0, Color32::DARK_GRAY);
+        painter.rect_filled(rect, 0.0, Color32::BLACK);
 
         // スライダーのノブ
         let knob_y = rect.top() + rect.height() * norm_value;
         let knob_rect = Rect::from_center_size(
             Pos2::new(rect.center().x, knob_y),
-            Vec2::new(rect.width(), 6.0),
+            Vec2::new(rect.width(), 5.0),
         );
-        painter.rect_filled(knob_rect, 2.0, Color32::WHITE);
+        painter.rect_filled(knob_rect, 0.0, Color32::LIGHT_GRAY);
 
         // メモリ描画
-        let steps = [-60, -48, -36, -24, -18, -12, -6, -3, 0, 3, 6];
+        let steps = [-60, -36, -24, -18, -12, -6, 0];
         for &db in &steps {
             if db as f32 >= self.min_db && db as f32 <= self.max_db {
                 let y =
                     rect.bottom() - rect.height() * db_to_norm(db as f32, self.min_db, self.max_db);
                 painter.line_segment(
-                    [Pos2::new(rect.left(), y), Pos2::new(rect.left() + 8.0, y)],
-                    (1.0, Color32::LIGHT_GRAY),
+                    [
+                        Pos2::new(rect.left() + 2.0, y),
+                        Pos2::new(rect.left() + 8.0, y),
+                    ],
+                    (1.0, Color32::GRAY),
                 );
             }
         }

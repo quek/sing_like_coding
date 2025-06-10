@@ -60,31 +60,31 @@ pub struct StereoPeakMeter<'a> {
     pub min_db: f32,
     pub max_db: f32,
     pub show_scale: bool,
+    pub height: f32,
 }
 
 impl<'a> Widget for StereoPeakMeter<'a> {
     fn ui(self, ui: &mut Ui) -> Response {
-        let meter_width = 12.0;
-        let spacing = 8.0;
-        let height = 120.0;
+        let meter_width = 6.0;
+        let spacing = 4.0;
         let scale_width = if self.show_scale { 20.0 } else { 0.0 };
         let total_width = meter_width * 2.0 + spacing + scale_width;
 
         let (rect, response) =
-            ui.allocate_exact_size(Vec2::new(total_width, height), Sense::hover());
+            ui.allocate_exact_size(Vec2::new(total_width, self.height), Sense::hover());
         let painter = ui.painter_at(rect);
 
         let left_rect = Rect::from_min_size(
             rect.min + Vec2::new(scale_width, 0.0),
-            Vec2::new(meter_width, height),
+            Vec2::new(meter_width, self.height),
         );
         let right_rect = Rect::from_min_size(
             Pos2::new(left_rect.max.x + spacing, rect.min.y),
-            Vec2::new(meter_width, height),
+            Vec2::new(meter_width, self.height),
         );
 
         if self.show_scale {
-            let scale_rect = Rect::from_min_size(rect.min, Vec2::new(scale_width, height));
+            let scale_rect = Rect::from_min_size(rect.min, Vec2::new(scale_width, self.height));
             draw_db_scale(&painter, scale_rect, self.min_db, self.max_db);
         }
 

@@ -286,19 +286,26 @@ impl TrackView {
                             for x in [&peak_level_state.left, &peak_level_state.right] {
                                 LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
                             }
-                            ui.add(StereoPeakMeter {
-                                peak_level_state,
-                                min_db: DB_MIN,
-                                max_db: DB_MAX,
-                                show_scale: true,
-                            });
 
-                            let mut db_value = db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
-                            ui.add(DbSlider {
-                                db_value: &mut db_value,
-                                min_db: -60.0,
-                                max_db: 6.0,
-                                height: 160.0,
+                            ui.horizontal(|ui| {
+                                let height = 160.0;
+
+                                ui.add(StereoPeakMeter {
+                                    peak_level_state,
+                                    min_db: DB_MIN,
+                                    max_db: DB_MAX,
+                                    show_scale: true,
+                                    height,
+                                });
+
+                                let mut db_value =
+                                    db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
+                                ui.add(DbSlider {
+                                    db_value: &mut db_value,
+                                    min_db: DB_MIN,
+                                    max_db: DB_MAX,
+                                    height,
+                                });
                             });
 
                             Ok(())
