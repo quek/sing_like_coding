@@ -67,7 +67,7 @@ impl<'a> Widget for StereoPeakMeter<'a> {
     fn ui(self, ui: &mut Ui) -> Response {
         let meter_width = 6.0;
         let spacing = 4.0;
-        let scale_width = if self.show_scale { 20.0 } else { 0.0 };
+        let scale_width = if self.show_scale { 14.0 } else { 0.0 };
         let total_width = meter_width * 2.0 + spacing + scale_width;
 
         let (rect, response) =
@@ -144,7 +144,7 @@ fn draw_db_scale(painter: &Painter, rect: Rect, min_db: f32, max_db: f32) {
         painter.text(
             Pos2::new(x - 2.0, y - 6.0),
             Align2::RIGHT_CENTER,
-            format!("{db}"),
+            format!("{}", db.abs()),
             FontId::monospace(10.0),
             Color32::GRAY,
         );
