@@ -94,8 +94,21 @@ impl<'a> Widget for StereoPeakMeter<'a> {
     }
 }
 
+fn normalize_db(db: f32, min_db: f32, max_db: f32) -> f32 {
+    let db = db.clamp(min_db, max_db);
+    // 0.0 = min_db, 1.0 = max_db の範囲に正規化
+    let t = (db - min_db) / (max_db - min_db);
+    curved(t, 1.5)
+}
+
+// 非線形カーブ。index < 1.0 で下側を拡大（-6dB付近の視認性向上）
+fn curved(t: f32, index: f32) -> f32 {
+    t.powf(index)
+}
+
 fn draw_meter(painter: &Painter, rect: Rect, level: &PeakLevelState, min_db: f32, max_db: f32) {
-    let norm = |db: f32| ((db - min_db) / (max_db - min_db)).clamp(0.0, 1.0);
+    let norm = |db: f32| normalize_db(db, min_db, max_db);
+
     let curr_h = rect.height() * norm(level.current_db);
     let hold_h = rect.height() * norm(level.hold_db);
 
@@ -118,13 +131,13 @@ fn draw_meter(painter: &Painter, rect: Rect, level: &PeakLevelState, min_db: f32
 }
 
 fn draw_db_scale(painter: &Painter, rect: Rect, min_db: f32, max_db: f32) {
-    let steps = [-60, -48, -36, -24, -18, -12, -6, -3, 0];
+    let steps = [-60, -36, -24, -18, -12, -6, 0];
     for &db in &steps {
         if db < min_db as i32 || db > max_db as i32 {
             continue;
         }
-        let t = ((db as f32 - min_db) / (max_db - min_db)).clamp(0.0, 1.0);
-        let y = rect.bottom() - rect.height() * t;
+        let norm = normalize_db(db as f32, min_db, max_db);
+        let y = rect.bottom() - rect.height() * norm;
         let x = rect.right();
 
         painter.text(

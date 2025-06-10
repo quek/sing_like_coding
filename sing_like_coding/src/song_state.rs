@@ -28,6 +28,11 @@ impl SongState {
         self.loop_end = singer.loop_range.end;
         self.process_elasped_avg = singer.process_elasped_avg;
         self.cpu_usage = singer.cpu_usage;
+        for track in self.tracks.iter_mut() {
+            for peak in track.peaks.iter_mut() {
+                *peak = -60.0;
+            }
+        }
     }
 
     pub fn song_file_get(&self) -> Option<String> {

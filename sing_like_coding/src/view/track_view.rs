@@ -296,7 +296,7 @@ impl TrackView {
                             ui.add(StereoPeakMeter {
                                 peak_level_state,
                                 min_db: -60.0,
-                                max_db: 0.0,
+                                max_db: 6.0,
                                 show_scale: true,
                             });
 
