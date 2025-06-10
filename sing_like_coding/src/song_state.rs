@@ -1,6 +1,7 @@
 use common::process_data::MAX_CHANNELS;
 
 use crate::singer::Singer;
+use crate::view::stereo_peak_meter::DB_MIN;
 
 pub const MAX_PATH_LEN: usize = 1024;
 pub const MAX_TRACKS: usize = 0xff;
@@ -30,7 +31,7 @@ impl SongState {
         self.cpu_usage = singer.cpu_usage;
         for track in self.tracks.iter_mut() {
             for peak in track.peaks.iter_mut() {
-                *peak = -60.0;
+                *peak = DB_MIN;
             }
         }
     }

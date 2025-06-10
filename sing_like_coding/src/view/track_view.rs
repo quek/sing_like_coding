@@ -10,7 +10,7 @@ use super::{
     db_slider::DbSlider,
     main_view::Route,
     shortcut_key::{shortcut_key, Modifier},
-    stereo_peak_meter::{StereoPeakLevelState, StereoPeakMeter},
+    stereo_peak_meter::{StereoPeakLevelState, StereoPeakMeter, DB_MAX, DB_MIN},
     util::LabelBuilder,
 };
 
@@ -288,12 +288,12 @@ impl TrackView {
                             }
                             ui.add(StereoPeakMeter {
                                 peak_level_state,
-                                min_db: -60.0,
-                                max_db: 6.0,
+                                min_db: DB_MIN,
+                                max_db: DB_MAX,
                                 show_scale: true,
                             });
 
-                            let mut db_value = db_from_norm(track.volume as f32, -60.0, 6.0);
+                            let mut db_value = db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
                             ui.add(DbSlider {
                                 db_value: &mut db_value,
                                 min_db: -60.0,

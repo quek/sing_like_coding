@@ -4,6 +4,6 @@ pub mod plugin_select_view;
 // pub mod query_view;
 mod db_slider;
 mod shortcut_key;
-mod stereo_peak_meter;
+pub mod stereo_peak_meter;
 pub mod track_view;
 mod util;

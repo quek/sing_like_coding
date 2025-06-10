@@ -3,6 +3,9 @@ use eframe::egui::{
     Align2, Color32, FontId, Painter, Pos2, Rect, Response, Sense, Ui, Vec2, Widget,
 };
 
+pub const DB_MIN: f32 = -60.0;
+pub const DB_MAX: f32 = 6.0;
+
 #[derive(Default)]
 pub struct StereoPeakLevelState {
     pub left: PeakLevelState,
@@ -16,11 +19,20 @@ impl StereoPeakLevelState {
     }
 }
 
-#[derive(Default)]
 pub struct PeakLevelState {
     pub current_db: f32,
     pub hold_db: f32,
     pub hold_timer: f32,
+}
+
+impl Default for PeakLevelState {
+    fn default() -> Self {
+        Self {
+            current_db: DB_MIN,
+            hold_db: DB_MIN,
+            hold_timer: 0.0,
+        }
+    }
 }
 
 impl PeakLevelState {
