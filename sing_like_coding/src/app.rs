@@ -118,6 +118,10 @@ impl<'a> eframe::App for AppMain<'a> {
             self.state.hwnd = get_hwnd(frame);
         }
         let _ = self.view.view(ctx, &mut self.device, &mut self.state);
+
+        // 節電
+        let repaint_after = std::time::Duration::from_secs_f64(1.0 / 4.0);
+        ctx.request_repaint_after(repaint_after);
     }
 }
 

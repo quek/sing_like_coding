@@ -46,10 +46,10 @@ impl PeakLevelState {
         if new_db >= self.hold_db {
             self.hold_db = new_db;
             self.hold_timer = 0.0;
-        } else {
+        } else if self.hold_db > DB_MIN {
             self.hold_timer += dt;
             if self.hold_timer > hold_time {
-                self.hold_db = (self.hold_db - fall_rate * dt).max(new_db);
+                self.hold_db = (self.hold_db - fall_rate * dt).max(new_db).max(DB_MIN);
             }
         }
     }
