@@ -16,6 +16,7 @@ use crate::{
 
 use super::{
     db_slider::DbSlider,
+    knob::Knob,
     main_view::Route,
     shortcut_key::{shortcut_key, Modifier},
     stereo_peak_meter::{StereoPeakLevelState, StereoPeakMeter, DB_MAX, DB_MIN},
@@ -199,6 +200,14 @@ impl TrackView {
         peak_level_state.update(&state.song_state.tracks[track_index].peaks);
         for x in [&peak_level_state.left, &peak_level_state.right] {
             LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
+        }
+
+        let mut pan = track.pan;
+        let knob = ui.add(Knob { value: &mut pan });
+        if knob.dragged() {
+            commands.push(UiCommand::TrackPan(track_index, pan));
+        } else if knob.double_clicked() {
+            commands.push(UiCommand::TrackPan(track_index, 0.5));
         }
 
         ui.horizontal(|ui| -> anyhow::Result<()> {

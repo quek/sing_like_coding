@@ -46,6 +46,7 @@ pub enum SingerCommand {
     PluginLoad(usize, Description, isize),
     PluginDelete(usize, usize),
     TrackAdd,
+    TrackPan(usize, f32),
     TrackVolume(usize, f32),
     LaneAdd(usize),
     SongFile(String),
@@ -229,12 +230,20 @@ impl Singer {
                 output[nchannels * frame + channel] = buffers
                     .iter_mut()
                     .map(|((buffer, constant_mask), track)| {
-                        if (*constant_mask & (1 << channel)) == 0 {
+                        let constp = (*constant_mask & (1 << channel)) == 1;
+                        if !constp || frame == 0 {
                             buffer[channel][frame] *= track.volume;
-                            buffer[channel][frame]
-                        } else {
-                            buffer[channel][0] *= track.volume;
+                            if (track.pan - 0.5).abs() < 0.01 {
+                            } else if channel == 0 && track.pan > 0.5 {
+                                buffer[channel][frame] *= (1.0 - track.pan) / 0.5;
+                            } else if channel == 1 && track.pan < 0.5 {
+                                buffer[channel][frame] *= track.pan / 0.5;
+                            }
+                        }
+                        if constp {
                             buffer[channel][0]
+                        } else {
+                            buffer[channel][frame]
                         }
                     })
                     .sum();
@@ -494,11 +503,17 @@ async fn singer_loop(
                 singer.track_add();
                 singer.send_song();
             }
+            SingerCommand::TrackPan(track_index, pan) => {
+                let mut singer = singer.lock().unwrap();
+                if let Some(track) = singer.song.tracks.get_mut(track_index) {
+                    track.pan = pan;
+                    singer.send_song();
+                }
+            }
             SingerCommand::TrackVolume(track_index, volume) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.volume = volume;
-                    dbg!("SingerCommand::TrackVolume", track.volume);
                     singer.send_song();
                 }
             }

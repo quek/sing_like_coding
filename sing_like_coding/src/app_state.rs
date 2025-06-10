@@ -28,6 +28,7 @@ pub enum UiCommand {
     NoteUpdate(i16, i16, i16, bool),
     NoteDelte,
     TrackAdd,
+    TrackPan(usize, f32),
     TrackVolume(usize, f32),
     LaneAdd,
     CursorUp,
@@ -207,6 +208,9 @@ impl<'a> AppState<'a> {
             UiCommand::TrackAdd => {
                 TrackAdd {}.call(self)?;
             }
+            UiCommand::TrackPan(track_index, pan) => self
+                .view_sender
+                .send(SingerCommand::TrackPan(*track_index, *pan))?,
             UiCommand::TrackVolume(track_index, volume) => self
                 .view_sender
                 .send(SingerCommand::TrackVolume(*track_index, *volume))?,

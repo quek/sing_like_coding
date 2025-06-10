@@ -12,7 +12,7 @@ pub struct Track {
     #[serde(default)]
     pub volume: f32,
     #[serde(default)]
-    pub pan: f64,
+    pub pan: f32,
     pub modules: Vec<Module>,
     pub lanes: Vec<Lane>,
 }
