@@ -1,4 +1,5 @@
 use std::{
+    f32::consts::PI,
     fs::File,
     io::BufReader,
     ops::Range,
@@ -223,29 +224,40 @@ impl Singer {
                 let constant_mask = plugin_ref.process_data_mut().constant_mask_out;
                 (&mut plugin_ref.process_data_mut().buffer_out, constant_mask)
             })
-            .zip(self.song.tracks.iter())
+            .zip(self.song.tracks.iter().map(|track| {
+                if (track.pan - 0.5).abs() < 0.01 {
+                    (track.volume, 1.0, 1.0)
+                } else {
+                    let normalized_pan = (track.pan - 0.5) * 2.0;
+                    let pan_angle = (normalized_pan + 1.0) * PI / 4.0;
+                    (track.volume, pan_angle.cos(), pan_angle.sin())
+                }
+            }))
             .collect::<Vec<_>>();
+
         for channel in 0..nchannels {
             for frame in 0..nframes {
                 output[nchannels * frame + channel] = buffers
                     .iter_mut()
-                    .map(|((buffer, constant_mask), track)| {
-                        let constp = (*constant_mask & (1 << channel)) == 1;
-                        if !constp || frame == 0 {
-                            buffer[channel][frame] *= track.volume;
-                            if (track.pan - 0.5).abs() < 0.01 {
-                            } else if channel == 0 && track.pan > 0.5 {
-                                buffer[channel][frame] *= (1.0 - track.pan) / 0.5;
-                            } else if channel == 1 && track.pan < 0.5 {
-                                buffer[channel][frame] *= track.pan / 0.5;
+                    .map(
+                        |((buffer, constant_mask), (volume, pan_gain_left, pan_gain_right))| {
+                            let constp = (*constant_mask & (1 << channel)) == 1;
+                            if !constp || frame == 0 {
+                                buffer[channel][frame] *= *volume;
+
+                                if channel == 0 {
+                                    buffer[channel][frame] *= *pan_gain_left;
+                                } else if channel == 1 {
+                                    buffer[channel][frame] *= *pan_gain_right;
+                                }
                             }
-                        }
-                        if constp {
-                            buffer[channel][0]
-                        } else {
-                            buffer[channel][frame]
-                        }
-                    })
+                            if constp {
+                                buffer[channel][0]
+                            } else {
+                                buffer[channel][frame]
+                            }
+                        },
+                    )
                     .sum();
             }
         }
