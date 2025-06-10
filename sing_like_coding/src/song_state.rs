@@ -1,5 +1,7 @@
 use common::process_data::MAX_CHANNELS;
 
+use crate::singer::Singer;
+
 pub const MAX_PATH_LEN: usize = 1024;
 pub const MAX_TRACKS: usize = 0xff;
 
@@ -17,18 +19,30 @@ pub struct SongState {
 }
 
 impl SongState {
-    pub fn get_song_file(&self) -> Option<String> {
-        let nul_pos = self
+    pub fn init(&mut self, singer: &Singer) {
+        self.song_file_set(&singer.song_file.clone().unwrap_or_default());
+        self.play_p = singer.play_p;
+        self.line_play = singer.line_play;
+        self.loop_p = singer.loop_p;
+        self.loop_start = singer.loop_range.start;
+        self.loop_end = singer.loop_range.end;
+        self.process_elasped_avg = singer.process_elasped_avg;
+        self.cpu_usage = singer.cpu_usage;
+    }
+
+    pub fn song_file_get(&self) -> Option<String> {
+        let null_pos = self
             .song_file
             .iter()
             .position(|&b| b == 0)
             .unwrap_or(self.song_file.len());
-        std::str::from_utf8(&self.song_file[..nul_pos])
+        std::str::from_utf8(&self.song_file[..null_pos])
             .ok()
+            .filter(|s| !s.is_empty())
             .map(|s| s.to_string())
     }
 
-    pub fn set_song_file(&mut self, name: &str) {
+    pub fn song_file_set(&mut self, name: &str) {
         let bytes = name.as_bytes();
         let len = bytes.len().min(self.song_file.len() - 1);
         self.song_file[..len].copy_from_slice(&bytes[..len]);

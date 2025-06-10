@@ -64,16 +64,16 @@ pub struct Singer {
     song_state_ptr: *mut SongState,
     song_sender: Sender<AppStateCommand>,
     pub sender_to_loop: Sender<MainToPlugin>,
-    line_play: usize,
+    pub line_play: usize,
     process_track_contexts: Vec<ProcessTrackContext>,
     shmems: Vec<Vec<Shmem>>,
     pub gui_context: Option<eframe::egui::Context>,
 
     cpu_usages: Vec<f64>,
-    cpu_usage: f64,
+    pub cpu_usage: f64,
     process_elaspeds: Vec<f64>,
     process_elasped_last: Instant,
-    process_elasped_avg: f64,
+    pub process_elasped_avg: f64,
 }
 
 unsafe impl Send for Singer {}
@@ -109,6 +109,7 @@ impl Singer {
             process_elasped_avg: 0.0,
         };
         this.track_add();
+        this.song_state_mut().init(&this);
         this
     }
 
@@ -358,13 +359,17 @@ impl Singer {
         let process_data_list = self
             .process_track_contexts
             .iter()
-            .filter_map(|x| x.plugins.last())
-            .map(|plugin_ref: &PluginRef| plugin_ref.process_data())
+            .map(|x| x.plugins.last().map(|x| x.process_data()))
             .collect::<Vec<_>>();
         for track_index in 0..process_data_list.len() {
-            let process_data = &process_data_list[track_index];
-            for channel in 0..process_data.nchannels {
-                song_state.tracks[track_index].peaks[channel] = process_data.peak(channel);
+            if let Some(process_data) = &process_data_list[track_index] {
+                for channel in 0..2 {
+                    song_state.tracks[track_index].peaks[channel] = process_data.peak(channel);
+                }
+            } else {
+                for channel in 0..2 {
+                    song_state.tracks[track_index].peaks[channel] = 0.0;
+                }
             }
         }
     }
@@ -378,7 +383,7 @@ impl Singer {
 
     fn send_state(&self) {
         let state = self.song_state_mut();
-        state.set_song_file(&self.song_file.clone().unwrap_or_default());
+        state.song_file_set(&self.song_file.clone().unwrap_or_default());
         state.play_p = self.play_p;
         state.line_play = self.line_play;
         state.loop_p = self.loop_p;

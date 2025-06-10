@@ -1,6 +1,6 @@
 use std::{
     env::current_exe,
-    fs::File,
+    fs::{create_dir_all, File},
     io::Write,
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
@@ -239,7 +239,7 @@ impl<'a> AppState<'a> {
     }
 
     fn song_save_file(&mut self) -> anyhow::Result<()> {
-        let song_file = if let Some(song_file) = &self.song_state.get_song_file() {
+        let song_file = if let Some(song_file) = &self.song_state.song_file_get() {
             song_file.into()
         } else {
             if let Some(path) = FileDialog::new()
@@ -271,7 +271,9 @@ pub enum AppStateCommand {
 fn song_directory() -> PathBuf {
     let exe_path = current_exe().unwrap();
     let dir = exe_path.parent().unwrap();
-    dir.join("user").join("song")
+    let dir = dir.join("user").join("song");
+    create_dir_all(&dir).unwrap();
+    dir
 }
 
 fn note_update(
