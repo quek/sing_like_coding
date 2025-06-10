@@ -306,18 +306,21 @@ impl TrackView {
 
                                 let mut db_value =
                                     db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
-                                if ui
-                                    .add(DbSlider {
-                                        db_value: &mut db_value,
-                                        min_db: DB_MIN,
-                                        max_db: DB_MAX,
-                                        height,
-                                    })
-                                    .dragged()
-                                {
+                                let fader = ui.add(DbSlider {
+                                    db_value: &mut db_value,
+                                    min_db: DB_MIN,
+                                    max_db: DB_MAX,
+                                    height,
+                                });
+                                if fader.dragged() {
                                     commands.push(UiCommand::TrackVolume(
                                         track_index,
                                         db_to_norm(db_value, DB_MIN, DB_MAX),
+                                    ));
+                                } else if fader.double_clicked() {
+                                    commands.push(UiCommand::TrackVolume(
+                                        track_index,
+                                        db_to_norm(0.0, DB_MIN, DB_MAX),
                                     ));
                                 }
 
