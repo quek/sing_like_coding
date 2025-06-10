@@ -363,7 +363,7 @@ impl Singer {
             .collect::<Vec<_>>();
         for track_index in 0..process_data_list.len() {
             if let Some(process_data) = &process_data_list[track_index] {
-                for channel in 0..2 {
+                for channel in 0..process_data.nchannels {
                     song_state.tracks[track_index].peaks[channel] = process_data.peak(channel);
                 }
             } else {
