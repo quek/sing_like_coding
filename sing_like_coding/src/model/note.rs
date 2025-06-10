@@ -7,6 +7,7 @@ pub struct Note {
     pub channel: i16,
     pub key: i16,
     pub velocity: f64,
+    #[serde(default)]
     pub off: bool,
 }
 

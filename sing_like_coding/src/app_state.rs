@@ -21,8 +21,20 @@ use crate::{
     model::{note::Note, song::Song},
     singer::SingerCommand,
     song_state::SongState,
-    view::{main_view::Route, track_view::UiCommand},
+    view::main_view::Route,
 };
+
+pub enum UiCommand {
+    NoteUpdate(i16, i16, i16, bool),
+    NoteDelte,
+    TrackAdd,
+    TrackVolume(usize, f32),
+    LaneAdd,
+    CursorUp,
+    CursorDown,
+    CursorLeft,
+    CursorRight,
+}
 
 #[derive(Clone, Debug)]
 pub struct Cursor {

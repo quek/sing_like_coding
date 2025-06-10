@@ -1,13 +1,18 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Range};
 
 use anyhow::Result;
 use common::{
     dsp::{db_from_norm, db_to_norm},
     protocol::MainToPlugin,
 };
-use eframe::egui::{CentralPanel, Color32, Frame, Key, Label, TopBottomPanel, Ui};
+use eframe::egui::{CentralPanel, Color32, Frame, Key, TopBottomPanel, Ui};
 
-use crate::{app_state::AppState, device::Device, singer::SingerCommand, util::with_font_mono};
+use crate::{
+    app_state::{AppState, UiCommand},
+    device::Device,
+    singer::SingerCommand,
+    util::with_font_mono,
+};
 
 use super::{
     db_slider::DbSlider,
@@ -137,199 +142,19 @@ impl TrackView {
                 Ok(())
             });
 
-            // ui.separator();
-
-            // ui.horizontal(|ui| {
-            //     if ui.button("Note On").clicked() {
-            //         let track_index = 0;
-            //         let key = 63;
-            //         let channel = 0;
-            //         let velocity = 100.0;
-            //         let time = 0;
-            //         state
-            //             .view_sender
-            //             .send(SingerMsg::NoteOn(track_index, key, channel, velocity, time))
-            //             .unwrap();
-            //     }
-
-            //     if ui.button("Note Off").clicked() {
-            //         let track_index = 0;
-            //         let key = 63;
-            //         let channel = 0;
-            //         let velocity = 0.0;
-            //         let time = 0;
-            //         state
-            //             .view_sender
-            //             .send(SingerMsg::NoteOff(
-            //                 track_index,
-            //                 key,
-            //                 channel,
-            //                 velocity,
-            //                 time,
-            //             ))
-            //             .unwrap();
-            //     }
-            // });
-
             ui.separator();
 
             with_font_mono(ui, |ui| {
                 let line_start = (state.cursor.line as i64 - 0x0f).max(0) as usize;
                 let line_end = line_start + 0x20;
                 let line_range = line_start..line_end;
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label(" ");
-                        for line in line_range.clone() {
-                            Frame::NONE
-                                .fill(if line == state.song_state.line_play {
-                                    Color32::DARK_GREEN
-                                } else if (state.song_state.loop_start..state.song_state.loop_start)
-                                    .contains(&(line * 0x100))
-                                {
-                                    Color32::from_rgb(0x00, 0x30, 0x00)
-                                } else {
-                                    Color32::BLACK
-                                })
-                                .show(ui, |ui| {
-                                    ui.label(format!("{:02X}", line));
-                                });
-                        }
-                    });
+                ui.horizontal(|ui| -> anyhow::Result<()> {
+                    self.view_ruler(state, ui, &line_range)?;
 
-                    for (track_index, track) in state.song.tracks.iter().enumerate() {
-                        ui.vertical(|ui| -> anyhow::Result<()> {
-                            with_font_mono(ui, |ui| {
-                                Frame::NONE
-                                    .fill(if state.selected_tracks.contains(&track_index) {
-                                        Color32::GREEN
-                                    } else {
-                                        Color32::BLACK
-                                    })
-                                    .show(ui, |ui| {
-                                        ui.add(Label::new(format!("{:<9}", track.name)).truncate());
-                                    });
-                                ui.horizontal(|ui| -> anyhow::Result<()> {
-                                    for lane_index in 0..track.lanes.len() {
-                                        ui.vertical(|ui| -> anyhow::Result<()> {
-                                            for line in line_range.clone() {
-                                                let color = if state.cursor.track == track_index
-                                                    && state.cursor.lane == lane_index
-                                                    && state.cursor.line == line
-                                                {
-                                                    Color32::YELLOW
-                                                } else if line == state.song_state.line_play {
-                                                    Color32::DARK_GREEN
-                                                } else if state
-                                                    .selected_cells
-                                                    .contains(&(track_index, line))
-                                                {
-                                                    Color32::LIGHT_BLUE
-                                                } else {
-                                                    Color32::BLACK
-                                                };
-                                                let text = track.lanes[lane_index]
-                                                    .note(line)
-                                                    .map_or("--- -- --".to_string(), |note| {
-                                                        if note.off {
-                                                            format!(
-                                                                "{:<3}    {:02X}",
-                                                                note.note_name(),
-                                                                note.delay
-                                                            )
-                                                        } else {
-                                                            format!(
-                                                                "{:<3} {:02X} {:02X}",
-                                                                note.note_name(),
-                                                                note.velocity as i32,
-                                                                note.delay
-                                                            )
-                                                        }
-                                                    });
-
-                                                LabelBuilder::new(ui, text).bg_color(color).build();
-                                            }
-                                            Ok(())
-                                        });
-                                    }
-                                    Ok(())
-                                });
-                            });
-
-                            for (module_index, module) in track.modules.iter().enumerate() {
-                                let label = LabelBuilder::new(ui, &module.name)
-                                    .size([DEFAULT_TRACK_WIDTH, 0.0])
-                                    .build();
-                                if label.clicked() {
-                                    state
-                                        .sender_to_loop
-                                        .send(MainToPlugin::GuiOpen(track_index, module_index))?;
-                                }
-                                label.context_menu(|ui: &mut Ui| {
-                                    if ui.button("Delete").clicked() {
-                                        state
-                                            .view_sender
-                                            .send(SingerCommand::PluginDelete(
-                                                track_index,
-                                                module_index,
-                                            ))
-                                            .unwrap();
-                                        ui.close_menu();
-                                    }
-                                });
-                            }
-
-                            if LabelBuilder::new(ui, "+")
-                                .size([DEFAULT_TRACK_WIDTH, 0.0])
-                                .build()
-                                .clicked()
-                            {
-                                state.route = Route::PluginSelect;
-                            }
-
-                            let peak_level_state = self.stereo_peak_level_state(track_index);
-                            peak_level_state.update(&state.song_state.tracks[track_index].peaks);
-                            for x in [&peak_level_state.left, &peak_level_state.right] {
-                                LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
-                            }
-
-                            ui.horizontal(|ui| -> anyhow::Result<()> {
-                                let height = 160.0;
-
-                                ui.add(StereoPeakMeter {
-                                    peak_level_state,
-                                    min_db: DB_MIN,
-                                    max_db: DB_MAX,
-                                    show_scale: true,
-                                    height,
-                                });
-
-                                let mut db_value =
-                                    db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
-                                let fader = ui.add(DbSlider {
-                                    db_value: &mut db_value,
-                                    min_db: DB_MIN,
-                                    max_db: DB_MAX,
-                                    height,
-                                });
-                                if fader.dragged() {
-                                    commands.push(UiCommand::TrackVolume(
-                                        track_index,
-                                        db_to_norm(db_value, DB_MIN, DB_MAX),
-                                    ));
-                                } else if fader.double_clicked() {
-                                    commands.push(UiCommand::TrackVolume(
-                                        track_index,
-                                        db_to_norm(0.0, DB_MIN, DB_MAX),
-                                    ));
-                                }
-
-                                Ok(())
-                            });
-
-                            Ok(())
-                        });
+                    for track_index in 0..state.song.tracks.len() {
+                        self.view_track(state, ui, track_index, &line_range, &mut commands)?;
                     }
+                    Ok(())
                 });
             });
             Ok(())
@@ -366,24 +191,218 @@ impl TrackView {
             .resize_with(track_index + 1, Default::default);
         &mut self.stereo_peak_level_states[track_index]
     }
-}
 
-// #[derive(Default)]
-// pub struct NoteUpdate {
-//     pub key_delta: i16,
-//     pub velociy_delta: i16,
-//     pub delay_delta: i16,
-//     pub off: bool,
-// }
+    fn view_fader(
+        &mut self,
+        state: &AppState,
+        ui: &mut Ui,
+        track_index: usize,
+        commands: &mut Vec<UiCommand>,
+    ) -> anyhow::Result<()> {
+        let track = &state.song.tracks[track_index];
+        let peak_level_state = self.stereo_peak_level_state(track_index);
+        peak_level_state.update(&state.song_state.tracks[track_index].peaks);
+        for x in [&peak_level_state.left, &peak_level_state.right] {
+            LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
+        }
 
-pub enum UiCommand {
-    NoteUpdate(i16, i16, i16, bool),
-    NoteDelte,
-    TrackAdd,
-    TrackVolume(usize, f32),
-    LaneAdd,
-    CursorUp,
-    CursorDown,
-    CursorLeft,
-    CursorRight,
+        ui.horizontal(|ui| -> anyhow::Result<()> {
+            let height = 160.0;
+
+            ui.add(StereoPeakMeter {
+                peak_level_state,
+                min_db: DB_MIN,
+                max_db: DB_MAX,
+                show_scale: true,
+                height,
+            });
+
+            let mut db_value = db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
+            let fader = ui.add(DbSlider {
+                db_value: &mut db_value,
+                min_db: DB_MIN,
+                max_db: DB_MAX,
+                height,
+            });
+            if fader.dragged() {
+                commands.push(UiCommand::TrackVolume(
+                    track_index,
+                    db_to_norm(db_value, DB_MIN, DB_MAX),
+                ));
+            } else if fader.double_clicked() {
+                commands.push(UiCommand::TrackVolume(
+                    track_index,
+                    db_to_norm(0.0, DB_MIN, DB_MAX),
+                ));
+            }
+
+            Ok(())
+        });
+        Ok(())
+    }
+
+    fn view_lane(
+        &self,
+        state: &AppState,
+        ui: &mut Ui,
+        track_index: usize,
+        lane_index: usize,
+        line_range: &Range<usize>,
+    ) -> anyhow::Result<()> {
+        ui.vertical(|ui| -> anyhow::Result<()> {
+            for line in line_range.clone() {
+                let color = if state.cursor.track == track_index
+                    && state.cursor.lane == lane_index
+                    && state.cursor.line == line
+                {
+                    Color32::YELLOW
+                } else if line == state.song_state.line_play {
+                    Color32::DARK_GREEN
+                } else if state.selected_cells.contains(&(track_index, line)) {
+                    Color32::LIGHT_BLUE
+                } else {
+                    Color32::BLACK
+                };
+                let text = state.song.tracks[track_index].lanes[lane_index]
+                    .note(line)
+                    .map_or("--- -- --".to_string(), |note| {
+                        if note.off {
+                            format!("{:<3}    {:02X}", note.note_name(), note.delay)
+                        } else {
+                            format!(
+                                "{:<3} {:02X} {:02X}",
+                                note.note_name(),
+                                note.velocity as i32,
+                                note.delay
+                            )
+                        }
+                    });
+
+                LabelBuilder::new(ui, text).bg_color(color).build();
+            }
+            Ok(())
+        });
+        Ok(())
+    }
+
+    fn view_lanes(
+        &self,
+        state: &AppState,
+        ui: &mut Ui,
+        track_index: usize,
+        line_range: &Range<usize>,
+    ) -> anyhow::Result<()> {
+        ui.horizontal(|ui| -> anyhow::Result<()> {
+            for lane_index in 0..state.song.tracks[track_index].lanes.len() {
+                self.view_lane(state, ui, track_index, lane_index, line_range)?;
+            }
+            Ok(())
+        });
+        Ok(())
+    }
+
+    fn view_module(
+        &self,
+        state: &AppState,
+        ui: &mut Ui,
+        track_index: usize,
+        module_index: usize,
+    ) -> anyhow::Result<()> {
+        let module = &state.song.tracks[track_index].modules[module_index];
+        let label = LabelBuilder::new(ui, &module.name)
+            .size([DEFAULT_TRACK_WIDTH, 0.0])
+            .build();
+        if label.clicked() {
+            state
+                .sender_to_loop
+                .send(MainToPlugin::GuiOpen(track_index, module_index))?;
+        }
+        label.context_menu(|ui: &mut Ui| {
+            if ui.button("Delete").clicked() {
+                state
+                    .view_sender
+                    .send(SingerCommand::PluginDelete(track_index, module_index))
+                    .unwrap();
+                ui.close_menu();
+            }
+        });
+        Ok(())
+    }
+
+    fn view_modules(
+        &self,
+        state: &mut AppState,
+        ui: &mut Ui,
+        track_index: usize,
+    ) -> anyhow::Result<()> {
+        for module_index in 0..state.song.tracks[track_index].modules.len() {
+            self.view_module(state, ui, track_index, module_index)?;
+        }
+        if LabelBuilder::new(ui, "+")
+            .size([DEFAULT_TRACK_WIDTH, 0.0])
+            .build()
+            .clicked()
+        {
+            state.route = Route::PluginSelect;
+        }
+
+        Ok(())
+    }
+
+    fn view_ruler(
+        &self,
+        state: &AppState,
+        ui: &mut Ui,
+        line_range: &Range<usize>,
+    ) -> anyhow::Result<()> {
+        ui.vertical(|ui| {
+            ui.label(" ");
+            for line in line_range.clone() {
+                Frame::NONE
+                    .fill(if line == state.song_state.line_play {
+                        Color32::DARK_GREEN
+                    } else if (state.song_state.loop_start..state.song_state.loop_start)
+                        .contains(&(line * 0x100))
+                    {
+                        Color32::from_rgb(0x00, 0x30, 0x00)
+                    } else {
+                        Color32::BLACK
+                    })
+                    .show(ui, |ui| {
+                        ui.label(format!("{:02X}", line));
+                    });
+            }
+        });
+        Ok(())
+    }
+
+    fn view_track(
+        &mut self,
+        state: &mut AppState,
+        ui: &mut Ui,
+        track_index: usize,
+        line_range: &Range<usize>,
+        mut commands: &mut Vec<UiCommand>,
+    ) -> anyhow::Result<()> {
+        ui.vertical(|ui| -> anyhow::Result<()> {
+            with_font_mono(ui, |ui| {
+                LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
+                    .bg_color(if state.selected_tracks.contains(&track_index) {
+                        Color32::GREEN
+                    } else {
+                        Color32::BLACK
+                    })
+                    .build();
+
+                self.view_lanes(state, ui, track_index, line_range).unwrap();
+            });
+
+            self.view_modules(state, ui, track_index)?;
+
+            self.view_fader(state, ui, track_index, &mut commands)?;
+
+            Ok(())
+        });
+        Ok(())
+    }
 }
