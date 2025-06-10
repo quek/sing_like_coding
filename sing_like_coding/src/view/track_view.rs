@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use common::protocol::MainToPlugin;
+use common::{dsp::db_from_norm, protocol::MainToPlugin};
 use eframe::egui::{CentralPanel, Color32, Frame, Key, Label, TopBottomPanel, Ui};
 
 use crate::{app_state::AppState, device::Device, singer::SingerCommand, util::with_font_mono};
 
 use super::{
+    db_slider::DbSlider,
     main_view::Route,
     shortcut_key::{shortcut_key, Modifier},
     stereo_peak_meter::{StereoPeakLevelState, StereoPeakMeter},
@@ -280,24 +281,24 @@ impl TrackView {
                                 state.route = Route::PluginSelect;
                             }
 
-                            for channel in 0..2 {
-                                LabelBuilder::new(
-                                    ui,
-                                    format!(
-                                        "{:.2}dB",
-                                        state.song_state.tracks[track_index].peaks[channel]
-                                    ),
-                                )
-                                .build();
-                            }
-
                             let peak_level_state = self.stereo_peak_level_state(track_index);
                             peak_level_state.update(&state.song_state.tracks[track_index].peaks);
+                            for x in [&peak_level_state.left, &peak_level_state.right] {
+                                LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
+                            }
                             ui.add(StereoPeakMeter {
                                 peak_level_state,
                                 min_db: -60.0,
                                 max_db: 6.0,
                                 show_scale: true,
+                            });
+
+                            let mut db_value = db_from_norm(track.volume as f32, -60.0, 6.0);
+                            ui.add(DbSlider {
+                                db_value: &mut db_value,
+                                min_db: -60.0,
+                                max_db: 6.0,
+                                height: 160.0,
                             });
 
                             Ok(())

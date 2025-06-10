@@ -1,3 +1,4 @@
+use common::dsp::db_to_norm;
 use eframe::egui::{
     Align2, Color32, FontId, Painter, Pos2, Rect, Response, Sense, Ui, Vec2, Widget,
 };
@@ -94,20 +95,8 @@ impl<'a> Widget for StereoPeakMeter<'a> {
     }
 }
 
-fn normalize_db(db: f32, min_db: f32, max_db: f32) -> f32 {
-    let db = db.clamp(min_db, max_db);
-    // 0.0 = min_db, 1.0 = max_db の範囲に正規化
-    let t = (db - min_db) / (max_db - min_db);
-    curved(t, 1.5)
-}
-
-// 非線形カーブ。index < 1.0 で下側を拡大（-6dB付近の視認性向上）
-fn curved(t: f32, index: f32) -> f32 {
-    t.powf(index)
-}
-
 fn draw_meter(painter: &Painter, rect: Rect, level: &PeakLevelState, min_db: f32, max_db: f32) {
-    let norm = |db: f32| normalize_db(db, min_db, max_db);
+    let norm = |db: f32| db_to_norm(db, min_db, max_db);
 
     let curr_h = rect.height() * norm(level.current_db);
     let hold_h = rect.height() * norm(level.hold_db);
@@ -136,7 +125,7 @@ fn draw_db_scale(painter: &Painter, rect: Rect, min_db: f32, max_db: f32) {
         if db < min_db as i32 || db > max_db as i32 {
             continue;
         }
-        let norm = normalize_db(db as f32, min_db, max_db);
+        let norm = db_to_norm(db as f32, min_db, max_db);
         let y = rect.bottom() - rect.height() * norm;
         let x = rect.right();
 

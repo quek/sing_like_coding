@@ -1,5 +1,7 @@
 use anyhow::Result;
-use common::{event::Event, module::Module, process_track_context::ProcessTrackContext};
+use common::{
+    dsp::db_to_norm, event::Event, module::Module, process_track_context::ProcessTrackContext,
+};
 use serde::{Deserialize, Serialize};
 
 use super::lane::Lane;
@@ -7,6 +9,8 @@ use super::lane::Lane;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
     pub name: String,
+    pub volume: f64,
+    pub pan: f64,
     pub modules: Vec<Module>,
     pub lanes: Vec<Lane>,
 }
@@ -15,6 +19,8 @@ impl Track {
     pub fn new() -> Self {
         Self {
             name: "T01".to_string(),
+            volume: db_to_norm(0.0, -60.0, 6.0) as f64,
+            pan: 0.5,
             modules: vec![],
             lanes: vec![Lane::new()],
         }
