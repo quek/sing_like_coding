@@ -167,10 +167,6 @@ impl Singer {
             hwnd,
         ))?;
 
-        self.song.tracks[track_index].modules.push(Module::new(
-            description.id.clone(),
-            description.name.clone(),
-        ));
         Ok(id)
     }
 
@@ -318,16 +314,20 @@ impl Singer {
                     .id
                     .clone();
                 let description = clap_manager.description(&module_id);
-                xs.push((track_index, description));
+                xs.push((track_index, description, module_index));
             }
         }
 
-        for track_index in 0..self.song.tracks.len() {
-            self.song.tracks[track_index].modules.clear();
-        }
-
-        for (track_index, description) in xs {
+        for (track_index, description, module_index) in xs {
             self.plugin_load(track_index, description.unwrap(), false, hwnd)?;
+            self.sender_to_loop.send(MainToPlugin::StateLoad(
+                track_index,
+                module_index,
+                self.song.tracks[track_index].modules[module_index]
+                    .state
+                    .clone()
+                    .unwrap(),
+            ))?;
         }
 
         self.song_file = Some(song_file);
@@ -464,6 +464,10 @@ async fn singer_loop(
 
                 let mut singer = singer.lock().unwrap();
                 singer.plugin_load(track_index, &description, true, hwnd)?;
+                singer.song.tracks[track_index].modules.push(Module::new(
+                    description.id.clone(),
+                    description.name.clone(),
+                ));
 
                 singer.send_song();
             }

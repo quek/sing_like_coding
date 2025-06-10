@@ -192,7 +192,9 @@ impl<'a> AppState<'a> {
             UiCommand::NoteDelte => self
                 .view_sender
                 .send(SingerCommand::NoteDelete(self.cursor.clone()))?,
-            UiCommand::TrackAdd => TrackAdd {}.call(self)?,
+            UiCommand::TrackAdd => {
+                TrackAdd {}.call(self)?;
+            }
             UiCommand::TrackVolume(track_index, volume) => self
                 .view_sender
                 .send(SingerCommand::TrackVolume(*track_index, *volume))?,
