@@ -218,23 +218,26 @@ impl Singer {
             .zip(self.process_track_contexts.par_iter_mut())
             .try_for_each(|(track, process_track_context)| track.process(process_track_context))?;
 
-        let buffers = self
+        let mut buffers = self
             .process_track_contexts
             .iter_mut()
             .filter_map(|x| x.plugins.last_mut())
             .map(|plugin_ref: &mut PluginRef| {
                 let constant_mask = plugin_ref.process_data_mut().constant_mask_out;
-                (&plugin_ref.process_data_mut().buffer_out, constant_mask)
+                (&mut plugin_ref.process_data_mut().buffer_out, constant_mask)
             })
+            .zip(self.song.tracks.iter())
             .collect::<Vec<_>>();
         for channel in 0..nchannels {
             for frame in 0..nframes {
                 output[nchannels * frame + channel] = buffers
-                    .iter()
-                    .map(|(buffer, constant_mask)| {
-                        if (constant_mask & (1 << channel)) == 0 {
+                    .iter_mut()
+                    .map(|((buffer, constant_mask), track)| {
+                        if (*constant_mask & (1 << channel)) == 0 {
+                            buffer[channel][frame] *= track.volume;
                             buffer[channel][frame]
                         } else {
+                            buffer[channel][0] *= track.volume;
                             buffer[channel][0]
                         }
                     })
@@ -491,6 +494,7 @@ async fn singer_loop(
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.volume = volume;
+                    dbg!("SingerCommand::TrackVolume", track.volume);
                     singer.send_song();
                 }
             }

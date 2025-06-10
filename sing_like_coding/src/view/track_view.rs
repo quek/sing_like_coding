@@ -313,7 +313,7 @@ impl TrackView {
                                         max_db: DB_MAX,
                                         height,
                                     })
-                                    .changed()
+                                    .dragged()
                                 {
                                     commands.push(UiCommand::TrackVolume(
                                         track_index,
