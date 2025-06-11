@@ -254,13 +254,38 @@ impl TrackView {
             LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
         }
 
-        let mut pan = track.pan;
-        let knob = ui.add(Knob { value: &mut pan });
-        if knob.dragged() {
-            commands.push(UiCommand::TrackPan(track_index, pan));
-        } else if knob.double_clicked() {
-            commands.push(UiCommand::TrackPan(track_index, 0.5));
-        }
+        ui.horizontal(|ui| -> anyhow::Result<()> {
+            let mut pan = track.pan;
+            let knob = ui.add(Knob { value: &mut pan });
+            if knob.dragged() {
+                commands.push(UiCommand::TrackPan(track_index, pan));
+            } else if knob.double_clicked() {
+                commands.push(UiCommand::TrackPan(track_index, 0.5));
+            }
+
+            ui.vertical(|ui| -> anyhow::Result<()> {
+                let width = 18.0;
+
+                let mut solo = track.solo;
+                if ui
+                    .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut solo, "S"))
+                    .clicked()
+                {
+                    commands.push(UiCommand::TrackSolo(track_index, solo));
+                }
+
+                let mut mute = track.mute;
+                if ui
+                    .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut mute, "M"))
+                    .clicked()
+                {
+                    commands.push(UiCommand::TrackMute(track_index, mute));
+                }
+
+                Ok(())
+            });
+            Ok(())
+        });
 
         ui.horizontal(|ui| -> anyhow::Result<()> {
             let height = 160.0;
@@ -294,6 +319,13 @@ impl TrackView {
 
             Ok(())
         });
+
+        LabelBuilder::new(
+            ui,
+            format!("{:.2}dB", db_from_norm(track.volume, DB_MIN, DB_MAX)),
+        )
+        .build();
+
         Ok(())
     }
 

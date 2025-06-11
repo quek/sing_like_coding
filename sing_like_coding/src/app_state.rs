@@ -28,6 +28,8 @@ pub enum UiCommand {
     NoteUpdate(i16, i16, i16, bool),
     NoteDelte,
     TrackAdd,
+    TrackMute(usize, bool),
+    TrackSolo(usize, bool),
     TrackPan(usize, f32),
     TrackVolume(usize, f32),
     LaneAdd,
@@ -208,6 +210,12 @@ impl<'a> AppState<'a> {
             UiCommand::TrackAdd => {
                 TrackAdd {}.call(self)?;
             }
+            UiCommand::TrackMute(track_index, mute) => self
+                .view_sender
+                .send(SingerCommand::TrackMute(*track_index, *mute))?,
+            UiCommand::TrackSolo(track_index, solo) => self
+                .view_sender
+                .send(SingerCommand::TrackSolo(*track_index, *solo))?,
             UiCommand::TrackPan(track_index, pan) => self
                 .view_sender
                 .send(SingerCommand::TrackPan(*track_index, *pan))?,

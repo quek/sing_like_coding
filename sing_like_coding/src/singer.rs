@@ -47,6 +47,8 @@ pub enum SingerCommand {
     PluginLoad(usize, Description, isize),
     PluginDelete(usize, usize),
     TrackAdd,
+    TrackMute(usize, bool),
+    TrackSolo(usize, bool),
     TrackPan(usize, f32),
     TrackVolume(usize, f32),
     LaneAdd(usize),
@@ -216,6 +218,7 @@ impl Singer {
             .zip(self.process_track_contexts.par_iter_mut())
             .try_for_each(|(track, process_track_context)| track.process(process_track_context))?;
 
+        let mut solo_any = false;
         let mut buffers = self
             .process_track_contexts
             .iter_mut()
@@ -225,12 +228,21 @@ impl Singer {
                 (&mut plugin_ref.process_data_mut().buffer_out, constant_mask)
             })
             .zip(self.song.tracks.iter().map(|track| {
+                solo_any |= track.solo;
                 if (track.pan - 0.5).abs() < 0.01 {
-                    (track.volume, track.volume, track.volume)
+                    (
+                        track.mute,
+                        track.solo,
+                        track.volume,
+                        track.volume,
+                        track.volume,
+                    )
                 } else {
                     let normalized_pan = (track.pan - 0.5) * 2.0;
                     let pan_angle = (normalized_pan + 1.0) * PI / 4.0;
                     (
+                        track.mute,
+                        track.solo,
                         track.volume * pan_angle.cos(),
                         track.volume * pan_angle.sin(),
                         track.volume,
@@ -239,7 +251,9 @@ impl Singer {
             }))
             .collect::<Vec<_>>();
 
-        for ((buffer, constant_mask), (gain_ch0, gain_ch1, gain_ch_restg)) in buffers.iter_mut() {
+        for ((buffer, constant_mask), (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)) in
+            buffers.iter_mut()
+        {
             for channel in 0..nchannels {
                 let constp = (*constant_mask & (1 << channel)) != 0;
                 let gain = if channel == 0 {
@@ -264,12 +278,16 @@ impl Singer {
             for channel in 0..nchannels {
                 output[nchannels * frame + channel] = buffers
                     .iter()
-                    .map(|((buffer, constant_mask), _)| {
-                        let constp = (*constant_mask & (1 << channel)) != 0;
-                        if constp {
-                            buffer[channel][0]
+                    .map(|((buffer, constant_mask), (mute, solo, _, _, _))| {
+                        if *mute || (solo_any && !*solo) {
+                            0.0
                         } else {
-                            buffer[channel][frame]
+                            let constp = (*constant_mask & (1 << channel)) != 0;
+                            if constp {
+                                buffer[channel][0]
+                            } else {
+                                buffer[channel][frame]
+                            }
                         }
                     })
                     .sum();
@@ -360,7 +378,7 @@ impl Singer {
                 module_index,
                 self.song.tracks[track_index].modules[module_index]
                     .state
-                    .clone()
+                    .take()
                     .unwrap(),
             ))?;
         }
@@ -528,6 +546,20 @@ async fn singer_loop(
                 let mut singer = singer.lock().unwrap();
                 singer.track_add();
                 singer.send_song();
+            }
+            SingerCommand::TrackMute(track_index, mute) => {
+                let mut singer = singer.lock().unwrap();
+                if let Some(track) = singer.song.tracks.get_mut(track_index) {
+                    track.mute = mute;
+                    singer.send_song();
+                }
+            }
+            SingerCommand::TrackSolo(track_index, solo) => {
+                let mut singer = singer.lock().unwrap();
+                if let Some(track) = singer.song.tracks.get_mut(track_index) {
+                    track.solo = solo;
+                    singer.send_song();
+                }
             }
             SingerCommand::TrackPan(track_index, pan) => {
                 let mut singer = singer.lock().unwrap();

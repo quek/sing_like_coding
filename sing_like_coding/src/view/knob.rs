@@ -8,7 +8,7 @@ pub struct Knob<'a> {
 
 impl<'a> Widget for Knob<'a> {
     fn ui(self, ui: &mut Ui) -> Response {
-        let desired_size = Vec2::new(36.0, 48.0);
+        let desired_size = Vec2::new(34.0, 48.0);
         let (rect, response) = ui.allocate_exact_size(desired_size, Sense::click_and_drag());
 
         let center = rect.center() - Vec2::new(0.0, (desired_size.y - desired_size.x) / 2.0);

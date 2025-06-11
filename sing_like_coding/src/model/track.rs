@@ -13,6 +13,10 @@ pub struct Track {
     pub volume: f32,
     #[serde(default)]
     pub pan: f32,
+    #[serde(default)]
+    pub mute: bool,
+    #[serde(default)]
+    pub solo: bool,
     pub modules: Vec<Module>,
     pub lanes: Vec<Lane>,
 }
@@ -23,6 +27,8 @@ impl Track {
             name: "T01".to_string(),
             volume: db_to_norm(0.0, -60.0, 6.0),
             pan: 0.5,
+            solo: false,
+            mute: false,
             modules: vec![],
             lanes: vec![Lane::new()],
         }
