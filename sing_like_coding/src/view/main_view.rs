@@ -45,9 +45,7 @@ impl MainView {
             Route::Command => self.command_view.view(gui_context, state)?,
             Route::PluginSelect => {
                 if self.plugin_select_view.is_none() {
-                    self.plugin_select_view = Some(PluginSelectView::new(
-                        state.clap_manager.descriptions.clone(),
-                    ));
+                    self.plugin_select_view = Some(PluginSelectView::new());
                 }
 
                 if let Some(description) = self

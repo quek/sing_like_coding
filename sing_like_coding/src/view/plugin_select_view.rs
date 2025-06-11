@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::plugin::description::Description;
+use common::{clap_manager::ClapManager, plugin::description::Description};
 use eframe::egui::{self, Button, CentralPanel, Key, TextEdit, Ui};
 
 use crate::util::is_subsequence_case_insensitive;
@@ -7,16 +7,19 @@ use crate::util::is_subsequence_case_insensitive;
 pub struct PluginSelectView {
     focus_p: bool,
     buffer: String,
-    all_items: Vec<Description>,
+    descriptions: Vec<Description>,
     quried_items: Vec<Description>,
 }
 
 impl PluginSelectView {
-    pub fn new(all_items: Vec<Description>) -> Self {
+    pub fn new() -> Self {
+        let mut clap_manager = ClapManager::new();
+        clap_manager.load().unwrap();
+        let descriptions = clap_manager.descriptions;
         Self {
             focus_p: true,
             buffer: "".to_string(),
-            all_items,
+            descriptions,
             quried_items: vec![],
         }
     }
@@ -28,7 +31,7 @@ impl PluginSelectView {
                 let response = ui.add(edit);
                 if response.changed() || self.focus_p {
                     self.quried_items = self
-                        .all_items
+                        .descriptions
                         .iter_mut()
                         .filter(|x| is_subsequence_case_insensitive(&x.name, &self.buffer))
                         .map(|x| x.clone())

@@ -7,7 +7,6 @@ use std::{
 };
 
 use common::{
-    clap_manager::ClapManager,
     module::Module,
     protocol::{MainToPlugin, PluginToMain},
     shmem::{open_shared_memory, SONG_STATE_NAME},
@@ -47,7 +46,6 @@ pub struct Cursor {
 
 pub struct AppState<'a> {
     pub hwnd: isize,
-    pub clap_manager: ClapManager,
     pub cursor: Cursor,
     pub note_last: Note,
     pub route: Route,
@@ -76,7 +74,6 @@ impl<'a> AppState<'a> {
 
         Self {
             hwnd: 0,
-            clap_manager: ClapManager::new(),
             cursor: Cursor {
                 track: 0,
                 lane: 0,
@@ -175,9 +172,7 @@ impl<'a> AppState<'a> {
                 PluginToMain::DidLoad => (),
                 PluginToMain::DidUnload(_track_index, _module_index) => (),
                 PluginToMain::DidGuiOpen => (),
-                PluginToMain::DidScan => {
-                    self.clap_manager.load()?;
-                }
+                PluginToMain::DidScan => {}
                 PluginToMain::DidStateLoad => (),
                 PluginToMain::DidStateSave(track_index, module_index, state) => {
                     if let Some(module) = self.module_mut(track_index, module_index) {
