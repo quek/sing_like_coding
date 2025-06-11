@@ -1,7 +1,7 @@
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 
-use crate::app_state::Cursor;
+use crate::app_state::CursorTrack;
 
 use super::{note::Note, track::Track};
 
@@ -31,7 +31,7 @@ impl Song {
         self.tracks.push(track);
     }
 
-    pub fn note(&self, cursor: &Cursor) -> Option<&Note> {
+    pub fn note(&self, cursor: &CursorTrack) -> Option<&Note> {
         self.tracks
             .get(cursor.track)
             .and_then(|x| x.lanes.get(cursor.lane))

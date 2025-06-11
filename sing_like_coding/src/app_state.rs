@@ -25,8 +25,10 @@ use crate::{
 pub enum UiCommand {
     Command,
     NextViewPart,
-    Track(TrackCommand),
+    Mixer(MixerCommand),
+    Module(ModuleCommand),
     PlayToggle,
+    Track(TrackCommand),
     TrackAdd,
     TrackMute(usize, bool),
     TrackSolo(usize, bool),
@@ -44,11 +46,33 @@ pub enum TrackCommand {
     CursorRight,
 }
 
+pub enum ModuleCommand {
+    CursorUp,
+    CursorDown,
+    CursorLeft,
+    CursorRight,
+}
+
+pub enum MixerCommand {
+    CursorUp,
+    CursorDown,
+    CursorLeft,
+    CursorRight,
+}
+
 #[derive(Clone, Debug)]
-pub struct Cursor {
+pub struct CursorTrack {
     pub track: usize,
     pub lane: usize,
     pub line: usize,
+}
+
+pub struct CursorModule {
+    pub index: usize,
+}
+
+pub struct CursorMixer {
+    pub index: usize,
 }
 
 pub enum FocusedPart {
@@ -60,7 +84,9 @@ pub enum FocusedPart {
 pub struct AppState<'a> {
     pub hwnd: isize,
     pub focused_part: FocusedPart,
-    pub cursor: Cursor,
+    pub cursor_track: CursorTrack,
+    pub cursor_module: CursorModule,
+    pub cursor_mixer: CursorMixer,
     pub note_last: Note,
     pub route: Route,
     pub selected_cells: Vec<(usize, usize)>,
@@ -89,7 +115,7 @@ impl<'a> AppState<'a> {
         Self {
             hwnd: 0,
             focused_part: FocusedPart::Track,
-            cursor: Cursor {
+            cursor_track: CursorTrack {
                 track: 0,
                 lane: 0,
                 line: 0,
@@ -118,43 +144,43 @@ impl<'a> AppState<'a> {
     }
 
     pub fn cursor_up(&mut self) {
-        if self.cursor.line != 0 {
-            self.cursor.line -= 1;
+        if self.cursor_track.line != 0 {
+            self.cursor_track.line -= 1;
         }
     }
 
     pub fn cursor_down(&mut self) {
-        self.cursor.line += 1;
+        self.cursor_track.line += 1;
     }
 
     pub fn cursor_left(&mut self) {
-        if self.cursor.lane == 0 {
-            if self.cursor.track == 0 {
-                self.cursor.track = self.song.tracks.len() - 1;
+        if self.cursor_track.lane == 0 {
+            if self.cursor_track.track == 0 {
+                self.cursor_track.track = self.song.tracks.len() - 1;
             } else {
-                self.cursor.track -= 1;
+                self.cursor_track.track -= 1;
             }
-            self.cursor.lane = self.song.tracks[self.cursor.track].lanes.len() - 1;
+            self.cursor_track.lane = self.song.tracks[self.cursor_track.track].lanes.len() - 1;
         } else {
-            self.cursor.lane -= 1;
+            self.cursor_track.lane -= 1;
         }
         self.selected_tracks.clear();
-        self.selected_tracks.push(self.cursor.track);
+        self.selected_tracks.push(self.cursor_track.track);
     }
 
     pub fn cursor_right(&mut self) {
-        if self.cursor.lane == self.song.tracks[self.cursor.track].lanes.len() - 1 {
-            self.cursor.lane = 0;
-            if self.cursor.track + 1 == self.song.tracks.len() {
-                self.cursor.track = 0;
+        if self.cursor_track.lane == self.song.tracks[self.cursor_track.track].lanes.len() - 1 {
+            self.cursor_track.lane = 0;
+            if self.cursor_track.track + 1 == self.song.tracks.len() {
+                self.cursor_track.track = 0;
             } else {
-                self.cursor.track += 1;
+                self.cursor_track.track += 1;
             }
         } else {
-            self.cursor.lane += 1;
+            self.cursor_track.lane += 1;
         }
         self.selected_tracks.clear();
-        self.selected_tracks.push(self.cursor.track);
+        self.selected_tracks.push(self.cursor_track.track);
     }
 
     pub fn module_mut(&mut self, track_index: usize, module_index: usize) -> Option<&mut Module> {
@@ -242,14 +268,14 @@ impl<'a> AppState<'a> {
                 .send(SingerCommand::TrackVolume(*track_index, *volume))?,
             UiCommand::LaneAdd => self
                 .view_sender
-                .send(SingerCommand::LaneAdd(self.cursor.track))?,
+                .send(SingerCommand::LaneAdd(self.cursor_track.track))?,
             UiCommand::Track(TrackCommand::CursorUp) => self.cursor_up(),
             UiCommand::Track(TrackCommand::CursorDown) => self.cursor_down(),
             UiCommand::Track(TrackCommand::CursorLeft) => self.cursor_left(),
             UiCommand::Track(TrackCommand::CursorRight) => self.cursor_right(),
             UiCommand::Track(TrackCommand::NoteDelte) => self
                 .view_sender
-                .send(SingerCommand::NoteDelete(self.cursor.clone()))?,
+                .send(SingerCommand::NoteDelete(self.cursor_track.clone()))?,
             UiCommand::Track(TrackCommand::NoteUpdate(
                 key_delta,
                 velociy_delta,
@@ -258,6 +284,8 @@ impl<'a> AppState<'a> {
             )) => {
                 note_update(*key_delta, *velociy_delta, *delay_delta, *off, self);
             }
+            UiCommand::Mixer(mixer_command) => todo!(),
+            UiCommand::Module(module_command) => todo!(),
         }
         Ok(())
     }
@@ -341,7 +369,7 @@ fn note_update(
     off: bool,
     state: &mut AppState,
 ) {
-    if let Some(note) = state.song.note(&state.cursor) {
+    if let Some(note) = state.song.note(&state.cursor_track) {
         if !note.off {
             let mut note = note.clone();
             note.key = (note.key + key_delta).clamp(0, 127);
@@ -352,10 +380,10 @@ fn note_update(
     }
 
     let mut note = state.note_last.clone();
-    note.line = state.cursor.line;
+    note.line = state.cursor_track.line;
     note.off = off;
     state
         .view_sender
-        .send(SingerCommand::Note(state.cursor.clone(), note))
+        .send(SingerCommand::Note(state.cursor_track.clone(), note))
         .unwrap();
 }

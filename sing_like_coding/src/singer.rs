@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    app_state::{AppStateCommand, Cursor},
+    app_state::{AppStateCommand, CursorTrack},
     model::{lane::Lane, note::Note, song::Song},
     song_state::SongState,
     util::next_id,
@@ -38,8 +38,8 @@ pub enum SingerCommand {
     Stop,
     Loop,
     Song,
-    Note(Cursor, Note),
-    NoteDelete(Cursor),
+    Note(CursorTrack, Note),
+    NoteDelete(CursorTrack),
     #[allow(dead_code)]
     NoteOn(usize, i16, i16, f64, u8),
     #[allow(dead_code)]

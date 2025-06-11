@@ -8,7 +8,7 @@ use common::{
 use eframe::egui::{CentralPanel, Color32, Key, TopBottomPanel, Ui};
 
 use crate::{
-    app_state::{AppState, TrackCommand, UiCommand},
+    app_state::{AppState, MixerCommand, ModuleCommand, TrackCommand, UiCommand},
     device::Device,
     singer::SingerCommand,
     util::with_font_mono,
@@ -175,8 +175,42 @@ impl MainView {
             ),
         ];
 
-        let shortcut_map_module = [];
-        let shortcut_map_mixer = [];
+        let shortcut_map_module = [
+            (
+                (Modifier::None, Key::K),
+                UiCommand::Module(ModuleCommand::CursorUp),
+            ),
+            (
+                (Modifier::None, Key::J),
+                UiCommand::Module(ModuleCommand::CursorDown),
+            ),
+            (
+                (Modifier::None, Key::H),
+                UiCommand::Module(ModuleCommand::CursorLeft),
+            ),
+            (
+                (Modifier::None, Key::L),
+                UiCommand::Module(ModuleCommand::CursorRight),
+            ),
+        ];
+        let shortcut_map_mixer = [
+            (
+                (Modifier::None, Key::K),
+                UiCommand::Mixer(MixerCommand::CursorUp),
+            ),
+            (
+                (Modifier::None, Key::J),
+                UiCommand::Mixer(MixerCommand::CursorDown),
+            ),
+            (
+                (Modifier::None, Key::H),
+                UiCommand::Mixer(MixerCommand::CursorLeft),
+            ),
+            (
+                (Modifier::None, Key::L),
+                UiCommand::Mixer(MixerCommand::CursorRight),
+            ),
+        ];
 
         let shortcut_map_track: HashMap<_, _> = shortcut_map_track.into_iter().collect();
         let shortcut_map_module: HashMap<_, _> = shortcut_map_module.into_iter().collect();
@@ -239,7 +273,7 @@ impl MainView {
             ui.separator();
 
             with_font_mono(ui, |ui| {
-                let line_start = (state.cursor.line as i64 - 0x0f).max(0) as usize;
+                let line_start = (state.cursor_track.line as i64 - 0x0f).max(0) as usize;
                 let line_end = line_start + 0x20;
                 let line_range = line_start..line_end;
                 ui.horizontal(|ui| -> anyhow::Result<()> {
@@ -390,9 +424,9 @@ impl MainView {
     ) -> anyhow::Result<()> {
         ui.vertical(|ui| -> anyhow::Result<()> {
             for line in line_range.clone() {
-                let color = if state.cursor.track == track_index
-                    && state.cursor.lane == lane_index
-                    && state.cursor.line == line
+                let color = if state.cursor_track.track == track_index
+                    && state.cursor_track.lane == lane_index
+                    && state.cursor_track.line == line
                 {
                     Color32::YELLOW
                 } else if line == state.song_state.line_play {
