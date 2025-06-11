@@ -32,8 +32,8 @@ pub enum UiCommand {
     PlayToggle,
     Track(TrackCommand),
     TrackAdd,
-    TrackMute(usize, bool),
-    TrackSolo(usize, bool),
+    TrackMute(Option<usize>, Option<bool>),
+    TrackSolo(Option<usize>, Option<bool>),
     TrackPan(usize, f32),
     TrackVolume(usize, f32),
     LaneAdd,
@@ -275,12 +275,18 @@ impl<'a> AppState<'a> {
             UiCommand::TrackAdd => {
                 TrackAdd {}.call(self)?;
             }
-            UiCommand::TrackMute(track_index, mute) => self
-                .view_sender
-                .send(SingerCommand::TrackMute(*track_index, *mute))?,
-            UiCommand::TrackSolo(track_index, solo) => self
-                .view_sender
-                .send(SingerCommand::TrackSolo(*track_index, *solo))?,
+            UiCommand::TrackMute(track_index, mute) => {
+                let track_index = track_index.unwrap_or(self.cursor_track.track);
+                let mute = mute.unwrap_or(!self.song.tracks[track_index].mute);
+                self.view_sender
+                    .send(SingerCommand::TrackMute(track_index, mute))?;
+            }
+            UiCommand::TrackSolo(track_index, solo) => {
+                let track_index = track_index.unwrap_or(self.cursor_track.track);
+                let solo = solo.unwrap_or(!self.song.tracks[track_index].solo);
+                self.view_sender
+                    .send(SingerCommand::TrackSolo(track_index, solo))?;
+            }
             UiCommand::TrackPan(track_index, pan) => self
                 .view_sender
                 .send(SingerCommand::TrackPan(*track_index, *pan))?,

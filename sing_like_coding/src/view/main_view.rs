@@ -36,6 +36,8 @@ pub struct MainView {
 impl MainView {
     pub fn new() -> Self {
         let shortcut_map_common = [
+            ((Modifier::None, Key::M), UiCommand::TrackMute(None, None)),
+            ((Modifier::None, Key::S), UiCommand::TrackSolo(None, None)),
             ((Modifier::C, Key::T), UiCommand::TrackAdd),
             ((Modifier::CS, Key::T), UiCommand::LaneAdd),
         ];
@@ -363,7 +365,7 @@ impl MainView {
                     .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut solo, "S"))
                     .clicked()
                 {
-                    commands.push(UiCommand::TrackSolo(track_index, solo));
+                    commands.push(UiCommand::TrackSolo(Some(track_index), Some(solo)));
                 }
 
                 let mut mute = track.mute;
@@ -371,7 +373,7 @@ impl MainView {
                     .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut mute, "M"))
                     .clicked()
                 {
-                    commands.push(UiCommand::TrackMute(track_index, mute));
+                    commands.push(UiCommand::TrackMute(Some(track_index), Some(mute)));
                 }
 
                 Ok(())
