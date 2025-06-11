@@ -177,7 +177,7 @@ impl TrackView {
                     state.view_sender.send(SingerCommand::Stop)?;
                 }
                 ui.label(format!(
-                    "Line {}",
+                    "{}",
                     play_position_text1(state.song_state.line_play, state.song.lpb)
                 ));
                 let mut loop_p = state.song_state.loop_p;
