@@ -8,7 +8,7 @@ use common::{
 use eframe::egui::{CentralPanel, Color32, Key, TopBottomPanel, Ui};
 
 use crate::{
-    app_state::{AppState, MixerCommand, ModuleCommand, TrackCommand, UiCommand},
+    app_state::{AppState, FocusedPart, MixerCommand, ModuleCommand, TrackCommand, UiCommand},
     device::Device,
     singer::SingerCommand,
     util::with_font_mono,
@@ -428,7 +428,7 @@ impl MainView {
                     && state.cursor_track.lane == lane_index
                     && state.cursor_track.line == line
                 {
-                    Color32::YELLOW
+                    state.color_cursor(FocusedPart::Track)
                 } else if line == state.song_state.line_play {
                     Color32::DARK_GREEN
                 } else if state.selected_cells.contains(&(track_index, line)) {
@@ -485,7 +485,7 @@ impl MainView {
         let color = if state.cursor_track.track == track_index
             && state.cursor_module.index == module_index
         {
-            Color32::YELLOW
+            state.color_cursor(FocusedPart::Module)
         } else {
             Color32::BLACK
         };
@@ -523,7 +523,7 @@ impl MainView {
         let color = if state.cursor_track.track == track_index
             && state.cursor_module.index == state.song.tracks[track_index].modules.len()
         {
-            Color32::YELLOW
+            state.color_cursor(FocusedPart::Module)
         } else {
             Color32::BLACK
         };

@@ -4,6 +4,7 @@ use std::{
     io::Write,
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use common::{
@@ -11,6 +12,7 @@ use common::{
     protocol::{MainToPlugin, PluginToMain},
     shmem::{open_shared_memory, SONG_STATE_NAME},
 };
+use eframe::egui::Color32;
 use rfd::FileDialog;
 use shared_memory::Shmem;
 
@@ -75,6 +77,7 @@ pub struct CursorMixer {
     pub index: usize,
 }
 
+#[derive(PartialEq)]
 pub enum FocusedPart {
     Track,
     Module,
@@ -142,6 +145,22 @@ impl<'a> AppState<'a> {
             song_open_p: false,
             _song_state_shmem: song_state_shmem,
             song_state,
+        }
+    }
+
+    pub fn color_cursor(&self, part: FocusedPart) -> Color32 {
+        if self.focused_part != part
+            || SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+                % 1000
+                / 500
+                == 0
+        {
+            Color32::YELLOW
+        } else {
+            Color32::from_rgb(200, 200, 0)
         }
     }
 
