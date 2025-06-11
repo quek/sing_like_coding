@@ -26,6 +26,7 @@ use super::{
 const DEFAULT_TRACK_WIDTH: f32 = 64.0;
 
 pub struct MainView {
+    shortcut_map_common: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_track: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_module: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_mixer: HashMap<(Modifier, Key), UiCommand>,
@@ -34,6 +35,10 @@ pub struct MainView {
 
 impl MainView {
     pub fn new() -> Self {
+        let shortcut_map_common = [
+            ((Modifier::C, Key::T), UiCommand::TrackAdd),
+            ((Modifier::CS, Key::T), UiCommand::LaneAdd),
+        ];
         let shortcut_map_track = [
             (
                 (Modifier::C, Key::J),
@@ -67,8 +72,6 @@ impl MainView {
                 (Modifier::C, Key::ArrowRight),
                 UiCommand::Track(TrackCommand::NoteUpdate(12, 0, 0, false)),
             ),
-            ((Modifier::C, Key::T), UiCommand::TrackAdd),
-            ((Modifier::CS, Key::T), UiCommand::LaneAdd),
             (
                 (Modifier::A, Key::J),
                 UiCommand::Track(TrackCommand::NoteUpdate(0, -1, 0, false)),
@@ -212,11 +215,13 @@ impl MainView {
             ),
         ];
 
+        let shortcut_map_common: HashMap<_, _> = shortcut_map_common.into_iter().collect();
         let shortcut_map_track: HashMap<_, _> = shortcut_map_track.into_iter().collect();
         let shortcut_map_module: HashMap<_, _> = shortcut_map_module.into_iter().collect();
         let shortcut_map_mixer: HashMap<_, _> = shortcut_map_mixer.into_iter().collect();
 
         Self {
+            shortcut_map_common,
             shortcut_map_track,
             shortcut_map_module,
             shortcut_map_mixer,
@@ -312,6 +317,8 @@ impl MainView {
                 crate::app_state::FocusedPart::Mixer => &self.shortcut_map_mixer,
             };
             if let Some(command) = map.get(&key) {
+                state.run_ui_command(command)?;
+            } else if let Some(command) = self.shortcut_map_common.get(&key) {
                 state.run_ui_command(command)?;
             }
         }
