@@ -5,7 +5,7 @@ use common::{
     dsp::{db_from_norm, db_to_norm},
     protocol::MainToPlugin,
 };
-use eframe::egui::{CentralPanel, Color32, Frame, Key, TopBottomPanel, Ui};
+use eframe::egui::{CentralPanel, Color32, Key, TopBottomPanel, Ui};
 
 use crate::{
     app_state::{AppState, UiCommand},
@@ -176,7 +176,10 @@ impl TrackView {
                 if ui.button("Stop").clicked() {
                     state.view_sender.send(SingerCommand::Stop)?;
                 }
-                ui.label(format!("Line {:04}", state.song_state.line_play));
+                ui.label(format!(
+                    "Line {}",
+                    play_position_text1(state.song_state.line_play, state.song.lpb)
+                ));
                 let mut loop_p = state.song_state.loop_p;
                 if ui.toggle_value(&mut loop_p, "Loop").clicked() {
                     state.view_sender.send(SingerCommand::Loop)?;
@@ -443,11 +446,11 @@ impl TrackView {
         ui: &mut Ui,
         line_range: &Range<usize>,
     ) -> anyhow::Result<()> {
-        ui.vertical(|ui| {
-            ui.label(" ");
-            for line in line_range.clone() {
-                Frame::NONE
-                    .fill(if line == state.song_state.line_play {
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label(" ");
+                for line in line_range.clone() {
+                    let color = if line == state.song_state.line_play {
                         Color32::DARK_GREEN
                     } else if (state.song_state.loop_start..state.song_state.loop_start)
                         .contains(&(line * 0x100))
@@ -455,11 +458,33 @@ impl TrackView {
                         Color32::from_rgb(0x00, 0x30, 0x00)
                     } else {
                         Color32::BLACK
-                    })
-                    .show(ui, |ui| {
-                        ui.label(format!("{:02X}", line));
-                    });
-            }
+                    };
+                    let text = if line % 4 == 0 {
+                        play_position_text2(line, state.song.lpb)
+                    } else {
+                        "".to_string()
+                    };
+                    LabelBuilder::new(ui, text).bg_color(color).build();
+                }
+            });
+
+            ui.vertical(|ui| {
+                ui.label(" ");
+                for line in line_range.clone() {
+                    let color = if line == state.song_state.line_play {
+                        Color32::DARK_GREEN
+                    } else if (state.song_state.loop_start..state.song_state.loop_start)
+                        .contains(&(line * 0x100))
+                    {
+                        Color32::from_rgb(0x00, 0x30, 0x00)
+                    } else {
+                        Color32::BLACK
+                    };
+                    LabelBuilder::new(ui, format!("{:02X}", line))
+                        .bg_color(color)
+                        .build();
+                }
+            });
         });
         Ok(())
     }
@@ -493,4 +518,18 @@ impl TrackView {
         });
         Ok(())
     }
+}
+
+fn play_position_text1(line: usize, lpb: u16) -> String {
+    format!(
+        "{}.{:X}",
+        play_position_text2(line, lpb),
+        line % lpb as usize + 1
+    )
+}
+
+fn play_position_text2(line: usize, lpb: u16) -> String {
+    let lpb = lpb as usize;
+    let bar = lpb * 4;
+    format!("{:03X}.{:X}", line / bar + 1, line % bar / lpb + 1)
 }
