@@ -8,7 +8,7 @@ use common::{
 use eframe::egui::{CentralPanel, Color32, Key, TopBottomPanel, Ui};
 
 use crate::{
-    app_state::{AppState, UiCommand},
+    app_state::{AppState, TrackCommand, UiCommand},
     device::Device,
     singer::SingerCommand,
     util::with_font_mono,
@@ -26,123 +26,166 @@ use super::{
 const DEFAULT_TRACK_WIDTH: f32 = 64.0;
 
 pub struct MainView {
-    shortcut_map: HashMap<(Modifier, Key), UiCommand>,
+    shortcut_map_track: HashMap<(Modifier, Key), UiCommand>,
+    shortcut_map_module: HashMap<(Modifier, Key), UiCommand>,
+    shortcut_map_mixer: HashMap<(Modifier, Key), UiCommand>,
     stereo_peak_level_states: Vec<StereoPeakLevelState>,
 }
 
 impl MainView {
     pub fn new() -> Self {
-        let shortcut_map = [
+        let shortcut_map_track = [
             (
                 (Modifier::C, Key::J),
-                UiCommand::NoteUpdate(-1, 0, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(-1, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::ArrowDown),
-                UiCommand::NoteUpdate(-1, 0, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(-1, 0, 0, false)),
             ),
-            ((Modifier::C, Key::K), UiCommand::NoteUpdate(1, 0, 0, false)),
+            (
+                (Modifier::C, Key::K),
+                UiCommand::Track(TrackCommand::NoteUpdate(1, 0, 0, false)),
+            ),
             (
                 (Modifier::C, Key::ArrowUp),
-                UiCommand::NoteUpdate(1, 0, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(1, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::H),
-                UiCommand::NoteUpdate(-12, 0, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(-12, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::ArrowLeft),
-                UiCommand::NoteUpdate(-12, 0, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(-12, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::L),
-                UiCommand::NoteUpdate(12, 0, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(12, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::ArrowRight),
-                UiCommand::NoteUpdate(12, 0, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(12, 0, 0, false)),
             ),
             ((Modifier::C, Key::T), UiCommand::TrackAdd),
             ((Modifier::CS, Key::T), UiCommand::LaneAdd),
             (
                 (Modifier::A, Key::J),
-                UiCommand::NoteUpdate(0, -1, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, -1, 0, false)),
             ),
             (
                 (Modifier::A, Key::ArrowDown),
-                UiCommand::NoteUpdate(0, -1, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, -1, 0, false)),
             ),
-            ((Modifier::A, Key::K), UiCommand::NoteUpdate(0, 1, 0, false)),
+            (
+                (Modifier::A, Key::K),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 1, 0, false)),
+            ),
             (
                 (Modifier::A, Key::ArrowUp),
-                UiCommand::NoteUpdate(0, 1, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 1, 0, false)),
             ),
             (
                 (Modifier::A, Key::H),
-                UiCommand::NoteUpdate(0, -0x10, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, -0x10, 0, false)),
             ),
             (
                 (Modifier::A, Key::ArrowLeft),
-                UiCommand::NoteUpdate(0, -0x10, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, -0x10, 0, false)),
             ),
             (
                 (Modifier::A, Key::L),
-                UiCommand::NoteUpdate(0, 0x10, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0x10, 0, false)),
             ),
             (
                 (Modifier::A, Key::ArrowRight),
-                UiCommand::NoteUpdate(0, 0x10, 0, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0x10, 0, false)),
             ),
             (
                 (Modifier::CA, Key::J),
-                UiCommand::NoteUpdate(0, 0, -1, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0, -1, false)),
             ),
             (
                 (Modifier::CA, Key::ArrowDown),
-                UiCommand::NoteUpdate(0, 0, -1, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0, -1, false)),
             ),
             (
                 (Modifier::CA, Key::K),
-                UiCommand::NoteUpdate(0, 0, 1, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0, 1, false)),
             ),
             (
                 (Modifier::CA, Key::ArrowUp),
-                UiCommand::NoteUpdate(0, 0, 1, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0, 1, false)),
             ),
             (
                 (Modifier::CA, Key::H),
-                UiCommand::NoteUpdate(0, 0, -0x10, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0, -0x10, false)),
             ),
             (
                 (Modifier::CA, Key::ArrowLeft),
-                UiCommand::NoteUpdate(0, 0, -0x10, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0, -0x10, false)),
             ),
             (
                 (Modifier::CA, Key::L),
-                UiCommand::NoteUpdate(0, 0, 0x10, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0, 0x10, false)),
             ),
             (
                 (Modifier::CA, Key::ArrowRight),
-                UiCommand::NoteUpdate(0, 0, 0x10, false),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0, 0x10, false)),
             ),
-            ((Modifier::None, Key::J), UiCommand::CursorDown),
-            ((Modifier::None, Key::ArrowDown), UiCommand::CursorDown),
-            ((Modifier::None, Key::K), UiCommand::CursorUp),
-            ((Modifier::None, Key::ArrowUp), UiCommand::CursorUp),
-            ((Modifier::None, Key::H), UiCommand::CursorLeft),
-            ((Modifier::None, Key::ArrowLeft), UiCommand::CursorLeft),
-            ((Modifier::None, Key::L), UiCommand::CursorRight),
-            ((Modifier::None, Key::ArrowRight), UiCommand::CursorRight),
+            (
+                (Modifier::None, Key::J),
+                UiCommand::Track(TrackCommand::CursorDown),
+            ),
+            (
+                (Modifier::None, Key::ArrowDown),
+                UiCommand::Track(TrackCommand::CursorDown),
+            ),
+            (
+                (Modifier::None, Key::K),
+                UiCommand::Track(TrackCommand::CursorUp),
+            ),
+            (
+                (Modifier::None, Key::ArrowUp),
+                UiCommand::Track(TrackCommand::CursorUp),
+            ),
+            (
+                (Modifier::None, Key::H),
+                UiCommand::Track(TrackCommand::CursorLeft),
+            ),
+            (
+                (Modifier::None, Key::ArrowLeft),
+                UiCommand::Track(TrackCommand::CursorLeft),
+            ),
+            (
+                (Modifier::None, Key::L),
+                UiCommand::Track(TrackCommand::CursorRight),
+            ),
+            (
+                (Modifier::None, Key::ArrowRight),
+                UiCommand::Track(TrackCommand::CursorRight),
+            ),
             (
                 (Modifier::None, Key::Period),
-                UiCommand::NoteUpdate(0, 0, 0, true),
+                UiCommand::Track(TrackCommand::NoteUpdate(0, 0, 0, true)),
             ),
-            ((Modifier::None, Key::Delete), UiCommand::NoteDelte),
+            (
+                (Modifier::None, Key::Delete),
+                UiCommand::Track(TrackCommand::NoteDelte),
+            ),
         ];
-        let shortcut_map: HashMap<_, _> = shortcut_map.into_iter().collect();
+
+        let shortcut_map_module = [];
+        let shortcut_map_mixer = [];
+
+        let shortcut_map_track: HashMap<_, _> = shortcut_map_track.into_iter().collect();
+        let shortcut_map_module: HashMap<_, _> = shortcut_map_module.into_iter().collect();
+        let shortcut_map_mixer: HashMap<_, _> = shortcut_map_mixer.into_iter().collect();
 
         Self {
-            shortcut_map,
+            shortcut_map_track,
+            shortcut_map_module,
+            shortcut_map_mixer,
             stereo_peak_level_states: vec![],
         }
     }
@@ -229,7 +272,12 @@ impl MainView {
         }
 
         if let Some(key) = shortcut_key(gui_context) {
-            if let Some(command) = self.shortcut_map.get(&key) {
+            let map = match state.focused_part {
+                crate::app_state::FocusedPart::Track => &self.shortcut_map_track,
+                crate::app_state::FocusedPart::Module => &self.shortcut_map_module,
+                crate::app_state::FocusedPart::Mixer => &self.shortcut_map_mixer,
+            };
+            if let Some(command) = map.get(&key) {
                 state.run_ui_command(command)?;
             }
         }

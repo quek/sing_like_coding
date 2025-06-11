@@ -25,8 +25,7 @@ use crate::{
 pub enum UiCommand {
     Command,
     NextViewPart,
-    NoteUpdate(i16, i16, i16, bool),
-    NoteDelte,
+    Track(TrackCommand),
     PlayToggle,
     TrackAdd,
     TrackMute(usize, bool),
@@ -34,6 +33,11 @@ pub enum UiCommand {
     TrackPan(usize, f32),
     TrackVolume(usize, f32),
     LaneAdd,
+}
+
+pub enum TrackCommand {
+    NoteUpdate(i16, i16, i16, bool),
+    NoteDelte,
     CursorUp,
     CursorDown,
     CursorLeft,
@@ -214,12 +218,6 @@ impl<'a> AppState<'a> {
                     FocusedPart::Mixer => FocusedPart::Track,
                 }
             }
-            UiCommand::NoteUpdate(key_delta, velociy_delta, delay_delta, off) => {
-                note_update(*key_delta, *velociy_delta, *delay_delta, *off, self);
-            }
-            UiCommand::NoteDelte => self
-                .view_sender
-                .send(SingerCommand::NoteDelete(self.cursor.clone()))?,
             UiCommand::PlayToggle => {
                 if self.song_state.play_p {
                     self.view_sender.send(SingerCommand::Stop)?;
@@ -245,10 +243,21 @@ impl<'a> AppState<'a> {
             UiCommand::LaneAdd => self
                 .view_sender
                 .send(SingerCommand::LaneAdd(self.cursor.track))?,
-            UiCommand::CursorUp => self.cursor_up(),
-            UiCommand::CursorDown => self.cursor_down(),
-            UiCommand::CursorLeft => self.cursor_left(),
-            UiCommand::CursorRight => self.cursor_right(),
+            UiCommand::Track(TrackCommand::CursorUp) => self.cursor_up(),
+            UiCommand::Track(TrackCommand::CursorDown) => self.cursor_down(),
+            UiCommand::Track(TrackCommand::CursorLeft) => self.cursor_left(),
+            UiCommand::Track(TrackCommand::CursorRight) => self.cursor_right(),
+            UiCommand::Track(TrackCommand::NoteDelte) => self
+                .view_sender
+                .send(SingerCommand::NoteDelete(self.cursor.clone()))?,
+            UiCommand::Track(TrackCommand::NoteUpdate(
+                key_delta,
+                velociy_delta,
+                delay_delta,
+                off,
+            )) => {
+                note_update(*key_delta, *velociy_delta, *delay_delta, *off, self);
+            }
         }
         Ok(())
     }
