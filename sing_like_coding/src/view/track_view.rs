@@ -37,13 +37,29 @@ impl TrackView {
                 (Modifier::C, Key::J),
                 UiCommand::NoteUpdate(-1, 0, 0, false),
             ),
+            (
+                (Modifier::C, Key::ArrowDown),
+                UiCommand::NoteUpdate(-1, 0, 0, false),
+            ),
             ((Modifier::C, Key::K), UiCommand::NoteUpdate(1, 0, 0, false)),
+            (
+                (Modifier::C, Key::ArrowUp),
+                UiCommand::NoteUpdate(1, 0, 0, false),
+            ),
             (
                 (Modifier::C, Key::H),
                 UiCommand::NoteUpdate(-12, 0, 0, false),
             ),
             (
+                (Modifier::C, Key::ArrowLeft),
+                UiCommand::NoteUpdate(-12, 0, 0, false),
+            ),
+            (
                 (Modifier::C, Key::L),
+                UiCommand::NoteUpdate(12, 0, 0, false),
+            ),
+            (
+                (Modifier::C, Key::ArrowRight),
                 UiCommand::NoteUpdate(12, 0, 0, false),
             ),
             ((Modifier::C, Key::T), UiCommand::TrackAdd),
@@ -52,9 +68,21 @@ impl TrackView {
                 (Modifier::A, Key::J),
                 UiCommand::NoteUpdate(0, -1, 0, false),
             ),
+            (
+                (Modifier::A, Key::ArrowDown),
+                UiCommand::NoteUpdate(0, -1, 0, false),
+            ),
             ((Modifier::A, Key::K), UiCommand::NoteUpdate(0, 1, 0, false)),
             (
+                (Modifier::A, Key::ArrowUp),
+                UiCommand::NoteUpdate(0, 1, 0, false),
+            ),
+            (
                 (Modifier::A, Key::H),
+                UiCommand::NoteUpdate(0, -0x10, 0, false),
+            ),
+            (
+                (Modifier::A, Key::ArrowLeft),
                 UiCommand::NoteUpdate(0, -0x10, 0, false),
             ),
             (
@@ -62,7 +90,15 @@ impl TrackView {
                 UiCommand::NoteUpdate(0, 0x10, 0, false),
             ),
             (
+                (Modifier::A, Key::ArrowRight),
+                UiCommand::NoteUpdate(0, 0x10, 0, false),
+            ),
+            (
                 (Modifier::CA, Key::J),
+                UiCommand::NoteUpdate(0, 0, -1, false),
+            ),
+            (
+                (Modifier::CA, Key::ArrowDown),
                 UiCommand::NoteUpdate(0, 0, -1, false),
             ),
             (
@@ -70,17 +106,33 @@ impl TrackView {
                 UiCommand::NoteUpdate(0, 0, 1, false),
             ),
             (
+                (Modifier::CA, Key::ArrowUp),
+                UiCommand::NoteUpdate(0, 0, 1, false),
+            ),
+            (
                 (Modifier::CA, Key::H),
+                UiCommand::NoteUpdate(0, 0, -0x10, false),
+            ),
+            (
+                (Modifier::CA, Key::ArrowLeft),
                 UiCommand::NoteUpdate(0, 0, -0x10, false),
             ),
             (
                 (Modifier::CA, Key::L),
                 UiCommand::NoteUpdate(0, 0, 0x10, false),
             ),
+            (
+                (Modifier::CA, Key::ArrowRight),
+                UiCommand::NoteUpdate(0, 0, 0x10, false),
+            ),
             ((Modifier::None, Key::J), UiCommand::CursorDown),
+            ((Modifier::None, Key::ArrowDown), UiCommand::CursorDown),
             ((Modifier::None, Key::K), UiCommand::CursorUp),
+            ((Modifier::None, Key::ArrowUp), UiCommand::CursorUp),
             ((Modifier::None, Key::H), UiCommand::CursorLeft),
+            ((Modifier::None, Key::ArrowLeft), UiCommand::CursorLeft),
             ((Modifier::None, Key::L), UiCommand::CursorRight),
+            ((Modifier::None, Key::ArrowRight), UiCommand::CursorRight),
             (
                 (Modifier::None, Key::Period),
                 UiCommand::NoteUpdate(0, 0, 0, true),
