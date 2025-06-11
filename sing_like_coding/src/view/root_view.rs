@@ -9,9 +9,9 @@ use crate::{
 
 use super::{
     command_view::CommandView,
+    main_view::MainView,
     plugin_select_view::PluginSelectView,
     shortcut_key::{shortcut_key, Modifier},
-    track_view::TrackView,
 };
 
 #[derive(Debug)]
@@ -23,7 +23,7 @@ pub enum Route {
 
 pub struct RootView {
     shortcut_map: HashMap<(Modifier, Key), UiCommand>,
-    track_view: TrackView,
+    main_view: MainView,
     command_view: CommandView,
     plugin_select_view: Option<PluginSelectView>,
 }
@@ -40,7 +40,7 @@ impl RootView {
 
         Self {
             shortcut_map,
-            track_view: TrackView::new(),
+            main_view: MainView::new(),
             command_view: CommandView::new(),
             plugin_select_view: None,
         }
@@ -58,7 +58,7 @@ impl RootView {
         state.receive_from_communicator()?;
 
         match &state.route {
-            Route::Track => self.track_view.view(gui_context, state, device)?,
+            Route::Track => self.main_view.view(gui_context, state, device)?,
             Route::Command => self.command_view.view(gui_context, state)?,
             Route::PluginSelect => {
                 if self.plugin_select_view.is_none() {

@@ -25,12 +25,12 @@ use super::{
 
 const DEFAULT_TRACK_WIDTH: f32 = 64.0;
 
-pub struct TrackView {
+pub struct MainView {
     shortcut_map: HashMap<(Modifier, Key), UiCommand>,
     stereo_peak_level_states: Vec<StereoPeakLevelState>,
 }
 
-impl TrackView {
+impl MainView {
     pub fn new() -> Self {
         let shortcut_map = [
             (
