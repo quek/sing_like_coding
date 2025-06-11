@@ -12,7 +12,6 @@ use common::{
     protocol::{MainToPlugin, PluginToMain},
     shmem::{open_shared_memory, SONG_STATE_NAME},
 };
-use eframe::egui;
 use rfd::FileDialog;
 use shared_memory::Shmem;
 
@@ -48,7 +47,6 @@ pub struct Cursor {
 
 pub struct AppState<'a> {
     pub hwnd: isize,
-    pub gui_context: Option<egui::Context>,
     pub clap_manager: ClapManager,
     pub cursor: Cursor,
     pub note_last: Note,
@@ -78,7 +76,6 @@ impl<'a> AppState<'a> {
 
         Self {
             hwnd: 0,
-            gui_context: None,
             clap_manager: ClapManager::new(),
             cursor: Cursor {
                 track: 0,

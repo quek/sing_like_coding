@@ -113,7 +113,6 @@ impl<'a> eframe::App for AppMain<'a> {
             });
 
             self.singer.lock().unwrap().gui_context = Some(ctx.clone());
-            self.state.gui_context = Some(ctx.clone());
 
             self.state.hwnd = get_hwnd(frame);
         }
