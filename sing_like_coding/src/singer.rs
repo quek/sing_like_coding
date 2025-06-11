@@ -226,32 +226,35 @@ impl Singer {
             })
             .zip(self.song.tracks.iter().map(|track| {
                 if (track.pan - 0.5).abs() < 0.01 {
-                    (track.volume, 1.0, 1.0)
+                    (track.volume, track.volume, track.volume)
                 } else {
                     let normalized_pan = (track.pan - 0.5) * 2.0;
                     let pan_angle = (normalized_pan + 1.0) * PI / 4.0;
-                    (track.volume, pan_angle.cos(), pan_angle.sin())
+                    (
+                        track.volume * pan_angle.cos(),
+                        track.volume * pan_angle.sin(),
+                        track.volume,
+                    )
                 }
             }))
             .collect::<Vec<_>>();
 
-        for ((buffer, constant_mask), (volume, pan_gain_left, pan_gain_right)) in buffers.iter_mut()
-        {
+        for ((buffer, constant_mask), (gain_ch0, gain_ch1, gain_ch_restg)) in buffers.iter_mut() {
             for channel in 0..nchannels {
                 let constp = (*constant_mask & (1 << channel)) != 0;
-                let pan_gain = if channel == 0 {
-                    *pan_gain_left
+                let gain = if channel == 0 {
+                    *gain_ch0
                 } else if channel == 1 {
-                    *pan_gain_right
+                    *gain_ch1
                 } else {
-                    1.0
+                    *gain_ch_restg
                 };
 
                 if constp {
-                    buffer[channel][0] *= *volume * pan_gain;
+                    buffer[channel][0] *= gain;
                 } else {
                     for frame in 0..nframes {
-                        buffer[channel][frame] *= *volume * pan_gain;
+                        buffer[channel][frame] *= gain;
                     }
                 }
             }
