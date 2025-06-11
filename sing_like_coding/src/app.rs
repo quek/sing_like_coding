@@ -11,7 +11,7 @@ use crate::app_state::{AppState, AppStateCommand};
 use crate::communicator::Communicator;
 use crate::device::Device;
 use crate::singer::{Singer, SingerCommand};
-use crate::view::main_view::MainView;
+use crate::view::root_view::RootView;
 
 pub fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -35,7 +35,7 @@ struct AppMain<'a> {
     state: AppState<'a>,
     device: Option<Device>,
     singer: Arc<Mutex<Singer>>,
-    view: MainView,
+    view: RootView,
     song_sender: Sender<AppStateCommand>,
     receiver_main_thread_to_communicator: Option<Receiver<MainToPlugin>>,
     sender_communicator_to_main_thread: Option<Sender<PluginToMain>>,
@@ -69,7 +69,7 @@ impl<'a> Default for AppMain<'a> {
             receiver_communicator_to_main_thread,
             receiver_from_singer,
         );
-        let view = MainView::new();
+        let view = RootView::new();
 
         // let app_state_cloned = app_state.clone();
         // tokio::spawn(async move {

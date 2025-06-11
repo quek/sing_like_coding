@@ -9,7 +9,7 @@ use eframe::egui::{
 
 use crate::{app_state::AppState, command::Command, commander::Commander};
 
-use super::main_view::Route;
+use super::root_view::Route;
 
 pub struct CommandView {
     focus_p: bool,

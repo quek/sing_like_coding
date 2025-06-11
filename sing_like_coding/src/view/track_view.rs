@@ -17,7 +17,7 @@ use crate::{
 use super::{
     db_slider::DbSlider,
     knob::Knob,
-    main_view::Route,
+    root_view::Route,
     shortcut_key::{shortcut_key, Modifier},
     stereo_peak_meter::{StereoPeakLevelState, StereoPeakMeter, DB_MAX, DB_MIN},
     util::LabelBuilder,

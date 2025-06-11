@@ -19,12 +19,15 @@ use crate::{
     model::{note::Note, song::Song},
     singer::SingerCommand,
     song_state::SongState,
-    view::main_view::Route,
+    view::root_view::Route,
 };
 
 pub enum UiCommand {
+    Command,
+    NextViewPart,
     NoteUpdate(i16, i16, i16, bool),
     NoteDelte,
+    PlayToggle,
     TrackAdd,
     TrackMute(usize, bool),
     TrackSolo(usize, bool),
@@ -44,8 +47,15 @@ pub struct Cursor {
     pub line: usize,
 }
 
+pub enum FocusedPart {
+    Track,
+    Module,
+    Mixer,
+}
+
 pub struct AppState<'a> {
     pub hwnd: isize,
+    pub focused_part: FocusedPart,
     pub cursor: Cursor,
     pub note_last: Note,
     pub route: Route,
@@ -74,6 +84,7 @@ impl<'a> AppState<'a> {
 
         Self {
             hwnd: 0,
+            focused_part: FocusedPart::Track,
             cursor: Cursor {
                 track: 0,
                 lane: 0,
@@ -193,12 +204,29 @@ impl<'a> AppState<'a> {
 
     pub fn run_ui_command(&mut self, command: &UiCommand) -> anyhow::Result<()> {
         match command {
+            UiCommand::Command => {
+                self.route = Route::Command;
+            }
+            UiCommand::NextViewPart => {
+                self.focused_part = match self.focused_part {
+                    FocusedPart::Track => FocusedPart::Module,
+                    FocusedPart::Module => FocusedPart::Mixer,
+                    FocusedPart::Mixer => FocusedPart::Track,
+                }
+            }
             UiCommand::NoteUpdate(key_delta, velociy_delta, delay_delta, off) => {
                 note_update(*key_delta, *velociy_delta, *delay_delta, *off, self);
             }
             UiCommand::NoteDelte => self
                 .view_sender
                 .send(SingerCommand::NoteDelete(self.cursor.clone()))?,
+            UiCommand::PlayToggle => {
+                if self.song_state.play_p {
+                    self.view_sender.send(SingerCommand::Stop)?;
+                } else {
+                    self.view_sender.send(SingerCommand::Play)?;
+                }
+            }
             UiCommand::TrackAdd => {
                 TrackAdd {}.call(self)?;
             }

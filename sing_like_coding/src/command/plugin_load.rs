@@ -1,4 +1,4 @@
-use crate::{app_state::AppState, view::main_view::Route};
+use crate::{app_state::AppState, view::root_view::Route};
 
 use super::Command;
 

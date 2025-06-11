@@ -1,10 +1,17 @@
 use anyhow::Result;
-use eframe::egui::Key;
+use eframe::egui::{ahash::HashMap, Key};
 
-use crate::{app_state::AppState, device::Device, singer::SingerCommand};
+use crate::{
+    app_state::{AppState, UiCommand},
+    device::Device,
+    singer::SingerCommand,
+};
 
 use super::{
-    command_view::CommandView, plugin_select_view::PluginSelectView, track_view::TrackView,
+    command_view::CommandView,
+    plugin_select_view::PluginSelectView,
+    shortcut_key::{shortcut_key, Modifier},
+    track_view::TrackView,
 };
 
 #[derive(Debug)]
@@ -14,15 +21,25 @@ pub enum Route {
     PluginSelect,
 }
 
-pub struct MainView {
+pub struct RootView {
+    shortcut_map: HashMap<(Modifier, Key), UiCommand>,
     track_view: TrackView,
     command_view: CommandView,
     plugin_select_view: Option<PluginSelectView>,
 }
 
-impl MainView {
+impl RootView {
     pub fn new() -> Self {
+        let shortcut_map = [
+            ((Modifier::None, Key::Space), UiCommand::PlayToggle),
+            ((Modifier::C, Key::Space), UiCommand::Command),
+            ((Modifier::None, Key::V), UiCommand::NextViewPart),
+        ];
+
+        let shortcut_map: HashMap<_, _> = shortcut_map.into_iter().collect();
+
         Self {
+            shortcut_map,
             track_view: TrackView::new(),
             command_view: CommandView::new(),
             plugin_select_view: None,
@@ -79,20 +96,15 @@ impl MainView {
         state: &mut AppState,
         gui_context: &eframe::egui::Context,
     ) -> Result<()> {
-        let input = gui_context.input(|i| i.clone());
         let focused = gui_context.memory(|memory| memory.focused());
         if focused.is_some() {
             return Ok(());
         }
 
-        if input.modifiers.ctrl && input.key_pressed(eframe::egui::Key::Space) {
-            state.route = Route::Command;
-        } else if input.key_pressed(Key::Space) {
-            state.view_sender.send(if state.song_state.play_p {
-                SingerCommand::Stop
-            } else {
-                SingerCommand::Play
-            })?;
+        if let Some(key) = shortcut_key(gui_context) {
+            if let Some(command) = self.shortcut_map.get(&key) {
+                state.run_ui_command(command)?;
+            }
         }
 
         Ok(())
