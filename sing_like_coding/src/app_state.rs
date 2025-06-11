@@ -120,6 +120,8 @@ impl<'a> AppState<'a> {
                 lane: 0,
                 line: 0,
             },
+            cursor_module: CursorModule { index: 0 },
+            cursor_mixer: CursorMixer { index: 0 },
             note_last: Note {
                 line: 0,
                 delay: 0,
@@ -284,8 +286,52 @@ impl<'a> AppState<'a> {
             )) => {
                 note_update(*key_delta, *velociy_delta, *delay_delta, *off, self);
             }
-            UiCommand::Mixer(mixer_command) => todo!(),
-            UiCommand::Module(module_command) => todo!(),
+            UiCommand::Module(ModuleCommand::CursorUp) => {
+                if self.cursor_module.index == 0 {
+                    self.cursor_module.index =
+                        self.song.tracks[self.cursor_track.track].modules.len();
+                } else {
+                    self.cursor_module.index -= 1;
+                }
+            }
+            UiCommand::Module(ModuleCommand::CursorDown) => {
+                if self.cursor_module.index
+                    == self.song.tracks[self.cursor_track.track].modules.len()
+                {
+                    self.cursor_module.index = 0;
+                } else {
+                    self.cursor_module.index += 1;
+                }
+            }
+            UiCommand::Module(ModuleCommand::CursorLeft) => {
+                if self.cursor_track.track == 0 {
+                    self.cursor_track.track = self.song.tracks.len() - 1;
+                } else {
+                    self.cursor_track.track -= 1;
+                }
+                self.cursor_track.lane = 0;
+                if self.cursor_module.index
+                    > self.song.tracks[self.cursor_track.track].modules.len()
+                {
+                    self.cursor_module.index =
+                        self.song.tracks[self.cursor_track.track].modules.len();
+                }
+            }
+            UiCommand::Module(ModuleCommand::CursorRight) => {
+                if self.cursor_track.track == self.song.tracks.len() - 1 {
+                    self.cursor_track.track = 0;
+                } else {
+                    self.cursor_track.track += 1;
+                }
+                self.cursor_track.lane = 0;
+                if self.cursor_module.index
+                    > self.song.tracks[self.cursor_track.track].modules.len()
+                {
+                    self.cursor_module.index =
+                        self.song.tracks[self.cursor_track.track].modules.len();
+                }
+            }
+            UiCommand::Mixer(module_command) => todo!(),
         }
         Ok(())
     }

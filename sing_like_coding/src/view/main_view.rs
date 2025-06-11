@@ -482,7 +482,15 @@ impl MainView {
         module_index: usize,
     ) -> anyhow::Result<()> {
         let module = &state.song.tracks[track_index].modules[module_index];
+        let color = if state.cursor_track.track == track_index
+            && state.cursor_module.index == module_index
+        {
+            Color32::YELLOW
+        } else {
+            Color32::BLACK
+        };
         let label = LabelBuilder::new(ui, &module.name)
+            .bg_color(color)
             .size([DEFAULT_TRACK_WIDTH, 0.0])
             .build();
         if label.clicked() {
@@ -511,7 +519,17 @@ impl MainView {
         for module_index in 0..state.song.tracks[track_index].modules.len() {
             self.view_module(state, ui, track_index, module_index)?;
         }
+
+        let color = if state.cursor_track.track == track_index
+            && state.cursor_module.index == state.song.tracks[track_index].modules.len()
+        {
+            Color32::YELLOW
+        } else {
+            Color32::BLACK
+        };
+
         if LabelBuilder::new(ui, "+")
+            .bg_color(color)
             .size([DEFAULT_TRACK_WIDTH, 0.0])
             .build()
             .clicked()
