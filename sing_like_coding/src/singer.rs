@@ -235,29 +235,40 @@ impl Singer {
             }))
             .collect::<Vec<_>>();
 
-        for channel in 0..nchannels {
-            for frame in 0..nframes {
-                output[nchannels * frame + channel] = buffers
-                    .iter_mut()
-                    .map(
-                        |((buffer, constant_mask), (volume, pan_gain_left, pan_gain_right))| {
-                            let constp = (*constant_mask & (1 << channel)) == 1;
-                            if !constp || frame == 0 {
-                                buffer[channel][frame] *= *volume;
+        for ((buffer, constant_mask), (volume, pan_gain_left, pan_gain_right)) in buffers.iter_mut()
+        {
+            for channel in 0..nchannels {
+                let constp = (*constant_mask & (1 << channel)) != 0;
+                let pan_gain = if channel == 0 {
+                    *pan_gain_left
+                } else if channel == 1 {
+                    *pan_gain_right
+                } else {
+                    1.0
+                };
 
-                                if channel == 0 {
-                                    buffer[channel][frame] *= *pan_gain_left;
-                                } else if channel == 1 {
-                                    buffer[channel][frame] *= *pan_gain_right;
-                                }
-                            }
-                            if constp {
-                                buffer[channel][0]
-                            } else {
-                                buffer[channel][frame]
-                            }
-                        },
-                    )
+                if constp {
+                    buffer[channel][0] *= *volume * pan_gain;
+                } else {
+                    for frame in 0..nframes {
+                        buffer[channel][frame] *= *volume * pan_gain;
+                    }
+                }
+            }
+        }
+
+        for frame in 0..nframes {
+            for channel in 0..nchannels {
+                output[nchannels * frame + channel] = buffers
+                    .iter()
+                    .map(|((buffer, constant_mask), _)| {
+                        let constp = (*constant_mask & (1 << channel)) != 0;
+                        if constp {
+                            buffer[channel][0]
+                        } else {
+                            buffer[channel][frame]
+                        }
+                    })
                     .sum();
             }
         }
