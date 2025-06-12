@@ -72,11 +72,59 @@ pub enum MixerCommand {
     Volume(f32),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CursorTrack {
     pub track: usize,
     pub lane: usize,
     pub line: usize,
+}
+
+impl CursorTrack {
+    pub fn min_merge(&self, other: &Self) -> Self {
+        let (track, lane) = if (self.track, self.lane) <= (other.track, other.lane) {
+            (self.track, self.lane)
+        } else {
+            (other.track, other.lane)
+        };
+        Self {
+            track,
+            lane,
+            line: self.line.min(other.line),
+        }
+    }
+
+    pub fn max_merge(&self, other: &Self) -> Self {
+        let (track, lane) = if (self.track, self.lane) >= (other.track, other.lane) {
+            (self.track, self.lane)
+        } else {
+            (other.track, other.lane)
+        };
+        Self {
+            track,
+            lane,
+            line: self.line.max(other.line),
+        }
+    }
+}
+
+impl Ord for CursorTrack {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.track == other.track && self.lane == other.lane && self.line == other.line {
+            std::cmp::Ordering::Equal
+        } else if (self.track < other.track || self.track == other.track && self.lane <= other.lane)
+            && self.line <= other.line
+        {
+            std::cmp::Ordering::Less
+        } else {
+            std::cmp::Ordering::Greater
+        }
+    }
+}
+
+impl PartialOrd for CursorTrack {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 pub struct CursorModule {
@@ -99,8 +147,8 @@ pub struct AppState<'a> {
     pub note_last: Note,
     pub route: Route,
     pub select_p: bool,
-    pub selected_cell_min: (usize, usize),
-    pub selected_cell_max: (usize, usize),
+    pub selection_track_min: CursorTrack,
+    pub selection_track_max: CursorTrack,
     pub selected_tracks: Vec<usize>,
     pub song: Song,
     pub view_sender: Sender<SingerCommand>,
@@ -143,8 +191,8 @@ impl<'a> AppState<'a> {
             },
             route: Route::Track,
             select_p: false,
-            selected_cell_min: (0, 0),
-            selected_cell_max: (0, 0),
+            selection_track_min: Default::default(),
+            selection_track_max: Default::default(),
             selected_tracks: vec![0],
             song: Song::new(),
             view_sender,
@@ -333,17 +381,13 @@ impl<'a> AppState<'a> {
             UiCommand::Track(TrackCommand::SelectMode) => {
                 self.select_p = !self.select_p;
                 if self.select_p {
-                    self.selected_cell_min = (self.cursor_track.track, self.cursor_track.line);
-                    self.selected_cell_max = self.selected_cell_min;
+                    self.selection_track_min = self.cursor_track;
+                    self.selection_track_max = self.cursor_track;
                 } else {
-                    self.selected_cell_min = (
-                        self.selected_cell_min.0.min(self.cursor_track.track),
-                        self.selected_cell_min.1.min(self.cursor_track.line),
-                    );
-                    self.selected_cell_max = (
-                        self.selected_cell_max.0.max(self.cursor_track.track),
-                        self.selected_cell_max.1.max(self.cursor_track.line),
-                    );
+                    self.selection_track_min =
+                        self.selection_track_min.min_merge(&self.cursor_track);
+                    self.selection_track_max =
+                        self.selection_track_max.max_merge(&self.cursor_track);
                 }
             }
             UiCommand::Module(ModuleCommand::CursorUp) => {
@@ -442,9 +486,9 @@ impl<'a> AppState<'a> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Track(TrackCommand::SelectMode))?;
         }
-        for track_index in self.selected_cell_min.0..=self.selected_cell_max.0 {
+        for track_index in self.selection_track_min.track..=self.selection_track_max.track {
             if let Some(_track) = self.song.tracks.get(track_index) {
-                for _line in self.selected_cell_min.1..=self.selected_cell_max.1 {
+                for _line in self.selection_track_min.line..=self.selection_track_max.line {
                     // TODO
                 }
             }

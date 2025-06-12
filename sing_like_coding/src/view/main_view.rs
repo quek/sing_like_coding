@@ -12,7 +12,9 @@ use common::{
 use eframe::egui::{CentralPanel, Color32, Key, TopBottomPanel, Ui};
 
 use crate::{
-    app_state::{AppState, FocusedPart, MixerCommand, ModuleCommand, TrackCommand, UiCommand},
+    app_state::{
+        AppState, CursorTrack, FocusedPart, MixerCommand, ModuleCommand, TrackCommand, UiCommand,
+    },
     device::Device,
     singer::SingerCommand,
     util::with_font_mono,
@@ -290,8 +292,10 @@ impl MainView {
         });
 
         CentralPanel::default().show(gui_context, |ui: &mut Ui| -> anyhow::Result<()> {
-            if false {
-                ui.label(format!("{:?}", state.song));
+            if true {
+                ui.label(format!("{:?}", state.cursor_track));
+                ui.label(format!("{:?}", state.selection_track_min));
+                ui.label(format!("{:?}", state.selection_track_max));
                 ui.label(format!("{:?}", state.song_state.tracks[0]));
                 ui.label(format!("{:?}", state.song_state.tracks[1]));
                 ui.label(format!("{:?}", state.song_state.tracks[2]));
@@ -518,23 +522,18 @@ impl MainView {
                 } else {
                     let (min, max) = if state.select_p {
                         (
-                            (
-                                state.selected_cell_min.0.min(state.cursor_track.track),
-                                state.selected_cell_min.1.min(state.cursor_track.line),
-                            ),
-                            (
-                                state.selected_cell_max.0.max(state.cursor_track.track),
-                                state.selected_cell_max.1.max(state.cursor_track.line),
-                            ),
+                            state.selection_track_min.min_merge(&state.cursor_track),
+                            state.selection_track_min.max_merge(&state.cursor_track),
                         )
                     } else {
-                        (state.selected_cell_min, state.selected_cell_max)
+                        (state.selection_track_min, state.selection_track_max)
                     };
-                    if min.0 <= track_index
-                        && track_index <= max.0
-                        && min.1 <= line
-                        && line <= max.1
-                    {
+                    let current = CursorTrack {
+                        track: track_index,
+                        lane: lane_index,
+                        line,
+                    };
+                    if min <= current && current <= max {
                         color = Color32::LIGHT_BLUE;
                     }
                 };
