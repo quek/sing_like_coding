@@ -46,12 +46,15 @@ pub enum UiCommand {
 }
 
 pub enum TrackCommand {
+    Copy,
+    Cut,
     CursorDown,
     CursorLeft,
     CursorRight,
     CursorUp,
     NoteDelte,
     NoteUpdate(i16, i16, i16, bool),
+    Paste,
     SelectMode,
 }
 
@@ -309,6 +312,9 @@ impl<'a> AppState<'a> {
             UiCommand::LaneAdd => self
                 .view_sender
                 .send(SingerCommand::LaneAdd(self.cursor_track.track))?,
+            UiCommand::Track(TrackCommand::Copy) => self.notes_copy()?,
+            UiCommand::Track(TrackCommand::Cut) => {}
+            UiCommand::Track(TrackCommand::Paste) => {}
             UiCommand::Track(TrackCommand::CursorUp) => self.cursor_up(),
             UiCommand::Track(TrackCommand::CursorDown) => self.cursor_down(),
             UiCommand::Track(TrackCommand::CursorLeft) => self.cursor_left(),
@@ -428,6 +434,20 @@ impl<'a> AppState<'a> {
         }
         if self.nmodules_saving == 0 {
             self.song_save_file()?;
+        }
+        Ok(())
+    }
+
+    fn notes_copy(&mut self) -> anyhow::Result<()> {
+        if self.select_p {
+            self.run_ui_command(&UiCommand::Track(TrackCommand::SelectMode))?;
+        }
+        for track_index in self.selected_cell_min.0..=self.selected_cell_max.0 {
+            if let Some(_track) = self.song.tracks.get(track_index) {
+                for _line in self.selected_cell_min.1..=self.selected_cell_max.1 {
+                    // TODO
+                }
+            }
         }
         Ok(())
     }
