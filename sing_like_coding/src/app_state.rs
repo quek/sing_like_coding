@@ -30,9 +30,11 @@ use crate::{
 
 pub enum UiCommand {
     Command,
-    NextViewPart,
+    Follow,
+    Loop,
     Mixer(MixerCommand),
     Module(ModuleCommand),
+    NextViewPart,
     PlayToggle,
     Track(TrackCommand),
     TrackAdd,
@@ -87,6 +89,7 @@ pub enum FocusedPart {
 pub struct AppState<'a> {
     pub hwnd: isize,
     pub focused_part: FocusedPart,
+    pub follow_p: bool,
     pub cursor_track: CursorTrack,
     pub cursor_module: CursorModule,
     pub note_last: Note,
@@ -117,6 +120,7 @@ impl<'a> AppState<'a> {
         Self {
             hwnd: 0,
             focused_part: FocusedPart::Track,
+            follow_p: true,
             cursor_track: CursorTrack {
                 track: 0,
                 lane: 0,
@@ -255,6 +259,12 @@ impl<'a> AppState<'a> {
         match command {
             UiCommand::Command => {
                 self.route = Route::Command;
+            }
+            UiCommand::Follow => {
+                self.follow_p = !self.follow_p;
+            }
+            UiCommand::Loop => {
+                self.view_sender.send(SingerCommand::Loop)?;
             }
             UiCommand::NextViewPart => {
                 self.focused_part = match self.focused_part {

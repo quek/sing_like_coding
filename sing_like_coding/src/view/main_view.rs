@@ -41,6 +41,8 @@ impl MainView {
     pub fn new() -> Self {
         let shortcut_map_common = [
             ((Modifier::None, Key::M), UiCommand::TrackMute(None, None)),
+            ((Modifier::None, Key::P), UiCommand::Loop),
+            ((Modifier::S, Key::P), UiCommand::Follow),
             ((Modifier::None, Key::S), UiCommand::TrackSolo(None, None)),
             ((Modifier::C, Key::T), UiCommand::TrackAdd),
             ((Modifier::CS, Key::T), UiCommand::LaneAdd),
@@ -292,10 +294,14 @@ impl MainView {
                     "{}",
                     play_position_text1(state.song_state.line_play, state.song.lpb)
                 ));
+
                 let mut loop_p = state.song_state.loop_p;
                 if ui.toggle_value(&mut loop_p, "Loop").clicked() {
                     state.view_sender.send(SingerCommand::Loop)?;
                 }
+
+                ui.toggle_value(&mut state.follow_p, "Follow");
+
                 if ui.button("device start").clicked() {
                     device.as_mut().unwrap().start().unwrap();
                 }
@@ -308,9 +314,13 @@ impl MainView {
             ui.separator();
 
             with_font_mono(ui, |ui| {
+                if state.song_state.play_p && state.follow_p {
+                    state.cursor_track.line = state.song_state.line_play
+                }
                 let line_start = (state.cursor_track.line as i64 - 0x0f).max(0) as usize;
                 let line_end = line_start + 0x20;
                 let line_range = line_start..line_end;
+
                 ui.horizontal(|ui| -> anyhow::Result<()> {
                     self.view_ruler(state, ui, &line_range)?;
 
