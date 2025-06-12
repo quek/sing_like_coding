@@ -28,7 +28,7 @@ pub struct Event {
     pub key: i16,
     pub velocity: f64,
     pub channel: i16,
-    pub delay: u8,
+    pub delay: usize,
 }
 
 #[repr(u8)]
@@ -84,7 +84,7 @@ impl ProcessData {
         }
     }
 
-    pub fn note_on(&mut self, key: i16, velocity: f64, channel: i16, delay: u8) {
+    pub fn note_on(&mut self, key: i16, velocity: f64, channel: i16, delay: usize) {
         if self.nevents_input == MAX_EVENTS {
             panic!();
         }
@@ -96,7 +96,7 @@ impl ProcessData {
         self.nevents_input += 1;
     }
 
-    pub fn note_off(&mut self, key: i16, channel: i16, delay: u8) {
+    pub fn note_off(&mut self, key: i16, channel: i16, delay: usize) {
         if self.nevents_input == MAX_EVENTS {
             panic!();
         }

@@ -42,9 +42,9 @@ pub enum SingerCommand {
     Note(CursorTrack, Note),
     NoteDelete(CursorTrack),
     #[allow(dead_code)]
-    NoteOn(usize, i16, i16, f64, u8),
+    NoteOn(usize, i16, i16, f64, usize),
     #[allow(dead_code)]
-    NoteOff(usize, i16, i16, f64, u8),
+    NoteOff(usize, i16, i16, f64, usize),
     PluginLoad(usize, Description, isize),
     PluginDelete(usize, usize),
     TrackAdd,
@@ -531,17 +531,17 @@ async fn singer_loop(
 
                 singer.send_song();
             }
-            SingerCommand::NoteOn(track_index, key, _channel, velocity, time) => {
+            SingerCommand::NoteOn(track_index, key, _channel, velocity, delay) => {
                 let mut singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
                     .event_list_input
-                    .push(Event::NoteOn(key, velocity, time));
+                    .push(Event::NoteOn(key, velocity, delay));
             }
-            SingerCommand::NoteOff(track_index, key, _channel, _velocity, time) => {
+            SingerCommand::NoteOff(track_index, key, _channel, _velocity, delay) => {
                 let mut singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
                     .event_list_input
-                    .push(Event::NoteOff(key, time));
+                    .push(Event::NoteOff(key, delay));
             }
             SingerCommand::TrackAdd => {
                 let mut singer = singer.lock().unwrap();

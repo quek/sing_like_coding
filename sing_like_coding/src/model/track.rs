@@ -54,7 +54,7 @@ impl Track {
                     if let Some((line, note)) = lane.notes.get_key_value(&line) {
                         let time = *line * 0x100 + note.delay as usize;
                         if range.contains(&time) {
-                            let delay = 0; // TODO
+                            let delay = time - range.start;
                             if let Some(Some(key)) = context.on_keys.get(lane_index).take() {
                                 context.event_list_input.push(Event::NoteOff(*key, delay));
                             }
