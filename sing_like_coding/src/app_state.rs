@@ -220,7 +220,6 @@ impl<'a> AppState<'a> {
             },
             cursor_module: CursorModule { index: 0 },
             note_last: Note {
-                line: 0,
                 delay: 0,
                 channel: 0,
                 key: 60,
@@ -639,7 +638,6 @@ fn note_update(
     }
 
     let mut note = state.note_last.clone();
-    note.line = state.cursor_track.line;
     note.off = off;
     state
         .view_sender

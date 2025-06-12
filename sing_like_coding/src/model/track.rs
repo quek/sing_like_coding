@@ -51,8 +51,8 @@ impl Track {
             let line_end = range.end / 0x100;
             for line in line_start..=line_end {
                 for (lane_index, lane) in self.lanes.iter().enumerate() {
-                    if let Some(note) = lane.notes.get(&line) {
-                        let time = note.line * 0x100 + note.delay as usize;
+                    if let Some((line, note)) = lane.notes.get_key_value(&line) {
+                        let time = *line * 0x100 + note.delay as usize;
                         if range.contains(&time) {
                             let delay = 0; // TODO
                             if let Some(Some(key)) = context.on_keys.get(lane_index).take() {

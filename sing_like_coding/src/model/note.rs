@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Note {
-    pub line: usize,
     pub delay: u8,
     pub channel: i16,
     pub key: i16,

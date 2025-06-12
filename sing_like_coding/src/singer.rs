@@ -497,7 +497,7 @@ async fn singer_loop(
                     .get_mut(cursor.track)
                     .map(|x| x.lanes.get_mut(cursor.lane))
                 {
-                    lane.notes.insert(note.line, note);
+                    lane.notes.insert(cursor.line, note);
                     singer.send_song();
                 }
             }
