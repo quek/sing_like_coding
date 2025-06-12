@@ -46,7 +46,7 @@ impl<'a> Widget for Knob<'a> {
         painter.line_segment([center, needle_pos], (2.0, Color32::WHITE));
 
         // 数値表示（下部）
-        let text = if (*self.value - 0.5).abs() < 0.01 {
+        let text = if (*self.value - 0.5).abs() < 0.001 {
             "C".to_string()
         } else if *self.value < 0.5 {
             format!("L{}", ((0.5 - *self.value) * 200.0).round() as i32)

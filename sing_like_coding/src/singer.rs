@@ -229,7 +229,7 @@ impl Singer {
             })
             .zip(self.song.tracks.iter().map(|track| {
                 solo_any |= track.solo;
-                if (track.pan - 0.5).abs() < 0.01 {
+                if (track.pan - 0.5).abs() < 0.001 {
                     (
                         track.mute,
                         track.solo,

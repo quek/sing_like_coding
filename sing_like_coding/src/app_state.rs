@@ -8,6 +8,7 @@ use std::{
 };
 
 use common::{
+    dsp::{db_from_norm, db_to_norm},
     module::Module,
     protocol::{MainToPlugin, PluginToMain},
     shmem::{open_shared_memory, SONG_STATE_NAME},
@@ -18,10 +19,13 @@ use shared_memory::Shmem;
 
 use crate::{
     command::{track_add::TrackAdd, Command},
-    model::{note::Note, song::Song},
+    model::{note::Note, song::Song, track::Track},
     singer::SingerCommand,
     song_state::SongState,
-    view::root_view::Route,
+    view::{
+        root_view::Route,
+        stereo_peak_meter::{DB_MAX, DB_MIN},
+    },
 };
 
 pub enum UiCommand {
@@ -56,10 +60,10 @@ pub enum ModuleCommand {
 }
 
 pub enum MixerCommand {
-    CursorUp,
-    CursorDown,
     CursorLeft,
     CursorRight,
+    Pan(f32),
+    Volume(f32),
 }
 
 #[derive(Clone, Debug)]
@@ -70,10 +74,6 @@ pub struct CursorTrack {
 }
 
 pub struct CursorModule {
-    pub index: usize,
-}
-
-pub struct CursorMixer {
     pub index: usize,
 }
 
@@ -89,7 +89,6 @@ pub struct AppState<'a> {
     pub focused_part: FocusedPart,
     pub cursor_track: CursorTrack,
     pub cursor_module: CursorModule,
-    pub cursor_mixer: CursorMixer,
     pub note_last: Note,
     pub route: Route,
     pub selected_cells: Vec<(usize, usize)>,
@@ -124,7 +123,6 @@ impl<'a> AppState<'a> {
                 line: 0,
             },
             cursor_module: CursorModule { index: 0 },
-            cursor_mixer: CursorMixer { index: 0 },
             note_last: Note {
                 line: 0,
                 delay: 0,
@@ -329,12 +327,7 @@ impl<'a> AppState<'a> {
                 }
             }
             UiCommand::Module(ModuleCommand::CursorLeft) => {
-                if self.cursor_track.track == 0 {
-                    self.cursor_track.track = self.song.tracks.len() - 1;
-                } else {
-                    self.cursor_track.track -= 1;
-                }
-                self.cursor_track.lane = 0;
+                self.track_prev();
                 if self.cursor_module.index
                     > self.song.tracks[self.cursor_track.track].modules.len()
                 {
@@ -343,12 +336,7 @@ impl<'a> AppState<'a> {
                 }
             }
             UiCommand::Module(ModuleCommand::CursorRight) => {
-                if self.cursor_track.track == self.song.tracks.len() - 1 {
-                    self.cursor_track.track = 0;
-                } else {
-                    self.cursor_track.track += 1;
-                }
-                self.cursor_track.lane = 0;
+                self.track_next();
                 if self.cursor_module.index
                     > self.song.tracks[self.cursor_track.track].modules.len()
                 {
@@ -356,7 +344,25 @@ impl<'a> AppState<'a> {
                         self.song.tracks[self.cursor_track.track].modules.len();
                 }
             }
-            UiCommand::Mixer(module_command) => todo!(),
+            UiCommand::Mixer(MixerCommand::CursorLeft) => self.track_prev(),
+            UiCommand::Mixer(MixerCommand::CursorRight) => self.track_next(),
+            UiCommand::Mixer(MixerCommand::Pan(delta)) => {
+                if let Some(track) = self.track_current() {
+                    self.view_sender.send(SingerCommand::TrackPan(
+                        self.cursor_track.track,
+                        (track.pan + (delta / 20.0)).clamp(0.0, 1.0),
+                    ))?;
+                }
+            }
+            UiCommand::Mixer(MixerCommand::Volume(delta)) => {
+                if let Some(track) = self.track_current() {
+                    let db = db_from_norm(track.volume, DB_MIN, DB_MAX) + delta;
+                    self.view_sender.send(SingerCommand::TrackVolume(
+                        self.cursor_track.track,
+                        db_to_norm(db, DB_MIN, DB_MAX).clamp(0.0, 1.0),
+                    ))?;
+                }
+            }
         }
         Ok(())
     }
@@ -416,6 +422,28 @@ impl<'a> AppState<'a> {
         let json = serde_json::to_string_pretty(&self.song).unwrap();
         file.write_all(json.as_bytes()).unwrap();
         Ok(())
+    }
+
+    fn track_current(&self) -> Option<&Track> {
+        self.song.tracks.get(self.cursor_track.track)
+    }
+
+    fn track_next(&mut self) {
+        if self.cursor_track.track == self.song.tracks.len() - 1 {
+            self.cursor_track.track = 0;
+        } else {
+            self.cursor_track.track += 1;
+        }
+        self.cursor_track.lane = 0;
+    }
+
+    fn track_prev(&mut self) {
+        if self.cursor_track.track == 0 {
+            self.cursor_track.track = self.song.tracks.len() - 1;
+        } else {
+            self.cursor_track.track -= 1;
+        }
+        self.cursor_track.lane = 0;
     }
 }
 

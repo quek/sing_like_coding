@@ -5,7 +5,7 @@ use common::{
     dsp::{db_from_norm, db_to_norm},
     protocol::MainToPlugin,
 };
-use eframe::egui::{CentralPanel, Color32, Key, TopBottomPanel, Ui};
+use eframe::egui::{CentralPanel, Color32, Frame, Key, TopBottomPanel, Ui};
 
 use crate::{
     app_state::{AppState, FocusedPart, MixerCommand, ModuleCommand, TrackCommand, UiCommand},
@@ -201,11 +201,19 @@ impl MainView {
         let shortcut_map_mixer = [
             (
                 (Modifier::None, Key::K),
-                UiCommand::Mixer(MixerCommand::CursorUp),
+                UiCommand::Mixer(MixerCommand::Volume(1.0)),
             ),
             (
                 (Modifier::None, Key::J),
-                UiCommand::Mixer(MixerCommand::CursorDown),
+                UiCommand::Mixer(MixerCommand::Volume(-1.0)),
+            ),
+            (
+                (Modifier::S, Key::K),
+                UiCommand::Mixer(MixerCommand::Volume(0.1)),
+            ),
+            (
+                (Modifier::S, Key::J),
+                UiCommand::Mixer(MixerCommand::Volume(-0.1)),
             ),
             (
                 (Modifier::None, Key::H),
@@ -214,6 +222,22 @@ impl MainView {
             (
                 (Modifier::None, Key::L),
                 UiCommand::Mixer(MixerCommand::CursorRight),
+            ),
+            (
+                (Modifier::C, Key::H),
+                UiCommand::Mixer(MixerCommand::Pan(-1.0)),
+            ),
+            (
+                (Modifier::C, Key::L),
+                UiCommand::Mixer(MixerCommand::Pan(1.0)),
+            ),
+            (
+                (Modifier::S, Key::H),
+                UiCommand::Mixer(MixerCommand::Pan(-0.1)),
+            ),
+            (
+                (Modifier::S, Key::L),
+                UiCommand::Mixer(MixerCommand::Pan(0.1)),
             ),
         ];
 
@@ -341,84 +365,98 @@ impl MainView {
         track_index: usize,
         commands: &mut Vec<UiCommand>,
     ) -> anyhow::Result<()> {
-        let track = &state.song.tracks[track_index];
-        let peak_level_state = self.stereo_peak_level_state(track_index);
-        peak_level_state.update(&state.song_state.tracks[track_index].peaks);
-        for x in [&peak_level_state.left, &peak_level_state.right] {
-            LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
-        }
-
-        ui.horizontal(|ui| -> anyhow::Result<()> {
-            let mut pan = track.pan;
-            let knob = ui.add(Knob { value: &mut pan });
-            if knob.dragged() {
-                commands.push(UiCommand::TrackPan(track_index, pan));
-            } else if knob.double_clicked() {
-                commands.push(UiCommand::TrackPan(track_index, 0.5));
-            }
-
-            ui.vertical(|ui| -> anyhow::Result<()> {
-                let width = 18.0;
-
-                let mut solo = track.solo;
-                if ui
-                    .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut solo, "S"))
-                    .clicked()
+        Frame::NONE
+            .fill(
+                if state.focused_part == FocusedPart::Mixer
+                    && track_index == state.cursor_track.track
                 {
-                    commands.push(UiCommand::TrackSolo(Some(track_index), Some(solo)));
+                    Color32::DARK_BLUE
+                } else {
+                    Color32::BLACK
+                },
+            )
+            .show(ui, |ui| -> anyhow::Result<()> {
+                let track = &state.song.tracks[track_index];
+                let peak_level_state = self.stereo_peak_level_state(track_index);
+                peak_level_state.update(&state.song_state.tracks[track_index].peaks);
+                for x in [&peak_level_state.left, &peak_level_state.right] {
+                    LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
                 }
 
-                let mut mute = track.mute;
-                if ui
-                    .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut mute, "M"))
-                    .clicked()
-                {
-                    commands.push(UiCommand::TrackMute(Some(track_index), Some(mute)));
-                }
+                ui.horizontal(|ui| -> anyhow::Result<()> {
+                    let mut pan = track.pan;
+                    let knob = ui.add(Knob { value: &mut pan });
+                    if knob.dragged() {
+                        commands.push(UiCommand::TrackPan(track_index, pan));
+                    } else if knob.double_clicked() {
+                        commands.push(UiCommand::TrackPan(track_index, 0.5));
+                    }
+
+                    ui.vertical(|ui| -> anyhow::Result<()> {
+                        let width = 18.0;
+
+                        let mut solo = track.solo;
+                        if ui
+                            .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut solo, "S"))
+                            .clicked()
+                        {
+                            commands.push(UiCommand::TrackSolo(Some(track_index), Some(solo)));
+                        }
+
+                        let mut mute = track.mute;
+                        if ui
+                            .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut mute, "M"))
+                            .clicked()
+                        {
+                            commands.push(UiCommand::TrackMute(Some(track_index), Some(mute)));
+                        }
+
+                        Ok(())
+                    });
+                    Ok(())
+                });
+
+                ui.horizontal(|ui| -> anyhow::Result<()> {
+                    let height = 160.0;
+
+                    ui.add(StereoPeakMeter {
+                        peak_level_state,
+                        min_db: DB_MIN,
+                        max_db: DB_MAX,
+                        show_scale: true,
+                        height,
+                    });
+
+                    let mut db_value = db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
+                    let fader = ui.add(DbSlider {
+                        db_value: &mut db_value,
+                        min_db: DB_MIN,
+                        max_db: DB_MAX,
+                        height,
+                    });
+                    if fader.dragged() {
+                        commands.push(UiCommand::TrackVolume(
+                            track_index,
+                            db_to_norm(db_value, DB_MIN, DB_MAX),
+                        ));
+                    } else if fader.double_clicked() {
+                        commands.push(UiCommand::TrackVolume(
+                            track_index,
+                            db_to_norm(0.0, DB_MIN, DB_MAX),
+                        ));
+                    }
+
+                    Ok(())
+                });
+
+                LabelBuilder::new(
+                    ui,
+                    format!("{:.2}dB", db_from_norm(track.volume, DB_MIN, DB_MAX)),
+                )
+                .build();
 
                 Ok(())
             });
-            Ok(())
-        });
-
-        ui.horizontal(|ui| -> anyhow::Result<()> {
-            let height = 160.0;
-
-            ui.add(StereoPeakMeter {
-                peak_level_state,
-                min_db: DB_MIN,
-                max_db: DB_MAX,
-                show_scale: true,
-                height,
-            });
-
-            let mut db_value = db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
-            let fader = ui.add(DbSlider {
-                db_value: &mut db_value,
-                min_db: DB_MIN,
-                max_db: DB_MAX,
-                height,
-            });
-            if fader.dragged() {
-                commands.push(UiCommand::TrackVolume(
-                    track_index,
-                    db_to_norm(db_value, DB_MIN, DB_MAX),
-                ));
-            } else if fader.double_clicked() {
-                commands.push(UiCommand::TrackVolume(
-                    track_index,
-                    db_to_norm(0.0, DB_MIN, DB_MAX),
-                ));
-            }
-
-            Ok(())
-        });
-
-        LabelBuilder::new(
-            ui,
-            format!("{:.2}dB", db_from_norm(track.volume, DB_MIN, DB_MAX)),
-        )
-        .build();
 
         Ok(())
     }
