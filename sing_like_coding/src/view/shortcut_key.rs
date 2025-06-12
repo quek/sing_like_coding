@@ -1,7 +1,7 @@
 use eframe::egui::{Event, Key};
 
 #[allow(dead_code)]
-#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub enum Modifier {
     None,
     C,
@@ -22,6 +22,11 @@ pub fn shortcut_key(gui_context: &eframe::egui::Context) -> Option<(Modifier, Ke
             Event::Key {
                 key, pressed: true, ..
             } => Some(*key),
+            // C-c, C-x, C-v は変換されている
+            // https://github.com/emilk/egui/blob/main/crates/egui-winit/src/lib.rs#L768
+            Event::Copy => Some(Key::C),
+            Event::Cut => Some(Key::X),
+            Event::Paste(_) => Some(Key::V),
             _ => None,
         })
         .next()
@@ -44,6 +49,7 @@ pub fn shortcut_key(gui_context: &eframe::egui::Context) -> Option<(Modifier, Ke
         } else {
             Modifier::None
         };
+        // dbg!(&modifier, &key,);
         Some((modifier, key))
     } else {
         None
