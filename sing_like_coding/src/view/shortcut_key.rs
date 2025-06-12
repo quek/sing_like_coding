@@ -15,6 +15,7 @@ pub enum Modifier {
 
 pub fn shortcut_key(gui_context: &eframe::egui::Context) -> Option<(Modifier, Key)> {
     let input = gui_context.input(|i| i.clone());
+    // dbg!(&input.events);
     if let Some(key) = input
         .events
         .iter()

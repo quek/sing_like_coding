@@ -7,6 +7,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use arboard::Clipboard;
 use common::{
     dsp::{db_from_norm, db_to_norm},
     module::Module,
@@ -103,6 +104,42 @@ impl CursorTrack {
             track,
             lane,
             line: self.line.max(other.line),
+        }
+    }
+
+    pub fn up(&mut self, _song: &Song) {
+        if self.line != 0 {
+            self.line -= 1;
+        }
+    }
+
+    pub fn down(&mut self, _song: &Song) {
+        self.line += 1;
+    }
+
+    pub fn left(&mut self, song: &Song) {
+        if self.lane == 0 {
+            if self.track == 0 {
+                self.track = song.tracks.len() - 1;
+            } else {
+                self.track -= 1;
+            }
+            self.lane = song.tracks[self.track].lanes.len() - 1;
+        } else {
+            self.lane -= 1;
+        }
+    }
+
+    pub fn right(&mut self, song: &Song) {
+        if self.lane == song.tracks[self.track].lanes.len() - 1 {
+            self.lane = 0;
+            if self.track + 1 == song.tracks.len() {
+                self.track = 0;
+            } else {
+                self.track += 1;
+            }
+        } else {
+            self.lane += 1;
         }
     }
 }
@@ -225,41 +262,21 @@ impl<'a> AppState<'a> {
     }
 
     pub fn cursor_up(&mut self) {
-        if self.cursor_track.line != 0 {
-            self.cursor_track.line -= 1;
-        }
+        self.cursor_track.up(&self.song);
     }
 
     pub fn cursor_down(&mut self) {
-        self.cursor_track.line += 1;
+        self.cursor_track.down(&self.song);
     }
 
     pub fn cursor_left(&mut self) {
-        if self.cursor_track.lane == 0 {
-            if self.cursor_track.track == 0 {
-                self.cursor_track.track = self.song.tracks.len() - 1;
-            } else {
-                self.cursor_track.track -= 1;
-            }
-            self.cursor_track.lane = self.song.tracks[self.cursor_track.track].lanes.len() - 1;
-        } else {
-            self.cursor_track.lane -= 1;
-        }
+        self.cursor_track.left(&self.song);
         self.selected_tracks.clear();
         self.selected_tracks.push(self.cursor_track.track);
     }
 
     pub fn cursor_right(&mut self) {
-        if self.cursor_track.lane == self.song.tracks[self.cursor_track.track].lanes.len() - 1 {
-            self.cursor_track.lane = 0;
-            if self.cursor_track.track + 1 == self.song.tracks.len() {
-                self.cursor_track.track = 0;
-            } else {
-                self.cursor_track.track += 1;
-            }
-        } else {
-            self.cursor_track.lane += 1;
-        }
+        self.cursor_track.right(&self.song);
         self.selected_tracks.clear();
         self.selected_tracks.push(self.cursor_track.track);
     }
@@ -364,7 +381,7 @@ impl<'a> AppState<'a> {
                 .send(SingerCommand::LaneAdd(self.cursor_track.track))?,
             UiCommand::Track(TrackCommand::Copy) => self.notes_copy()?,
             UiCommand::Track(TrackCommand::Cut) => {}
-            UiCommand::Track(TrackCommand::Paste) => {}
+            UiCommand::Track(TrackCommand::Paste) => self.notes_paste()?,
             UiCommand::Track(TrackCommand::CursorUp) => self.cursor_up(),
             UiCommand::Track(TrackCommand::CursorDown) => self.cursor_down(),
             UiCommand::Track(TrackCommand::CursorLeft) => self.cursor_left(),
@@ -517,6 +534,29 @@ impl<'a> AppState<'a> {
 
         let json = serde_json::to_string_pretty(&notess)?;
         self.gui_context.as_ref().unwrap().copy_text(json);
+
+        Ok(())
+    }
+
+    fn notes_paste(&mut self) -> anyhow::Result<()> {
+        let mut clipboard = Clipboard::new().unwrap();
+        if let Ok(text) = clipboard.get_text() {
+            let mut cursor = self.cursor_track.clone();
+            if let Ok(notess) = serde_json::from_str::<Vec<Vec<Option<Note>>>>(&text) {
+                for notes in notess.into_iter() {
+                    for note in notes.into_iter() {
+                        if let Some(note) = note {
+                            self.view_sender.send(SingerCommand::Note(cursor, note))?;
+                        } else {
+                            self.view_sender.send(SingerCommand::NoteDelete(cursor))?;
+                        }
+                        cursor.down(&self.song);
+                    }
+                    cursor.right(&self.song);
+                    cursor.line = self.cursor_track.line;
+                }
+            }
+        }
 
         Ok(())
     }
