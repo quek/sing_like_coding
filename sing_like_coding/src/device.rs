@@ -72,6 +72,10 @@ impl Device {
         Ok(())
     }
 
+    pub fn start_p(&self) -> bool {
+        self.stream.is_some()
+    }
+
     pub fn stop(&mut self) -> Result<()> {
         self.stream = None;
         Ok(())

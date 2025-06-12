@@ -302,12 +302,15 @@ impl MainView {
 
                 ui.toggle_value(&mut state.follow_p, "Follow");
 
-                if ui.button("device start").clicked() {
-                    device.as_mut().unwrap().start().unwrap();
+                let mut device_start_p = device.as_mut().unwrap().start_p();
+                if ui.toggle_value(&mut device_start_p, "Device").clicked() {
+                    if device_start_p {
+                        device.as_mut().unwrap().stop().unwrap();
+                    } else {
+                        device.as_mut().unwrap().start().unwrap();
+                    }
                 }
-                if ui.button("device stop").clicked() {
-                    device.as_mut().unwrap().stop().unwrap();
-                }
+
                 Ok(())
             });
 
