@@ -405,21 +405,23 @@ impl MainView {
             ui.vertical(|ui| -> anyhow::Result<()> {
                 let width = 18.0;
 
-                let mut solo = track.solo;
-                if ui
-                    .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut solo, "S"))
-                    .clicked()
-                {
-                    commands.push(UiCommand::TrackSolo(Some(track_index), Some(solo)));
-                }
+                with_font_mono(ui, |ui| {
+                    let mut solo = track.solo;
+                    if ui
+                        .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut solo, "S"))
+                        .clicked()
+                    {
+                        commands.push(UiCommand::TrackSolo(Some(track_index), Some(solo)));
+                    }
 
-                let mut mute = track.mute;
-                if ui
-                    .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut mute, "M"))
-                    .clicked()
-                {
-                    commands.push(UiCommand::TrackMute(Some(track_index), Some(mute)));
-                }
+                    let mut mute = track.mute;
+                    if ui
+                        .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut mute, "M"))
+                        .clicked()
+                    {
+                        commands.push(UiCommand::TrackMute(Some(track_index), Some(mute)));
+                    }
+                });
 
                 Ok(())
             });
