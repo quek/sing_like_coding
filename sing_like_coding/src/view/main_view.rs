@@ -178,9 +178,18 @@ impl MainView {
                 (Modifier::None, Key::ArrowRight),
                 UiCommand::Track(TrackCommand::CursorRight),
             ),
-            ((Modifier::C, Key::C), UiCommand::Track(TrackCommand::Copy)),
-            ((Modifier::C, Key::X), UiCommand::Track(TrackCommand::Cut)),
-            ((Modifier::C, Key::V), UiCommand::Track(TrackCommand::Paste)),
+            (
+                (Modifier::None, Key::C),
+                UiCommand::Track(TrackCommand::Copy),
+            ),
+            (
+                (Modifier::None, Key::X),
+                UiCommand::Track(TrackCommand::Cut),
+            ),
+            (
+                (Modifier::None, Key::V),
+                UiCommand::Track(TrackCommand::Paste),
+            ),
             (
                 (Modifier::None, Key::E),
                 UiCommand::Track(TrackCommand::SelectMode),

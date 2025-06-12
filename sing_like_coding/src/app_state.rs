@@ -159,6 +159,7 @@ pub struct AppState<'a> {
     pub song_open_p: bool,
     _song_state_shmem: Shmem,
     pub song_state: &'a SongState,
+    pub gui_context: Option<eframe::egui::Context>,
 }
 
 impl<'a> AppState<'a> {
@@ -203,6 +204,7 @@ impl<'a> AppState<'a> {
             song_open_p: false,
             _song_state_shmem: song_state_shmem,
             song_state,
+            gui_context: None,
         }
     }
 
@@ -486,13 +488,36 @@ impl<'a> AppState<'a> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Track(TrackCommand::SelectMode))?;
         }
-        for track_index in self.selection_track_min.track..=self.selection_track_max.track {
-            if let Some(_track) = self.song.tracks.get(track_index) {
-                for _line in self.selection_track_min.line..=self.selection_track_max.line {
-                    // TODO
+        let min = &self.selection_track_min;
+        let max = &self.selection_track_max;
+        let mut notess = vec![];
+        for track_index in min.track..=max.track {
+            if let Some(track) = self.song.tracks.get(track_index) {
+                let lane_start = if track_index == min.track {
+                    min.lane
+                } else {
+                    0
+                };
+                let lane_end = if track_index == max.track {
+                    max.lane
+                } else {
+                    track.lanes.len()
+                };
+                for lane_index in lane_start..=lane_end {
+                    if let Some(lane) = track.lanes.get(lane_index) {
+                        let mut notes = vec![];
+                        for line in min.line..=max.line {
+                            notes.push(lane.note(line).clone());
+                        }
+                        notess.push(notes);
+                    }
                 }
             }
         }
+
+        let json = serde_json::to_string_pretty(&notess)?;
+        self.gui_context.as_ref().unwrap().copy_text(json);
+
         Ok(())
     }
 
