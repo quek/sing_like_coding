@@ -7,6 +7,7 @@ pub const MAX_PATH_LEN: usize = 1024;
 pub const MAX_TRACKS: usize = 0xff;
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct SongState {
     song_file: [u8; MAX_PATH_LEN],
     pub play_p: bool,
@@ -57,6 +58,7 @@ impl SongState {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct TrackState {
     pub peaks: [f32; MAX_CHANNELS],
 }

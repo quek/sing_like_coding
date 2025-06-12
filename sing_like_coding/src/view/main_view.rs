@@ -287,6 +287,12 @@ impl MainView {
         });
 
         CentralPanel::default().show(gui_context, |ui: &mut Ui| -> anyhow::Result<()> {
+            if false {
+                ui.label(format!("{:?}", state.song));
+                ui.label(format!("{:?}", state.song_state.tracks[0]));
+                ui.label(format!("{:?}", state.song_state.tracks[1]));
+                ui.label(format!("{:?}", state.song_state.tracks[2]));
+            }
             ui.horizontal(|ui| -> anyhow::Result<()> {
                 if ui.button("Play").clicked() {
                     state.view_sender.send(SingerCommand::Play)?;

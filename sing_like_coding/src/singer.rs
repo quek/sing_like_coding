@@ -15,6 +15,7 @@ use crate::{
     model::{lane::Lane, note::Note, song::Song},
     song_state::SongState,
     util::next_id,
+    view::stereo_peak_meter::DB_MIN,
 };
 
 use anyhow::Result;
@@ -425,7 +426,7 @@ impl Singer {
                 }
             } else {
                 for channel in 0..2 {
-                    song_state.tracks[track_index].peaks[channel] = 0.0;
+                    song_state.tracks[track_index].peaks[channel] = DB_MIN;
                 }
             }
         }
