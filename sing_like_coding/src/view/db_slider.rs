@@ -7,6 +7,7 @@ pub struct DbSlider<'a> {
     pub min_db: f32,
     pub max_db: f32,
     pub height: f32,
+    pub bg_color: Color32,
 }
 
 impl<'a> Widget for DbSlider<'a> {
@@ -34,7 +35,7 @@ impl<'a> Widget for DbSlider<'a> {
                 Pos2::new(rect.max.x - 2.0, rect.max.y),
             ),
             0.0,
-            Color32::BLACK,
+            self.bg_color,
         );
 
         // スライダーのノブ
@@ -53,8 +54,8 @@ impl<'a> Widget for DbSlider<'a> {
                     rect.bottom() - rect.height() * db_to_norm(db as f32, self.min_db, self.max_db);
                 painter.line_segment(
                     [
-                        Pos2::new(rect.left() + 2.0, y),
-                        Pos2::new(rect.left() + 8.0, y),
+                        Pos2::new(rect.left() + 3.0, y),
+                        Pos2::new(rect.left() + 9.0, y),
                     ],
                     (1.0, Color32::GRAY),
                 );
