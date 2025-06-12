@@ -46,12 +46,13 @@ pub enum UiCommand {
 }
 
 pub enum TrackCommand {
-    NoteUpdate(i16, i16, i16, bool),
-    NoteDelte,
-    CursorUp,
     CursorDown,
     CursorLeft,
     CursorRight,
+    CursorUp,
+    NoteDelte,
+    NoteUpdate(i16, i16, i16, bool),
+    SelectMode,
 }
 
 pub enum ModuleCommand {
@@ -94,7 +95,9 @@ pub struct AppState<'a> {
     pub cursor_module: CursorModule,
     pub note_last: Note,
     pub route: Route,
-    pub selected_cells: Vec<(usize, usize)>,
+    pub select_p: bool,
+    pub selected_cell_min: (usize, usize),
+    pub selected_cell_max: (usize, usize),
     pub selected_tracks: Vec<usize>,
     pub song: Song,
     pub view_sender: Sender<SingerCommand>,
@@ -136,7 +139,9 @@ impl<'a> AppState<'a> {
                 off: false,
             },
             route: Route::Track,
-            selected_cells: vec![(0, 0)],
+            select_p: false,
+            selected_cell_min: (0, 0),
+            selected_cell_max: (0, 0),
             selected_tracks: vec![0],
             song: Song::new(),
             view_sender,
@@ -318,6 +323,22 @@ impl<'a> AppState<'a> {
                 off,
             )) => {
                 note_update(*key_delta, *velociy_delta, *delay_delta, *off, self);
+            }
+            UiCommand::Track(TrackCommand::SelectMode) => {
+                self.select_p = !self.select_p;
+                if self.select_p {
+                    self.selected_cell_min = (self.cursor_track.track, self.cursor_track.line);
+                    self.selected_cell_max = self.selected_cell_min;
+                } else {
+                    self.selected_cell_min = (
+                        self.selected_cell_min.0.min(self.cursor_track.track),
+                        self.selected_cell_min.1.min(self.cursor_track.line),
+                    );
+                    self.selected_cell_max = (
+                        self.selected_cell_max.0.max(self.cursor_track.track),
+                        self.selected_cell_max.1.max(self.cursor_track.line),
+                    );
+                }
             }
             UiCommand::Module(ModuleCommand::CursorUp) => {
                 if self.cursor_module.index == 0 {

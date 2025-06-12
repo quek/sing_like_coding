@@ -177,6 +177,10 @@ impl MainView {
                 UiCommand::Track(TrackCommand::CursorRight),
             ),
             (
+                (Modifier::None, Key::E),
+                UiCommand::Track(TrackCommand::SelectMode),
+            ),
+            (
                 (Modifier::None, Key::Period),
                 UiCommand::Track(TrackCommand::NoteUpdate(0, 0, 0, true)),
             ),
@@ -492,17 +496,36 @@ impl MainView {
     ) -> anyhow::Result<()> {
         ui.vertical(|ui| -> anyhow::Result<()> {
             for line in line_range.clone() {
-                let color = if state.cursor_track.track == track_index
+                let mut color = Color32::BLACK;
+                if state.cursor_track.track == track_index
                     && state.cursor_track.lane == lane_index
                     && state.cursor_track.line == line
                 {
-                    state.color_cursor(FocusedPart::Track)
+                    color = state.color_cursor(FocusedPart::Track);
                 } else if line == state.song_state.line_play {
-                    Color32::DARK_GREEN
-                } else if state.selected_cells.contains(&(track_index, line)) {
-                    Color32::LIGHT_BLUE
+                    color = Color32::DARK_GREEN;
                 } else {
-                    Color32::BLACK
+                    let (min, max) = if state.select_p {
+                        (
+                            (
+                                state.selected_cell_min.0.min(state.cursor_track.track),
+                                state.selected_cell_min.1.min(state.cursor_track.line),
+                            ),
+                            (
+                                state.selected_cell_max.0.max(state.cursor_track.track),
+                                state.selected_cell_max.1.max(state.cursor_track.line),
+                            ),
+                        )
+                    } else {
+                        (state.selected_cell_min, state.selected_cell_max)
+                    };
+                    if min.0 <= track_index
+                        && track_index <= max.0
+                        && min.1 <= line
+                        && line <= max.1
+                    {
+                        color = Color32::LIGHT_BLUE;
+                    }
                 };
                 let text = state.song.tracks[track_index].lanes[lane_index]
                     .note(line)
