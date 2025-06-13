@@ -390,7 +390,7 @@ impl<'a> AppState<'a> {
                 .view_sender
                 .send(SingerCommand::LaneAdd(self.cursor_track.track))?,
             UiCommand::Track(TrackCommand::Copy) => self.notes_copy()?,
-            UiCommand::Track(TrackCommand::Cut) => {}
+            UiCommand::Track(TrackCommand::Cut) => self.notes_cut()?,
             UiCommand::Track(TrackCommand::Paste) => self.notes_paste()?,
             UiCommand::Track(TrackCommand::CursorUp) => self.cursor_up(),
             UiCommand::Track(TrackCommand::CursorDown) => self.cursor_down(),
@@ -512,6 +512,10 @@ impl<'a> AppState<'a> {
     }
 
     fn notes_copy(&mut self) -> anyhow::Result<()> {
+        self.notes_copy_or_cut(true)
+    }
+
+    fn notes_copy_or_cut(&mut self, copy_p: bool) -> anyhow::Result<()> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Track(TrackCommand::SelectMode))?;
         }
@@ -535,6 +539,14 @@ impl<'a> AppState<'a> {
                         let mut notes = vec![];
                         for line in min.line..=max.line {
                             notes.push(lane.note(line).clone());
+                            if !copy_p {
+                                self.view_sender
+                                    .send(SingerCommand::NoteDelete(CursorTrack {
+                                        track: track_index,
+                                        lane: lane_index,
+                                        line,
+                                    }))?;
+                            }
                         }
                         notess.push(notes);
                     }
@@ -546,6 +558,10 @@ impl<'a> AppState<'a> {
         self.gui_context.as_ref().unwrap().copy_text(json);
 
         Ok(())
+    }
+
+    fn notes_cut(&mut self) -> anyhow::Result<()> {
+        self.notes_copy_or_cut(false)
     }
 
     fn notes_paste(&mut self) -> anyhow::Result<()> {
