@@ -48,6 +48,7 @@ pub enum SingerCommand {
     PluginLoad(usize, Description, isize),
     PluginDelete(usize, usize),
     TrackAdd,
+    TrackDelete(usize),
     TrackMute(usize, bool),
     TrackSolo(usize, bool),
     TrackPan(usize, f32),
@@ -327,7 +328,7 @@ impl Singer {
         self.play_p = true;
     }
 
-    pub fn plugin_delete(&mut self, track_index: usize, module_index: usize) -> anyhow::Result<()> {
+    pub fn plugin_delete(&mut self, track_index: usize, module_index: usize) -> Result<()> {
         self.song.tracks[track_index].modules.remove(module_index);
         self.process_track_contexts[track_index]
             .plugins
@@ -338,9 +339,9 @@ impl Singer {
         Ok(())
     }
 
-    pub fn song_close(&mut self) -> anyhow::Result<()> {
-        for track_index in 0..self.song.tracks.len() {
-            for module_index in 0..self.song.tracks[track_index].modules.len() {
+    pub fn song_close(&mut self) -> Result<()> {
+        for track_index in (0..self.song.tracks.len()).rev() {
+            for module_index in (0..self.song.tracks[track_index].modules.len()).rev() {
                 self.plugin_delete(track_index, module_index)?;
             }
         }
@@ -352,7 +353,7 @@ impl Singer {
         Ok(())
     }
 
-    pub fn song_open(&mut self, song_file: String, hwnd: isize) -> anyhow::Result<()> {
+    pub fn song_open(&mut self, song_file: String, hwnd: isize) -> Result<()> {
         let file = File::open(&song_file)?;
         let reader = BufReader::new(file);
         let song = serde_json::from_reader(reader)?;
@@ -435,11 +436,11 @@ impl Singer {
         }
     }
 
-    fn send_song(&self) {
+    fn send_song(&self) -> Result<()> {
         self.sender_to_ui
-            .send(AppStateCommand::Song(self.song.clone()))
-            .unwrap();
+            .send(AppStateCommand::Song(self.song.clone()))?;
         self.gui_context.as_ref().map(|x| x.request_repaint());
+        Ok(())
     }
 
     fn send_state(&self) {
@@ -456,20 +457,27 @@ impl Singer {
     }
 
     fn track_add(&mut self) {
-        self.song.add_track();
+        self.song.track_add();
         self.process_track_contexts
             .push(ProcessTrackContext::default());
         self.shmems.push(vec![]);
     }
+
+    fn track_delete(&mut self, track_index: usize) -> Result<()> {
+        for module_index in (0..self.song.tracks[track_index].modules.len()).rev() {
+            self.plugin_delete(track_index, module_index)?;
+        }
+        self.song.track_delete(track_index);
+        self.process_track_contexts.remove(track_index);
+        self.shmems.remove(track_index);
+        Ok(())
+    }
 }
 
-async fn singer_loop(
-    singer: Arc<Mutex<Singer>>,
-    receiver: Receiver<SingerCommand>,
-) -> anyhow::Result<()> {
+async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerCommand>) -> Result<()> {
     {
         let singer = singer.lock().unwrap();
-        singer.send_song();
+        singer.send_song()?;
         singer.send_state();
     }
 
@@ -491,7 +499,7 @@ async fn singer_loop(
                 singer.loop_p = !singer.loop_p;
                 singer.send_state();
             }
-            SingerCommand::Song => singer.lock().unwrap().send_song(),
+            SingerCommand::Song => singer.lock().unwrap().send_song()?,
             SingerCommand::Note(cursor, note) => {
                 let mut singer = singer.lock().unwrap();
                 let song = &mut singer.song;
@@ -501,7 +509,7 @@ async fn singer_loop(
                     .map(|x| x.lanes.get_mut(cursor.lane))
                 {
                     lane.notes.insert(cursor.line, note);
-                    singer.send_song();
+                    singer.send_song()?;
                 }
             }
             SingerCommand::NoteDelete(cursor) => {
@@ -513,7 +521,7 @@ async fn singer_loop(
                     .map(|x| x.lanes.get_mut(cursor.lane))
                 {
                     lane.notes.remove(&cursor.line);
-                    singer.send_song();
+                    singer.send_song()?;
                 }
             }
             SingerCommand::PluginLoad(track_index, description, hwnd) => {
@@ -526,13 +534,13 @@ async fn singer_loop(
                     description.name.clone(),
                 ));
 
-                singer.send_song();
+                singer.send_song()?;
             }
             SingerCommand::PluginDelete(track_index, module_index) => {
                 let mut singer = singer.lock().unwrap();
                 singer.plugin_delete(track_index, module_index)?;
 
-                singer.send_song();
+                singer.send_song()?;
             }
             SingerCommand::NoteOn(track_index, key, _channel, velocity, delay) => {
                 let mut singer = singer.lock().unwrap();
@@ -549,41 +557,46 @@ async fn singer_loop(
             SingerCommand::TrackAdd => {
                 let mut singer = singer.lock().unwrap();
                 singer.track_add();
-                singer.send_song();
+                singer.send_song()?;
+            }
+            SingerCommand::TrackDelete(track_index) => {
+                let mut singer = singer.lock().unwrap();
+                singer.track_delete(track_index)?;
+                singer.send_song()?;
             }
             SingerCommand::TrackMute(track_index, mute) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.mute = mute;
-                    singer.send_song();
+                    singer.send_song()?;
                 }
             }
             SingerCommand::TrackSolo(track_index, solo) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.solo = solo;
-                    singer.send_song();
+                    singer.send_song()?;
                 }
             }
             SingerCommand::TrackPan(track_index, pan) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.pan = pan;
-                    singer.send_song();
+                    singer.send_song()?;
                 }
             }
             SingerCommand::TrackVolume(track_index, volume) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.volume = volume;
-                    singer.send_song();
+                    singer.send_song()?;
                 }
             }
             SingerCommand::LaneAdd(track_index) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.lanes.push(Lane::new());
-                    singer.send_song();
+                    singer.send_song()?;
                 }
             }
             SingerCommand::SongFile(song_file) => {
@@ -595,7 +608,7 @@ async fn singer_loop(
                 let mut singer = singer.lock().unwrap();
                 singer.song_close()?;
                 singer.song_open(song_file, hwnd)?;
-                singer.send_song();
+                singer.send_song()?;
                 singer.send_state();
             }
         }

@@ -242,7 +242,7 @@ pub struct AppState<'a> {
     pub selected_tracks: Vec<usize>,
     pub song: Song,
     pub song_dirty_p: bool,
-    pub view_sender: Sender<SingerCommand>,
+    pub sender_to_singer: Sender<SingerCommand>,
     sender_to_loop: Sender<MainToPlugin>,
     receiver_communicator_to_main_thread: Receiver<PluginToMain>,
     receiver_from_singer: Receiver<AppStateCommand>,
@@ -257,7 +257,7 @@ pub struct AppState<'a> {
 
 impl<'a> AppState<'a> {
     pub fn new(
-        view_sender: Sender<SingerCommand>,
+        sender_to_singer: Sender<SingerCommand>,
         sender_to_loop: Sender<MainToPlugin>,
         receiver_communicator_to_main_thread: Receiver<PluginToMain>,
         receiver_from_singer: Receiver<AppStateCommand>,
@@ -289,7 +289,7 @@ impl<'a> AppState<'a> {
             selected_tracks: vec![0],
             song: Song::new(),
             song_dirty_p: false,
-            view_sender,
+            sender_to_singer,
             sender_to_loop,
             receiver_communicator_to_main_thread,
             receiver_from_singer,
@@ -394,7 +394,7 @@ impl<'a> AppState<'a> {
                 self.follow_p = !self.follow_p;
             }
             UiCommand::Loop => {
-                self.view_sender.send(SingerCommand::Loop)?;
+                self.sender_to_singer.send(SingerCommand::Loop)?;
             }
             UiCommand::FocusedPartNext => {
                 self.focused_part = match self.focused_part {
@@ -414,9 +414,9 @@ impl<'a> AppState<'a> {
             }
             UiCommand::PlayToggle => {
                 if self.song_state.play_p {
-                    self.view_sender.send(SingerCommand::Stop)?;
+                    self.sender_to_singer.send(SingerCommand::Stop)?;
                 } else {
-                    self.view_sender.send(SingerCommand::Play)?;
+                    self.sender_to_singer.send(SingerCommand::Play)?;
                 }
             }
             UiCommand::SongSave => {
@@ -431,23 +431,23 @@ impl<'a> AppState<'a> {
             UiCommand::TrackMute(track_index, mute) => {
                 let track_index = track_index.unwrap_or(self.cursor_track.track);
                 let mute = mute.unwrap_or(!self.song.tracks[track_index].mute);
-                self.view_sender
+                self.sender_to_singer
                     .send(SingerCommand::TrackMute(track_index, mute))?;
             }
             UiCommand::TrackSolo(track_index, solo) => {
                 let track_index = track_index.unwrap_or(self.cursor_track.track);
                 let solo = solo.unwrap_or(!self.song.tracks[track_index].solo);
-                self.view_sender
+                self.sender_to_singer
                     .send(SingerCommand::TrackSolo(track_index, solo))?;
             }
             UiCommand::TrackPan(track_index, pan) => self
-                .view_sender
+                .sender_to_singer
                 .send(SingerCommand::TrackPan(*track_index, *pan))?,
             UiCommand::TrackVolume(track_index, volume) => self
-                .view_sender
+                .sender_to_singer
                 .send(SingerCommand::TrackVolume(*track_index, *volume))?,
             UiCommand::LaneAdd => self
-                .view_sender
+                .sender_to_singer
                 .send(SingerCommand::LaneAdd(self.cursor_track.track))?,
             UiCommand::Lane(LaneCommand::Copy) => self.notes_copy()?,
             UiCommand::Lane(LaneCommand::Cut) => self.notes_cut()?,
@@ -458,7 +458,7 @@ impl<'a> AppState<'a> {
             UiCommand::Lane(LaneCommand::CursorRight) => self.cursor_right(),
             UiCommand::Lane(LaneCommand::Dup) => self.notes_dup()?,
             UiCommand::Lane(LaneCommand::NoteDelete) => self
-                .view_sender
+                .sender_to_singer
                 .send(SingerCommand::NoteDelete(self.cursor_track.clone()))?,
             UiCommand::Lane(LaneCommand::NoteMove(lane_delta, line_delta)) => {
                 self.note_move(*lane_delta, *line_delta)?;
@@ -526,7 +526,7 @@ impl<'a> AppState<'a> {
             UiCommand::Mixer(MixerCommand::CursorRight) => self.track_next(),
             UiCommand::Mixer(MixerCommand::Pan(delta)) => {
                 if let Some(track) = self.track_current() {
-                    self.view_sender.send(SingerCommand::TrackPan(
+                    self.sender_to_singer.send(SingerCommand::TrackPan(
                         self.cursor_track.track,
                         (track.pan + (delta / 20.0)).clamp(0.0, 1.0),
                     ))?;
@@ -535,7 +535,7 @@ impl<'a> AppState<'a> {
             UiCommand::Mixer(MixerCommand::Volume(delta)) => {
                 if let Some(track) = self.track_current() {
                     let db = db_from_norm(track.volume, DB_MIN, DB_MAX) + delta;
-                    self.view_sender.send(SingerCommand::TrackVolume(
+                    self.sender_to_singer.send(SingerCommand::TrackVolume(
                         self.cursor_track.track,
                         db_to_norm(db, DB_MIN, DB_MAX).clamp(0.0, 1.0),
                     ))?;
@@ -561,7 +561,7 @@ impl<'a> AppState<'a> {
             .pick_file()
         {
             self.song_open_p = true;
-            self.view_sender.send(SingerCommand::SongOpen(
+            self.sender_to_singer.send(SingerCommand::SongOpen(
                 path.to_str().map(|s| s.to_string()).unwrap(),
                 self.hwnd,
             ))?;
@@ -625,7 +625,7 @@ impl<'a> AppState<'a> {
                             for line in min.line..=max.line {
                                 notes.push(lane.note(line).clone());
                                 if !copy_p {
-                                    self.view_sender.send(SingerCommand::NoteDelete(
+                                    self.sender_to_singer.send(SingerCommand::NoteDelete(
                                         CursorTrack {
                                             track: track_index,
                                             lane: lane_index,
@@ -664,9 +664,11 @@ impl<'a> AppState<'a> {
             for notes in notess.into_iter() {
                 for note in notes.into_iter() {
                     if let Some((_line, note)) = note {
-                        self.view_sender.send(SingerCommand::Note(cursor, note))?;
+                        self.sender_to_singer
+                            .send(SingerCommand::Note(cursor, note))?;
                     } else {
-                        self.view_sender.send(SingerCommand::NoteDelete(cursor))?;
+                        self.sender_to_singer
+                            .send(SingerCommand::NoteDelete(cursor))?;
                     }
                     cursor = cursor.down(&self.song);
                 }
@@ -686,11 +688,13 @@ impl<'a> AppState<'a> {
         if self.selection_track_min.is_some() {
             let notess = self.notes_selected_cloned();
             for (cursor, _note) in notess.clone().into_iter().flatten().filter_map(|x| x) {
-                self.view_sender.send(SingerCommand::NoteDelete(cursor))?;
+                self.sender_to_singer
+                    .send(SingerCommand::NoteDelete(cursor))?;
             }
             for (cursor, note) in notess.into_iter().flatten().filter_map(|x| x) {
                 let cursor = cursor.move_by(lane_delta, line_delta, &self.song);
-                self.view_sender.send(SingerCommand::Note(cursor, note))?;
+                self.sender_to_singer
+                    .send(SingerCommand::Note(cursor, note))?;
             }
 
             self.selection_track_min = self
@@ -702,12 +706,12 @@ impl<'a> AppState<'a> {
                 .as_ref()
                 .map(|x| x.move_by(lane_delta, line_delta, &self.song));
         } else if let Some(note) = self.song.note(&self.cursor_track) {
-            self.view_sender
+            self.sender_to_singer
                 .send(SingerCommand::NoteDelete(self.cursor_track.clone()))?;
             let cursor = self
                 .cursor_track
                 .move_by(lane_delta, line_delta, &self.song);
-            self.view_sender
+            self.sender_to_singer
                 .send(SingerCommand::Note(cursor, note.clone()))?;
         }
 
@@ -726,9 +730,11 @@ impl<'a> AppState<'a> {
                 for notes in notess.into_iter() {
                     for note in notes.into_iter() {
                         if let Some(note) = note {
-                            self.view_sender.send(SingerCommand::Note(cursor, note))?;
+                            self.sender_to_singer
+                                .send(SingerCommand::Note(cursor, note))?;
                         } else {
-                            self.view_sender.send(SingerCommand::NoteDelete(cursor))?;
+                            self.sender_to_singer
+                                .send(SingerCommand::NoteDelete(cursor))?;
                         }
                         cursor = cursor.down(&self.song);
                     }
@@ -808,7 +814,7 @@ impl<'a> AppState<'a> {
                 note.key = (note.key + key_delta).clamp(0, 127);
                 note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
                 note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
-                self.view_sender
+                self.sender_to_singer
                     .send(SingerCommand::Note(cursor, note))
                     .unwrap();
             }
@@ -825,7 +831,7 @@ impl<'a> AppState<'a> {
 
             let mut note = self.note_last.clone();
             note.off = off;
-            self.view_sender
+            self.sender_to_singer
                 .send(SingerCommand::Note(self.cursor_track.clone(), note))
                 .unwrap();
         }
@@ -838,12 +844,12 @@ impl<'a> AppState<'a> {
             TrackCommand::Copy => self.track_copy()?,
             TrackCommand::CursorLeft => self.track_state.cursor_left(&self.song)?,
             TrackCommand::CursorRight => self.track_state.cursor_right(&self.song)?,
-            TrackCommand::Cut => {}
-            TrackCommand::Delete => {}
+            TrackCommand::Cut => self.track_cut()?,
+            TrackCommand::Delete => self.track_delete()?,
             TrackCommand::Dup => {}
             TrackCommand::MoveLeft => {}
             TrackCommand::MoveRight => {}
-            TrackCommand::Paste => {}
+            TrackCommand::Paste => self.track_paste()?,
             TrackCommand::SelectClear => {}
             TrackCommand::SelectMode => {
                 self.track_state.select_p = !self.track_state.select_p;
@@ -870,7 +876,7 @@ impl<'a> AppState<'a> {
                 .set_file_name(&self.song.name)
                 .save_file()
             {
-                self.view_sender.send(SingerCommand::SongFile(
+                self.sender_to_singer.send(SingerCommand::SongFile(
                     path.to_str().map(|s| s.to_string()).unwrap(),
                 ))?;
                 path
@@ -913,6 +919,22 @@ impl<'a> AppState<'a> {
             }
         }
 
+        Ok(())
+    }
+
+    fn track_cut(&mut self) -> anyhow::Result<()> {
+        self.track_copy()?;
+        self.track_delete()?;
+        Ok(())
+    }
+
+    fn track_delete(&mut self) -> anyhow::Result<()> {
+        self.sender_to_singer
+            .send(SingerCommand::TrackDelete(self.track_state.index))?;
+        Ok(())
+    }
+
+    fn track_paste(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 

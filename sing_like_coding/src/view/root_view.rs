@@ -75,7 +75,7 @@ impl RootView {
                     // let description = description.lock().unwrap();
                     for track_index in &state.selected_tracks {
                         state
-                            .view_sender
+                            .sender_to_singer
                             .send(SingerCommand::PluginLoad(
                                 *track_index,
                                 description.clone(),

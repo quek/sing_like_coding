@@ -25,10 +25,14 @@ impl Song {
         }
     }
 
-    pub fn add_track(&mut self) {
+    pub fn track_add(&mut self) {
         let mut track = Track::new();
         track.name = format!("T{:02X}", self.tracks.len() + 1);
         self.tracks.push(track);
+    }
+
+    pub fn track_delete(&mut self, track_index: usize) {
+        self.tracks.remove(track_index);
     }
 
     pub fn note(&self, cursor: &CursorTrack) -> Option<&Note> {

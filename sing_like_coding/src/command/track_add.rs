@@ -6,7 +6,7 @@ pub struct TrackAdd {}
 
 impl Command for TrackAdd {
     fn call(&mut self, state: &mut AppState) -> anyhow::Result<()> {
-        state.view_sender.send(SingerCommand::TrackAdd)?;
+        state.sender_to_singer.send(SingerCommand::TrackAdd)?;
         Ok(())
     }
 
