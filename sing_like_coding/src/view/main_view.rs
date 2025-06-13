@@ -790,8 +790,6 @@ impl MainView {
                 LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
                     .bg_color(if state.track_state.index == track_index {
                         state.color_cursor(FocusedPart::Track)
-                    } else if state.selected_tracks.contains(&track_index) {
-                        Color32::GREEN
                     } else {
                         Color32::BLACK
                     })

@@ -239,7 +239,6 @@ pub struct AppState<'a> {
     pub select_p: bool,
     pub selection_track_min: Option<CursorTrack>,
     pub selection_track_max: Option<CursorTrack>,
-    pub selected_tracks: Vec<usize>,
     pub song: Song,
     pub song_dirty_p: bool,
     pub sender_to_singer: Sender<SingerCommand>,
@@ -286,7 +285,6 @@ impl<'a> AppState<'a> {
             select_p: false,
             selection_track_min: Default::default(),
             selection_track_max: Default::default(),
-            selected_tracks: vec![0],
             song: Song::new(),
             song_dirty_p: false,
             sender_to_singer,
@@ -329,14 +327,10 @@ impl<'a> AppState<'a> {
 
     pub fn cursor_left(&mut self) {
         self.cursor_track = self.cursor_track.left(&self.song);
-        self.selected_tracks.clear();
-        self.selected_tracks.push(self.cursor_track.track);
     }
 
     pub fn cursor_right(&mut self) {
         self.cursor_track = self.cursor_track.right(&self.song);
-        self.selected_tracks.clear();
-        self.selected_tracks.push(self.cursor_track.track);
     }
 
     pub fn module_mut(&mut self, track_index: usize, module_index: usize) -> Option<&mut Module> {

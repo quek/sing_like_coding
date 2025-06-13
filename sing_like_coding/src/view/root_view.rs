@@ -72,17 +72,11 @@ impl RootView {
                     .unwrap()
                     .view(gui_context)?
                 {
-                    // let description = description.lock().unwrap();
-                    for track_index in &state.selected_tracks {
-                        state
-                            .sender_to_singer
-                            .send(SingerCommand::PluginLoad(
-                                *track_index,
-                                description.clone(),
-                                state.hwnd,
-                            ))
-                            .unwrap();
-                    }
+                    state.sender_to_singer.send(SingerCommand::PluginLoad(
+                        state.track_state.index,
+                        description.clone(),
+                        state.hwnd,
+                    ))?;
 
                     self.plugin_select_view = None;
                     state.route = Route::Track;
