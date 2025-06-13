@@ -68,8 +68,8 @@ pub struct Singer {
     pub song: Song,
     _song_state_shmem: Shmem,
     song_state_ptr: *mut SongState,
-    song_sender: Sender<AppStateCommand>,
-    pub sender_to_loop: Sender<MainToPlugin>,
+    sender_to_ui: Sender<AppStateCommand>,
+    pub sender_to_plugin: Sender<MainToPlugin>,
     pub line_play: usize,
     process_track_contexts: Vec<ProcessTrackContext>,
     shmems: Vec<Vec<Shmem>>,
@@ -86,7 +86,10 @@ unsafe impl Send for Singer {}
 unsafe impl Sync for Singer {}
 
 impl Singer {
-    pub fn new(song_sender: Sender<AppStateCommand>, sender_to_loop: Sender<MainToPlugin>) -> Self {
+    pub fn new(
+        sender_to_ui: Sender<AppStateCommand>,
+        sender_to_plugin: Sender<MainToPlugin>,
+    ) -> Self {
         let song_state_shmem = create_shared_memory::<SongState>(SONG_STATE_NAME).unwrap();
         let song_state_ptr = song_state_shmem.as_ptr() as *mut SongState;
         let song = Song::new();
@@ -101,8 +104,8 @@ impl Singer {
             song,
             _song_state_shmem: song_state_shmem,
             song_state_ptr,
-            song_sender,
-            sender_to_loop,
+            sender_to_ui,
+            sender_to_plugin,
             line_play: 0,
             process_track_contexts: vec![],
             shmems: vec![],
@@ -164,7 +167,7 @@ impl Singer {
             .push(PluginRef::new(id, shmem.as_ptr() as *mut ProcessData)?);
         self.shmems[track_index].push(shmem);
 
-        self.sender_to_loop.send(MainToPlugin::Load(
+        self.sender_to_plugin.send(MainToPlugin::Load(
             id,
             description.id.clone(),
             track_index,
@@ -330,7 +333,7 @@ impl Singer {
             .plugins
             .remove(module_index);
         self.shmems[track_index].remove(module_index);
-        self.sender_to_loop
+        self.sender_to_plugin
             .send(MainToPlugin::Unload(track_index, module_index))?;
         Ok(())
     }
@@ -374,7 +377,7 @@ impl Singer {
 
         for (track_index, description, module_index) in xs {
             self.plugin_load(track_index, description.unwrap(), false, hwnd)?;
-            self.sender_to_loop.send(MainToPlugin::StateLoad(
+            self.sender_to_plugin.send(MainToPlugin::StateLoad(
                 track_index,
                 module_index,
                 self.song.tracks[track_index].modules[module_index]
@@ -433,7 +436,7 @@ impl Singer {
     }
 
     fn send_song(&self) {
-        self.song_sender
+        self.sender_to_ui
             .send(AppStateCommand::Song(self.song.clone()))
             .unwrap();
         self.gui_context.as_ref().map(|x| x.request_repaint());

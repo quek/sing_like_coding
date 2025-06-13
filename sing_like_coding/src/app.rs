@@ -37,7 +37,7 @@ struct AppMain<'a> {
     singer: Arc<Mutex<Singer>>,
     view: RootView,
     song_sender: Sender<AppStateCommand>,
-    receiver_main_thread_to_communicator: Option<Receiver<MainToPlugin>>,
+    recevier_from_main_thread: Option<Receiver<MainToPlugin>>,
     sender_communicator_to_main_thread: Option<Sender<PluginToMain>>,
 }
 
@@ -48,43 +48,36 @@ pub enum Msg {
 
 impl<'a> Default for AppMain<'a> {
     fn default() -> Self {
-        let (sender_to_app_state, receiver_from_singer) = channel();
-        let (view_sender, view_receiver) = channel();
-        let (sender_to_loop, receiver_from_main) = channel();
+        let (sender_to_ui, receiver_from_singer) = channel();
+        let (sender_to_singer, recevier_from_ui) = channel();
+        let (sender_to_plugin, recevier_from_main_thread) = channel();
         let (sender_communicator_to_main_thread, receiver_communicator_to_main_thread) = channel();
         let singer = Arc::new(Mutex::new(Singer::new(
-            sender_to_app_state.clone(),
-            sender_to_loop.clone(),
+            sender_to_ui.clone(),
+            sender_to_plugin.clone(),
         )));
-        Singer::start_listener(singer.clone(), view_receiver);
+        Singer::start_listener(singer.clone(), recevier_from_ui);
 
         let mut device = Device::open_default(singer.clone()).unwrap();
         device.start().unwrap();
         let device = Some(device);
-        view_sender.send(SingerCommand::Song).unwrap();
+        sender_to_singer.send(SingerCommand::Song).unwrap();
 
         let app_state = AppState::new(
-            view_sender,
-            sender_to_loop,
+            sender_to_singer,
+            sender_to_plugin,
             receiver_communicator_to_main_thread,
             receiver_from_singer,
         );
         let view = RootView::new();
 
-        // let app_state_cloned = app_state.clone();
-        // tokio::spawn(async move {
-        //     dbg!("########## before send_to_plugin_process");
-        //     send_to_plugin_process(app_state_cloned, receiver_from_main)
-        //         .await
-        //         .unwrap();
-        // });
         Self {
             state: app_state,
             device,
             singer,
             view,
-            song_sender: sender_to_app_state,
-            receiver_main_thread_to_communicator: Some(receiver_from_main),
+            song_sender: sender_to_ui,
+            recevier_from_main_thread: Some(recevier_from_main_thread),
             sender_communicator_to_main_thread: Some(sender_communicator_to_main_thread),
         }
     }
@@ -101,9 +94,7 @@ impl<'a> eframe::App for AppMain<'a> {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        if let Some(receiver_main_thread_to_communicator) =
-            self.receiver_main_thread_to_communicator.take()
-        {
+        if let Some(receiver_main_thread_to_communicator) = self.recevier_from_main_thread.take() {
             let mut communicator = Communicator::new(
                 receiver_main_thread_to_communicator,
                 self.sender_communicator_to_main_thread.take().unwrap(),
@@ -126,16 +117,6 @@ impl<'a> eframe::App for AppMain<'a> {
         ctx.request_repaint_after(repaint_after);
     }
 }
-
-// async fn send_to_plugin_process(
-//     state: Arc<Mutex<AppState>>,
-//     receiver_from_main: Receiver<MainToPlugin>,
-// ) -> Result<()> {
-//     let mut communicator = Communicator::new(state, receiver_from_main).await?;
-//     communicator.run().await?;
-
-//     Ok(())
-// }
 
 fn get_hwnd(frame: &eframe::Frame) -> isize {
     if let Ok(window_handle) = frame.window_handle() {
