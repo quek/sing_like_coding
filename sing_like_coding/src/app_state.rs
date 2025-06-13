@@ -37,6 +37,7 @@ pub enum UiCommand {
     Module(ModuleCommand),
     NextViewPart,
     PlayToggle,
+    SongSave,
     Track(TrackCommand),
     TrackAdd,
     TrackMute(Option<usize>, Option<bool>),
@@ -188,12 +189,13 @@ pub struct AppState<'a> {
     pub selection_track_max: CursorTrack,
     pub selected_tracks: Vec<usize>,
     pub song: Song,
+    pub song_dirty_p: bool,
     pub view_sender: Sender<SingerCommand>,
     pub sender_to_loop: Sender<MainToPlugin>,
     receiver_communicator_to_main_thread: Receiver<PluginToMain>,
     receiver_from_singer: Receiver<AppStateCommand>,
     nmodules_saving: usize,
-    pub song_open_p: bool,
+    song_open_p: bool,
     _song_state_shmem: Shmem,
     pub song_state: &'a SongState,
     pub gui_context: Option<eframe::egui::Context>,
@@ -232,6 +234,7 @@ impl<'a> AppState<'a> {
             selection_track_max: Default::default(),
             selected_tracks: vec![0],
             song: Song::new(),
+            song_dirty_p: false,
             view_sender,
             sender_to_loop,
             receiver_communicator_to_main_thread,
@@ -293,8 +296,13 @@ impl<'a> AppState<'a> {
                 AppStateCommand::Song(song) => {
                     if self.song_open_p {
                         self.song_open_did(song).unwrap();
+                        self.song_open_p = false;
+                        self.song_dirty_p = false;
+                        dbg!(1, self.song_dirty_p);
                     } else {
                         self.song = song;
+                        self.song_dirty_p = true;
+                        dbg!(2, self.song_dirty_p);
                     }
                 }
                 AppStateCommand::Quit => (),
@@ -353,6 +361,9 @@ impl<'a> AppState<'a> {
                 } else {
                     self.view_sender.send(SingerCommand::Play)?;
                 }
+            }
+            UiCommand::SongSave => {
+                self.song_save()?;
             }
             UiCommand::TrackAdd => {
                 TrackAdd {}.call(self)?;
@@ -580,6 +591,7 @@ impl<'a> AppState<'a> {
         let mut file = File::create(&song_file).unwrap();
         let json = serde_json::to_string_pretty(&self.song).unwrap();
         file.write_all(json.as_bytes()).unwrap();
+        self.song_dirty_p = false;
         Ok(())
     }
 

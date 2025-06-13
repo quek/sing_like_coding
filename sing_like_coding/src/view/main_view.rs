@@ -46,6 +46,7 @@ impl MainView {
             ((Modifier::None, Key::P), UiCommand::Loop),
             ((Modifier::S, Key::P), UiCommand::Follow),
             ((Modifier::None, Key::S), UiCommand::TrackSolo(None, None)),
+            ((Modifier::C, Key::S), UiCommand::SongSave),
             ((Modifier::C, Key::T), UiCommand::TrackAdd),
             ((Modifier::CS, Key::T), UiCommand::LaneAdd),
         ];
@@ -282,7 +283,12 @@ impl MainView {
 
         TopBottomPanel::top("Top").show(gui_context, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("Sing Like Coding");
+                let song_name = format!(
+                    "{}{}",
+                    if state.song_dirty_p { "*" } else { "" },
+                    &state.song.name
+                );
+                ui.heading(song_name);
                 ui.label(format!(
                     "{:.3}ms",
                     state.song_state.process_elasped_avg * 1000.0
