@@ -575,18 +575,23 @@ impl<'a> AppState<'a> {
     }
 
     pub fn song_save(&mut self) -> anyhow::Result<()> {
-        let track_index_last = self.song.tracks.len() - 1;
-        for track_index in 0..=track_index_last {
-            let module_index_last = self.song.tracks[track_index].modules.len() - 1;
-            for module_index in 0..=module_index_last {
+        let mut callback_p = false;
+        let tracks_len = self.song.tracks.len();
+        for track_index in 0..tracks_len {
+            let modules_len = self.song.tracks[track_index].modules.len();
+            for module_index in 0..modules_len {
                 let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>> =
-                    if track_index == track_index_last && module_index == module_index_last {
+                    if track_index + 1 == tracks_len && module_index + 1 == modules_len {
+                        callback_p = true;
                         Box::new(|state, _| state.song_save_file())
                     } else {
                         Box::new(|_, _| Ok(()))
                     };
                 self.send_to_plugin(MainToPlugin::StateSave(track_index, module_index), callback)?;
             }
+        }
+        if !callback_p {
+            self.song_save_file()?;
         }
 
         Ok(())
@@ -635,7 +640,8 @@ impl<'a> AppState<'a> {
                 }
             }
             let json = serde_json::to_string_pretty(&notess)?;
-            self.gui_context.as_ref().unwrap().copy_text(json);
+            let mut clipboard = Clipboard::new().unwrap();
+            clipboard.set_text(&json)?;
         }
 
         Ok(())
@@ -829,14 +835,7 @@ impl<'a> AppState<'a> {
 
     pub fn run_track_command(&mut self, command: &TrackCommand) -> anyhow::Result<()> {
         match command {
-            TrackCommand::Copy => {
-                for module_index in 0..self.song.tracks[self.track_state.index].modules.len() {
-                    self.send_to_plugin(
-                        MainToPlugin::StateSave(self.track_state.index, module_index),
-                        Box::new(|_state, _command| Ok(())),
-                    )?;
-                }
-            }
+            TrackCommand::Copy => self.track_copy()?,
             TrackCommand::CursorLeft => self.track_state.cursor_left(&self.song)?,
             TrackCommand::CursorRight => self.track_state.cursor_right(&self.song)?,
             TrackCommand::Cut => {}
@@ -883,6 +882,37 @@ impl<'a> AppState<'a> {
         let json = serde_json::to_string_pretty(&self.song).unwrap();
         file.write_all(json.as_bytes()).unwrap();
         self.song_dirty_p = false;
+        Ok(())
+    }
+
+    fn track_copy(&mut self) -> anyhow::Result<()> {
+        let modules_len = self.song.tracks[self.track_state.index].modules.len();
+        if modules_len == 0 {
+            let json = serde_json::to_string_pretty(&self.song.tracks[self.track_state.index])?;
+            let mut clipboard = Clipboard::new().unwrap();
+            clipboard.set_text(&json)?;
+        } else {
+            for module_index in 0..modules_len {
+                let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>> =
+                    if module_index + 1 == modules_len {
+                        Box::new(|state, _command| {
+                            let json = serde_json::to_string_pretty(
+                                &state.song.tracks[state.track_state.index],
+                            )?;
+                            let mut clipboard = Clipboard::new().unwrap();
+                            clipboard.set_text(&json)?;
+                            Ok(())
+                        })
+                    } else {
+                        Box::new(|_state, _command| Ok(()))
+                    };
+                self.send_to_plugin(
+                    MainToPlugin::StateSave(self.track_state.index, module_index),
+                    callback,
+                )?;
+            }
+        }
+
         Ok(())
     }
 
