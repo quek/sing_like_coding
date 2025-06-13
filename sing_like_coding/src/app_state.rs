@@ -408,20 +408,17 @@ impl<'a> AppState<'a> {
                 delay_delta,
                 off,
             )) => {
-                note_update(*key_delta, *velociy_delta, *delay_delta, *off, self);
+                self.note_update(*key_delta, *velociy_delta, *delay_delta, *off)?;
             }
             UiCommand::Track(LaneCommand::SelectMode) => {
                 self.select_p = !self.select_p;
                 if self.select_p {
                     self.selection_track_min = Some(self.cursor_track);
-                    self.selection_track_max = Some(self.cursor_track);
+                    self.selection_track_max = None;
                 } else {
-                    self.selection_track_min = self
-                        .selection_track_min
-                        .map(|x| x.min_merge(&self.cursor_track));
-                    self.selection_track_max = self
-                        .selection_track_max
-                        .map(|x| x.max_merge(&self.cursor_track));
+                    let range = self.notes_selection_range().unwrap();
+                    self.selection_track_min = Some(range.0);
+                    self.selection_track_max = Some(range.1);
                 }
             }
             UiCommand::Track(LaneCommand::SelectClear) => {
@@ -586,7 +583,7 @@ impl<'a> AppState<'a> {
             let mut cursor = self.cursor_track.clone();
             for notes in notess.into_iter() {
                 for note in notes.into_iter() {
-                    if let Some(note) = note {
+                    if let Some((_line, note)) = note {
                         self.view_sender.send(SingerCommand::Note(cursor, note))?;
                     } else {
                         self.view_sender.send(SingerCommand::NoteDelete(cursor))?;
@@ -628,9 +625,9 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn notes_selected_cloned(&mut self) -> Vec<Vec<Option<Note>>> {
+    fn notes_selected_cloned(&mut self) -> Vec<Vec<Option<(CursorTrack, Note)>>> {
         let mut notess = vec![];
-        if let (Some(min), Some(max)) = (&self.selection_track_min, &self.selection_track_max) {
+        if let Some((min, max)) = self.notes_selection_range() {
             for track_index in min.track..=max.track {
                 if let Some(track) = self.song.tracks.get(track_index) {
                     let lane_start = if track_index == min.track {
@@ -647,7 +644,16 @@ impl<'a> AppState<'a> {
                         if let Some(lane) = track.lanes.get(lane_index) {
                             let mut notes = vec![];
                             for line in min.line..=max.line {
-                                notes.push(lane.note(line).cloned());
+                                notes.push(lane.note(line).cloned().map(|note| {
+                                    (
+                                        CursorTrack {
+                                            track: track_index,
+                                            lane: lane_index,
+                                            line,
+                                        },
+                                        note,
+                                    )
+                                }));
                             }
                             notess.push(notes);
                         }
@@ -656,6 +662,59 @@ impl<'a> AppState<'a> {
             }
         }
         notess
+    }
+
+    fn notes_selection_range(&self) -> Option<(CursorTrack, CursorTrack)> {
+        if let Some(min) = &self.selection_track_min {
+            let max = self
+                .selection_track_max
+                .as_ref()
+                .unwrap_or(&self.cursor_track);
+            Some((min.min_merge(max), min.max_merge(max)))
+        } else {
+            None
+        }
+    }
+
+    fn note_update(
+        &mut self,
+        key_delta: i16,
+        velociy_delta: i16,
+        delay_delta: i16,
+        off: bool,
+    ) -> anyhow::Result<()> {
+        if self.selection_track_min.is_some() {
+            let notess = self.notes_selected_cloned();
+            for (cursor, mut note) in notess.into_iter().flatten().filter_map(|x| x) {
+                if note.off {
+                    continue;
+                }
+                note.key = (note.key + key_delta).clamp(0, 127);
+                note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
+                note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
+                self.view_sender
+                    .send(SingerCommand::Note(cursor, note))
+                    .unwrap();
+            }
+        } else {
+            if let Some(note) = self.song.note(&self.cursor_track) {
+                if !note.off {
+                    let mut note = note.clone();
+                    note.key = (note.key + key_delta).clamp(0, 127);
+                    note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
+                    note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
+                    self.note_last = note;
+                }
+            }
+
+            let mut note = self.note_last.clone();
+            note.off = off;
+            self.view_sender
+                .send(SingerCommand::Note(self.cursor_track.clone(), note))
+                .unwrap();
+        }
+
+        Ok(())
     }
 
     fn song_save_file(&mut self) -> anyhow::Result<()> {
@@ -717,29 +776,4 @@ fn song_directory() -> PathBuf {
     let dir = dir.join("user").join("song");
     create_dir_all(&dir).unwrap();
     dir
-}
-
-fn note_update(
-    key_delta: i16,
-    velociy_delta: i16,
-    delay_delta: i16,
-    off: bool,
-    state: &mut AppState,
-) {
-    if let Some(note) = state.song.note(&state.cursor_track) {
-        if !note.off {
-            let mut note = note.clone();
-            note.key = (note.key + key_delta).clamp(0, 127);
-            note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
-            note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
-            state.note_last = note;
-        }
-    }
-
-    let mut note = state.note_last.clone();
-    note.off = off;
-    state
-        .view_sender
-        .send(SingerCommand::Note(state.cursor_track.clone(), note))
-        .unwrap();
 }
