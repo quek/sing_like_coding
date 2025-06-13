@@ -13,7 +13,8 @@ use eframe::egui::{CentralPanel, Color32, Key, TopBottomPanel, Ui};
 
 use crate::{
     app_state::{
-        AppState, CursorTrack, FocusedPart, LaneCommand, MixerCommand, ModuleCommand, UiCommand,
+        AppState, CursorTrack, FocusedPart, LaneCommand, MixerCommand, ModuleCommand, TrackCommand,
+        UiCommand,
     },
     device::Device,
     singer::SingerCommand,
@@ -33,6 +34,7 @@ const DEFAULT_TRACK_WIDTH: f32 = 64.0;
 
 pub struct MainView {
     shortcut_map_common: HashMap<(Modifier, Key), UiCommand>,
+    shortcut_map_track: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_lane: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_module: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_mixer: HashMap<(Modifier, Key), UiCommand>,
@@ -50,186 +52,223 @@ impl MainView {
             ((Modifier::C, Key::T), UiCommand::TrackAdd),
             ((Modifier::CS, Key::T), UiCommand::LaneAdd),
         ];
-        let shortcut_map_lane = [
-            (
-                (Modifier::C, Key::J),
-                UiCommand::Track(LaneCommand::NoteUpdate(-1, 0, 0, false)),
-            ),
-            (
-                (Modifier::C, Key::ArrowDown),
-                UiCommand::Track(LaneCommand::NoteUpdate(-1, 0, 0, false)),
-            ),
-            (
-                (Modifier::C, Key::K),
-                UiCommand::Track(LaneCommand::NoteUpdate(1, 0, 0, false)),
-            ),
-            (
-                (Modifier::C, Key::ArrowUp),
-                UiCommand::Track(LaneCommand::NoteUpdate(1, 0, 0, false)),
-            ),
-            (
-                (Modifier::C, Key::H),
-                UiCommand::Track(LaneCommand::NoteUpdate(-12, 0, 0, false)),
-            ),
-            (
-                (Modifier::C, Key::ArrowLeft),
-                UiCommand::Track(LaneCommand::NoteUpdate(-12, 0, 0, false)),
-            ),
-            (
-                (Modifier::C, Key::L),
-                UiCommand::Track(LaneCommand::NoteUpdate(12, 0, 0, false)),
-            ),
-            (
-                (Modifier::C, Key::ArrowRight),
-                UiCommand::Track(LaneCommand::NoteUpdate(12, 0, 0, false)),
-            ),
-            (
-                (Modifier::A, Key::J),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, -1, 0, false)),
-            ),
-            (
-                (Modifier::A, Key::ArrowDown),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, -1, 0, false)),
-            ),
-            (
-                (Modifier::A, Key::K),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 1, 0, false)),
-            ),
-            (
-                (Modifier::A, Key::ArrowUp),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 1, 0, false)),
-            ),
-            (
-                (Modifier::A, Key::H),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, -0x10, 0, false)),
-            ),
-            (
-                (Modifier::A, Key::ArrowLeft),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, -0x10, 0, false)),
-            ),
-            (
-                (Modifier::A, Key::L),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0x10, 0, false)),
-            ),
-            (
-                (Modifier::A, Key::ArrowRight),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0x10, 0, false)),
-            ),
-            (
-                (Modifier::CA, Key::J),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0, -1, false)),
-            ),
-            (
-                (Modifier::CA, Key::ArrowDown),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0, -1, false)),
-            ),
-            (
-                (Modifier::CA, Key::K),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0, 1, false)),
-            ),
-            (
-                (Modifier::CA, Key::ArrowUp),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0, 1, false)),
-            ),
-            (
-                (Modifier::CA, Key::H),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0, -0x10, false)),
-            ),
-            (
-                (Modifier::CA, Key::ArrowLeft),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0, -0x10, false)),
-            ),
-            (
-                (Modifier::CA, Key::L),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0, 0x10, false)),
-            ),
-            (
-                (Modifier::CA, Key::ArrowRight),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0, 0x10, false)),
-            ),
-            (
-                (Modifier::CAS, Key::J),
-                UiCommand::Track(LaneCommand::NoteMove(0, -1)),
-            ),
-            (
-                (Modifier::CAS, Key::ArrowDown),
-                UiCommand::Track(LaneCommand::NoteMove(0, -1)),
-            ),
-            (
-                (Modifier::CAS, Key::K),
-                UiCommand::Track(LaneCommand::NoteMove(0, 1)),
-            ),
-            (
-                (Modifier::CAS, Key::ArrowUp),
-                UiCommand::Track(LaneCommand::NoteMove(0, 1)),
-            ),
-            (
-                (Modifier::CAS, Key::H),
-                UiCommand::Track(LaneCommand::NoteMove(-1, 0)),
-            ),
-            (
-                (Modifier::CAS, Key::ArrowLeft),
-                UiCommand::Track(LaneCommand::NoteMove(-1, 0)),
-            ),
-            (
-                (Modifier::CAS, Key::L),
-                UiCommand::Track(LaneCommand::NoteMove(1, 0)),
-            ),
-            (
-                (Modifier::CAS, Key::ArrowRight),
-                UiCommand::Track(LaneCommand::NoteMove(1, 0)),
-            ),
-            (
-                (Modifier::None, Key::J),
-                UiCommand::Track(LaneCommand::CursorDown),
-            ),
-            (
-                (Modifier::None, Key::ArrowDown),
-                UiCommand::Track(LaneCommand::CursorDown),
-            ),
-            (
-                (Modifier::None, Key::K),
-                UiCommand::Track(LaneCommand::CursorUp),
-            ),
-            (
-                (Modifier::None, Key::ArrowUp),
-                UiCommand::Track(LaneCommand::CursorUp),
-            ),
+        let shortcut_map_track = [
             (
                 (Modifier::None, Key::H),
-                UiCommand::Track(LaneCommand::CursorLeft),
-            ),
-            (
-                (Modifier::None, Key::ArrowLeft),
-                UiCommand::Track(LaneCommand::CursorLeft),
+                UiCommand::Track(TrackCommand::CursorLeft),
             ),
             (
                 (Modifier::None, Key::L),
-                UiCommand::Track(LaneCommand::CursorRight),
+                UiCommand::Track(TrackCommand::CursorRight),
             ),
             (
-                (Modifier::None, Key::ArrowRight),
-                UiCommand::Track(LaneCommand::CursorRight),
+                (Modifier::C, Key::H),
+                UiCommand::Track(TrackCommand::MoveLeft),
             ),
-            ((Modifier::C, Key::C), UiCommand::Track(LaneCommand::Copy)),
-            ((Modifier::C, Key::X), UiCommand::Track(LaneCommand::Cut)),
-            ((Modifier::C, Key::V), UiCommand::Track(LaneCommand::Paste)),
-            ((Modifier::None, Key::D), UiCommand::Track(LaneCommand::Dup)),
+            (
+                (Modifier::C, Key::L),
+                UiCommand::Track(TrackCommand::MoveRight),
+            ),
+            ((Modifier::C, Key::C), UiCommand::Track(TrackCommand::Copy)),
+            ((Modifier::C, Key::X), UiCommand::Track(TrackCommand::Cut)),
+            ((Modifier::C, Key::V), UiCommand::Track(TrackCommand::Paste)),
+            (
+                (Modifier::None, Key::D),
+                UiCommand::Track(TrackCommand::Dup),
+            ),
             (
                 (Modifier::None, Key::E),
-                UiCommand::Track(LaneCommand::SelectMode),
-            ),
-            (
-                (Modifier::None, Key::Period),
-                UiCommand::Track(LaneCommand::NoteUpdate(0, 0, 0, true)),
-            ),
-            (
-                (Modifier::None, Key::Delete),
-                UiCommand::Track(LaneCommand::NoteDelte),
+                UiCommand::Track(TrackCommand::SelectMode),
             ),
             (
                 (Modifier::None, Key::Escape),
-                UiCommand::Track(LaneCommand::SelectClear),
+                UiCommand::Track(TrackCommand::SelectClear),
+            ),
+            (
+                (Modifier::None, Key::Delete),
+                UiCommand::Track(TrackCommand::Delete),
+            ),
+        ];
+        let shortcut_map_lane = [
+            (
+                (Modifier::C, Key::J),
+                UiCommand::Lane(LaneCommand::NoteUpdate(-1, 0, 0, false)),
+            ),
+            (
+                (Modifier::C, Key::ArrowDown),
+                UiCommand::Lane(LaneCommand::NoteUpdate(-1, 0, 0, false)),
+            ),
+            (
+                (Modifier::C, Key::K),
+                UiCommand::Lane(LaneCommand::NoteUpdate(1, 0, 0, false)),
+            ),
+            (
+                (Modifier::C, Key::ArrowUp),
+                UiCommand::Lane(LaneCommand::NoteUpdate(1, 0, 0, false)),
+            ),
+            (
+                (Modifier::C, Key::H),
+                UiCommand::Lane(LaneCommand::NoteUpdate(-12, 0, 0, false)),
+            ),
+            (
+                (Modifier::C, Key::ArrowLeft),
+                UiCommand::Lane(LaneCommand::NoteUpdate(-12, 0, 0, false)),
+            ),
+            (
+                (Modifier::C, Key::L),
+                UiCommand::Lane(LaneCommand::NoteUpdate(12, 0, 0, false)),
+            ),
+            (
+                (Modifier::C, Key::ArrowRight),
+                UiCommand::Lane(LaneCommand::NoteUpdate(12, 0, 0, false)),
+            ),
+            (
+                (Modifier::A, Key::J),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, -1, 0, false)),
+            ),
+            (
+                (Modifier::A, Key::ArrowDown),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, -1, 0, false)),
+            ),
+            (
+                (Modifier::A, Key::K),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 1, 0, false)),
+            ),
+            (
+                (Modifier::A, Key::ArrowUp),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 1, 0, false)),
+            ),
+            (
+                (Modifier::A, Key::H),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, -0x10, 0, false)),
+            ),
+            (
+                (Modifier::A, Key::ArrowLeft),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, -0x10, 0, false)),
+            ),
+            (
+                (Modifier::A, Key::L),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0x10, 0, false)),
+            ),
+            (
+                (Modifier::A, Key::ArrowRight),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0x10, 0, false)),
+            ),
+            (
+                (Modifier::CA, Key::J),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, -1, false)),
+            ),
+            (
+                (Modifier::CA, Key::ArrowDown),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, -1, false)),
+            ),
+            (
+                (Modifier::CA, Key::K),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, 1, false)),
+            ),
+            (
+                (Modifier::CA, Key::ArrowUp),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, 1, false)),
+            ),
+            (
+                (Modifier::CA, Key::H),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, -0x10, false)),
+            ),
+            (
+                (Modifier::CA, Key::ArrowLeft),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, -0x10, false)),
+            ),
+            (
+                (Modifier::CA, Key::L),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, 0x10, false)),
+            ),
+            (
+                (Modifier::CA, Key::ArrowRight),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, 0x10, false)),
+            ),
+            (
+                (Modifier::CAS, Key::J),
+                UiCommand::Lane(LaneCommand::NoteMove(0, -1)),
+            ),
+            (
+                (Modifier::CAS, Key::ArrowDown),
+                UiCommand::Lane(LaneCommand::NoteMove(0, -1)),
+            ),
+            (
+                (Modifier::CAS, Key::K),
+                UiCommand::Lane(LaneCommand::NoteMove(0, 1)),
+            ),
+            (
+                (Modifier::CAS, Key::ArrowUp),
+                UiCommand::Lane(LaneCommand::NoteMove(0, 1)),
+            ),
+            (
+                (Modifier::CAS, Key::H),
+                UiCommand::Lane(LaneCommand::NoteMove(-1, 0)),
+            ),
+            (
+                (Modifier::CAS, Key::ArrowLeft),
+                UiCommand::Lane(LaneCommand::NoteMove(-1, 0)),
+            ),
+            (
+                (Modifier::CAS, Key::L),
+                UiCommand::Lane(LaneCommand::NoteMove(1, 0)),
+            ),
+            (
+                (Modifier::CAS, Key::ArrowRight),
+                UiCommand::Lane(LaneCommand::NoteMove(1, 0)),
+            ),
+            (
+                (Modifier::None, Key::J),
+                UiCommand::Lane(LaneCommand::CursorDown),
+            ),
+            (
+                (Modifier::None, Key::ArrowDown),
+                UiCommand::Lane(LaneCommand::CursorDown),
+            ),
+            (
+                (Modifier::None, Key::K),
+                UiCommand::Lane(LaneCommand::CursorUp),
+            ),
+            (
+                (Modifier::None, Key::ArrowUp),
+                UiCommand::Lane(LaneCommand::CursorUp),
+            ),
+            (
+                (Modifier::None, Key::H),
+                UiCommand::Lane(LaneCommand::CursorLeft),
+            ),
+            (
+                (Modifier::None, Key::ArrowLeft),
+                UiCommand::Lane(LaneCommand::CursorLeft),
+            ),
+            (
+                (Modifier::None, Key::L),
+                UiCommand::Lane(LaneCommand::CursorRight),
+            ),
+            (
+                (Modifier::None, Key::ArrowRight),
+                UiCommand::Lane(LaneCommand::CursorRight),
+            ),
+            ((Modifier::C, Key::C), UiCommand::Lane(LaneCommand::Copy)),
+            ((Modifier::C, Key::X), UiCommand::Lane(LaneCommand::Cut)),
+            ((Modifier::C, Key::V), UiCommand::Lane(LaneCommand::Paste)),
+            ((Modifier::None, Key::D), UiCommand::Lane(LaneCommand::Dup)),
+            (
+                (Modifier::None, Key::E),
+                UiCommand::Lane(LaneCommand::SelectMode),
+            ),
+            (
+                (Modifier::None, Key::Period),
+                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, 0, true)),
+            ),
+            (
+                (Modifier::None, Key::Delete),
+                UiCommand::Lane(LaneCommand::NoteDelete),
+            ),
+            (
+                (Modifier::None, Key::Escape),
+                UiCommand::Lane(LaneCommand::SelectClear),
             ),
         ];
 
@@ -295,12 +334,14 @@ impl MainView {
         ];
 
         let shortcut_map_common: HashMap<_, _> = shortcut_map_common.into_iter().collect();
+        let shortcut_map_track: HashMap<_, _> = shortcut_map_track.into_iter().collect();
         let shortcut_map_lane: HashMap<_, _> = shortcut_map_lane.into_iter().collect();
         let shortcut_map_module: HashMap<_, _> = shortcut_map_module.into_iter().collect();
         let shortcut_map_mixer: HashMap<_, _> = shortcut_map_mixer.into_iter().collect();
 
         Self {
             shortcut_map_common,
+            shortcut_map_track,
             shortcut_map_lane,
             shortcut_map_module,
             shortcut_map_mixer,
@@ -415,6 +456,7 @@ impl MainView {
 
         if let Some(key) = shortcut_key(gui_context) {
             let map = match state.focused_part {
+                crate::app_state::FocusedPart::Track => &self.shortcut_map_track,
                 crate::app_state::FocusedPart::Lane => &self.shortcut_map_lane,
                 crate::app_state::FocusedPart::Module => &self.shortcut_map_module,
                 crate::app_state::FocusedPart::Mixer => &self.shortcut_map_mixer,
@@ -621,7 +663,7 @@ impl MainView {
 
     fn view_module(
         &self,
-        state: &AppState,
+        state: &mut AppState,
         ui: &mut Ui,
         track_index: usize,
         module_index: usize,
@@ -639,9 +681,10 @@ impl MainView {
             .size([DEFAULT_TRACK_WIDTH, 0.0])
             .build();
         if label.clicked() {
-            state
-                .sender_to_loop
-                .send(MainToPlugin::GuiOpen(track_index, module_index))?;
+            state.send_to_plugin(
+                MainToPlugin::GuiOpen(track_index, module_index),
+                Box::new(|_, _| Ok(())),
+            )?;
         }
         label.context_menu(|ui: &mut Ui| {
             if ui.button("Delete").clicked() {
@@ -745,7 +788,9 @@ impl MainView {
         ui.vertical(|ui| -> anyhow::Result<()> {
             with_font_mono(ui, |ui| {
                 LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
-                    .bg_color(if state.selected_tracks.contains(&track_index) {
+                    .bg_color(if state.track_state.index == track_index {
+                        state.color_cursor(FocusedPart::Track)
+                    } else if state.selected_tracks.contains(&track_index) {
                         Color32::GREEN
                     } else {
                         Color32::BLACK

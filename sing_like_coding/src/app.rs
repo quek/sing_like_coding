@@ -93,7 +93,9 @@ impl<'a> Default for AppMain<'a> {
 impl<'a> eframe::App for AppMain<'a> {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.song_sender.send(AppStateCommand::Quit).unwrap();
-        self.state.sender_to_loop.send(MainToPlugin::Quit).unwrap();
+        self.state
+            .send_to_plugin(MainToPlugin::Quit, Box::new(|_, _| Ok(())))
+            .unwrap();
         log::debug!("#### on_exit did send MainToPlugin::Quit");
         sleep(Duration::from_millis(100));
     }

@@ -8,7 +8,7 @@ pub struct PluginScan {}
 
 impl Command for PluginScan {
     fn call(&mut self, state: &mut AppState) -> anyhow::Result<()> {
-        state.sender_to_loop.send(MainToPlugin::Scan)?;
+        state.send_to_plugin(MainToPlugin::Scan, Box::new(|_, _| Ok(())))?;
         Ok(())
     }
 

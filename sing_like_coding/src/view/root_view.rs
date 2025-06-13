@@ -33,7 +33,8 @@ impl RootView {
         let shortcut_map = [
             ((Modifier::None, Key::Space), UiCommand::PlayToggle),
             ((Modifier::C, Key::Space), UiCommand::Command),
-            ((Modifier::None, Key::V), UiCommand::NextViewPart),
+            ((Modifier::None, Key::V), UiCommand::FocusedPartNext),
+            ((Modifier::S, Key::V), UiCommand::FocusedPartPrev),
         ];
 
         let shortcut_map: HashMap<_, _> = shortcut_map.into_iter().collect();

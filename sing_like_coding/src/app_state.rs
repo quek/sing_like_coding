@@ -1,4 +1,5 @@
 use std::{
+    collections::VecDeque,
     env::current_exe,
     fs::{create_dir_all, File},
     io::Write,
@@ -31,20 +32,36 @@ use crate::{
 
 pub enum UiCommand {
     Command,
+    FocusedPartNext,
+    FocusedPartPrev,
     Follow,
+    Lane(LaneCommand),
+    LaneAdd,
     Loop,
     Mixer(MixerCommand),
     Module(ModuleCommand),
-    NextViewPart,
     PlayToggle,
     SongSave,
-    Track(LaneCommand),
+    Track(TrackCommand),
     TrackAdd,
     TrackMute(Option<usize>, Option<bool>),
-    TrackSolo(Option<usize>, Option<bool>),
     TrackPan(usize, f32),
+    TrackSolo(Option<usize>, Option<bool>),
     TrackVolume(usize, f32),
-    LaneAdd,
+}
+
+pub enum TrackCommand {
+    Copy,
+    CursorLeft,
+    CursorRight,
+    Cut,
+    Delete,
+    Dup,
+    MoveLeft,
+    MoveRight,
+    Paste,
+    SelectClear,
+    SelectMode,
 }
 
 pub enum LaneCommand {
@@ -55,7 +72,7 @@ pub enum LaneCommand {
     CursorRight,
     CursorUp,
     Dup,
-    NoteDelte,
+    NoteDelete,
     NoteMove(i64, i64),
     NoteUpdate(i16, i16, i16, bool),
     Paste,
@@ -205,6 +222,7 @@ pub struct CursorModule {
 
 #[derive(PartialEq)]
 pub enum FocusedPart {
+    Track,
     Lane,
     Module,
     Mixer,
@@ -225,13 +243,15 @@ pub struct AppState<'a> {
     pub song: Song,
     pub song_dirty_p: bool,
     pub view_sender: Sender<SingerCommand>,
-    pub sender_to_loop: Sender<MainToPlugin>,
+    sender_to_loop: Sender<MainToPlugin>,
     receiver_communicator_to_main_thread: Receiver<PluginToMain>,
     receiver_from_singer: Receiver<AppStateCommand>,
-    nmodules_saving: usize,
     song_open_p: bool,
     _song_state_shmem: Shmem,
     pub song_state: &'a SongState,
+    pub track_state: TrackState,
+    callbacks_plugin_to_main:
+        VecDeque<Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>>>,
     pub gui_context: Option<eframe::egui::Context>,
 }
 
@@ -273,10 +293,11 @@ impl<'a> AppState<'a> {
             sender_to_loop,
             receiver_communicator_to_main_thread,
             receiver_from_singer,
-            nmodules_saving: 0,
             song_open_p: false,
             _song_state_shmem: song_state_shmem,
             song_state,
+            track_state: Default::default(),
+            callbacks_plugin_to_main: Default::default(),
             gui_context: None,
         }
     }
@@ -291,7 +312,8 @@ impl<'a> AppState<'a> {
                 / 500
                 == 0
         {
-            Color32::YELLOW
+            // Color32::YELLOW
+            Color32::from_rgba_premultiplied(0xff, 0xff, 0, 0xa0)
         } else {
             Color32::from_rgb(200, 200, 0)
         }
@@ -347,25 +369,17 @@ impl<'a> AppState<'a> {
     }
 
     pub fn receive_from_communicator(&mut self) -> anyhow::Result<()> {
-        while let Ok(message) = self.receiver_communicator_to_main_thread.try_recv() {
-            match message {
-                PluginToMain::DidLoad => (),
-                PluginToMain::DidUnload(_track_index, _module_index) => (),
-                PluginToMain::DidGuiOpen => (),
-                PluginToMain::DidScan => {}
-                PluginToMain::DidStateLoad => (),
+        while let Ok(mut message) = self.receiver_communicator_to_main_thread.try_recv() {
+            match &mut message {
                 PluginToMain::DidStateSave(track_index, module_index, state) => {
-                    if let Some(module) = self.module_mut(track_index, module_index) {
-                        module.state = Some(state);
-                    }
-                    if self.nmodules_saving > 0 {
-                        self.nmodules_saving -= 1;
-                        if self.nmodules_saving == 0 {
-                            self.song_save_file()?;
-                        }
+                    if let Some(module) = self.module_mut(*track_index, *module_index) {
+                        module.state = Some(std::mem::take(state));
                     }
                 }
-                PluginToMain::Quit => (),
+                _ => {}
+            }
+            if let Some(callback) = self.callbacks_plugin_to_main.pop_front() {
+                callback(self, message)?;
             }
         }
         Ok(())
@@ -382,11 +396,20 @@ impl<'a> AppState<'a> {
             UiCommand::Loop => {
                 self.view_sender.send(SingerCommand::Loop)?;
             }
-            UiCommand::NextViewPart => {
+            UiCommand::FocusedPartNext => {
                 self.focused_part = match self.focused_part {
+                    FocusedPart::Track => FocusedPart::Lane,
                     FocusedPart::Lane => FocusedPart::Module,
                     FocusedPart::Module => FocusedPart::Mixer,
-                    FocusedPart::Mixer => FocusedPart::Lane,
+                    FocusedPart::Mixer => FocusedPart::Track,
+                }
+            }
+            UiCommand::FocusedPartPrev => {
+                self.focused_part = match self.focused_part {
+                    FocusedPart::Track => FocusedPart::Mixer,
+                    FocusedPart::Lane => FocusedPart::Track,
+                    FocusedPart::Module => FocusedPart::Lane,
+                    FocusedPart::Mixer => FocusedPart::Module,
                 }
             }
             UiCommand::PlayToggle => {
@@ -399,6 +422,9 @@ impl<'a> AppState<'a> {
             UiCommand::SongSave => {
                 self.song_save()?;
             }
+
+            UiCommand::Track(command) => self.run_track_command(command)?,
+
             UiCommand::TrackAdd => {
                 TrackAdd {}.call(self)?;
             }
@@ -423,21 +449,21 @@ impl<'a> AppState<'a> {
             UiCommand::LaneAdd => self
                 .view_sender
                 .send(SingerCommand::LaneAdd(self.cursor_track.track))?,
-            UiCommand::Track(LaneCommand::Copy) => self.notes_copy()?,
-            UiCommand::Track(LaneCommand::Cut) => self.notes_cut()?,
-            UiCommand::Track(LaneCommand::Paste) => self.notes_paste()?,
-            UiCommand::Track(LaneCommand::CursorUp) => self.cursor_up(),
-            UiCommand::Track(LaneCommand::CursorDown) => self.cursor_down(),
-            UiCommand::Track(LaneCommand::CursorLeft) => self.cursor_left(),
-            UiCommand::Track(LaneCommand::CursorRight) => self.cursor_right(),
-            UiCommand::Track(LaneCommand::Dup) => self.notes_dup()?,
-            UiCommand::Track(LaneCommand::NoteDelte) => self
+            UiCommand::Lane(LaneCommand::Copy) => self.notes_copy()?,
+            UiCommand::Lane(LaneCommand::Cut) => self.notes_cut()?,
+            UiCommand::Lane(LaneCommand::Paste) => self.notes_paste()?,
+            UiCommand::Lane(LaneCommand::CursorUp) => self.cursor_up(),
+            UiCommand::Lane(LaneCommand::CursorDown) => self.cursor_down(),
+            UiCommand::Lane(LaneCommand::CursorLeft) => self.cursor_left(),
+            UiCommand::Lane(LaneCommand::CursorRight) => self.cursor_right(),
+            UiCommand::Lane(LaneCommand::Dup) => self.notes_dup()?,
+            UiCommand::Lane(LaneCommand::NoteDelete) => self
                 .view_sender
                 .send(SingerCommand::NoteDelete(self.cursor_track.clone()))?,
-            UiCommand::Track(LaneCommand::NoteMove(lane_delta, line_delta)) => {
+            UiCommand::Lane(LaneCommand::NoteMove(lane_delta, line_delta)) => {
                 self.note_move(*lane_delta, *line_delta)?;
             }
-            UiCommand::Track(LaneCommand::NoteUpdate(
+            UiCommand::Lane(LaneCommand::NoteUpdate(
                 key_delta,
                 velociy_delta,
                 delay_delta,
@@ -445,7 +471,7 @@ impl<'a> AppState<'a> {
             )) => {
                 self.note_update(*key_delta, *velociy_delta, *delay_delta, *off)?;
             }
-            UiCommand::Track(LaneCommand::SelectMode) => {
+            UiCommand::Lane(LaneCommand::SelectMode) => {
                 self.select_p = !self.select_p;
                 if self.select_p {
                     self.selection_track_min = Some(self.cursor_track);
@@ -456,7 +482,7 @@ impl<'a> AppState<'a> {
                     self.selection_track_max = Some(range.1);
                 }
             }
-            UiCommand::Track(LaneCommand::SelectClear) => {
+            UiCommand::Lane(LaneCommand::SelectClear) => {
                 self.select_p = false;
                 self.selection_track_min = None;
                 self.selection_track_max = None;
@@ -519,6 +545,16 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
+    pub fn send_to_plugin(
+        &mut self,
+        command: MainToPlugin,
+        callback: Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>>,
+    ) -> anyhow::Result<()> {
+        self.callbacks_plugin_to_main.push_back(callback);
+        self.sender_to_loop.send(command)?;
+        Ok(())
+    }
+
     pub fn song_open(&mut self) -> anyhow::Result<()> {
         if let Some(path) = FileDialog::new()
             .set_directory(song_directory())
@@ -539,17 +575,20 @@ impl<'a> AppState<'a> {
     }
 
     pub fn song_save(&mut self) -> anyhow::Result<()> {
-        self.nmodules_saving = 0;
-        for track_index in 0..self.song.tracks.len() {
-            for module_index in 0..self.song.tracks[track_index].modules.len() {
-                self.sender_to_loop
-                    .send(MainToPlugin::StateSave(track_index, module_index))?;
-                self.nmodules_saving += 1;
+        let track_index_last = self.song.tracks.len() - 1;
+        for track_index in 0..=track_index_last {
+            let module_index_last = self.song.tracks[track_index].modules.len() - 1;
+            for module_index in 0..=module_index_last {
+                let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>> =
+                    if track_index == track_index_last && module_index == module_index_last {
+                        Box::new(|state, _| state.song_save_file())
+                    } else {
+                        Box::new(|_, _| Ok(()))
+                    };
+                self.send_to_plugin(MainToPlugin::StateSave(track_index, module_index), callback)?;
             }
         }
-        if self.nmodules_saving == 0 {
-            self.song_save_file()?;
-        }
+
         Ok(())
     }
 
@@ -559,7 +598,7 @@ impl<'a> AppState<'a> {
 
     fn notes_copy_or_cut(&mut self, copy_p: bool) -> anyhow::Result<()> {
         if self.select_p {
-            self.run_ui_command(&UiCommand::Track(LaneCommand::SelectMode))?;
+            self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
         }
         if let (Some(min), Some(max)) = (&self.selection_track_min, &self.selection_track_max) {
             let mut notess = vec![];
@@ -608,7 +647,7 @@ impl<'a> AppState<'a> {
 
     fn notes_dup(&mut self) -> anyhow::Result<()> {
         if self.select_p {
-            self.run_ui_command(&UiCommand::Track(LaneCommand::SelectMode))?;
+            self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
         }
         let notess = self.notes_selected_cloned();
         if let (Some(min), Some(max)) =
@@ -788,6 +827,41 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
+    pub fn run_track_command(&mut self, command: &TrackCommand) -> anyhow::Result<()> {
+        match command {
+            TrackCommand::Copy => {
+                for module_index in 0..self.song.tracks[self.track_state.index].modules.len() {
+                    self.send_to_plugin(
+                        MainToPlugin::StateSave(self.track_state.index, module_index),
+                        Box::new(|_state, _command| Ok(())),
+                    )?;
+                }
+            }
+            TrackCommand::CursorLeft => self.track_state.cursor_left(&self.song)?,
+            TrackCommand::CursorRight => self.track_state.cursor_right(&self.song)?,
+            TrackCommand::Cut => {}
+            TrackCommand::Delete => {}
+            TrackCommand::Dup => {}
+            TrackCommand::MoveLeft => {}
+            TrackCommand::MoveRight => {}
+            TrackCommand::Paste => {}
+            TrackCommand::SelectClear => {}
+            TrackCommand::SelectMode => {
+                self.track_state.select_p = !self.track_state.select_p;
+                if self.track_state.select_p {
+                    self.track_state.select_min = self.track_state.index;
+                    self.track_state.select_max = self.track_state.index;
+                } else if self.track_state.select_min < self.track_state.index {
+                    self.track_state.select_max = self.track_state.index;
+                } else {
+                    self.track_state.select_max = self.track_state.select_min;
+                    self.track_state.select_min = self.track_state.index;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn song_save_file(&mut self) -> anyhow::Result<()> {
         let song_file = if let Some(song_file) = &self.song_state.song_file_get() {
             song_file.into()
@@ -839,6 +913,34 @@ impl<'a> AppState<'a> {
 pub enum AppStateCommand {
     Song(Song),
     Quit,
+}
+
+#[derive(Default)]
+pub struct TrackState {
+    pub index: usize,
+    pub select_p: bool,
+    pub select_min: usize,
+    pub select_max: usize,
+}
+
+impl TrackState {
+    pub fn cursor_left(&mut self, song: &Song) -> anyhow::Result<()> {
+        if self.index == 0 {
+            self.index = song.tracks.len() - 1;
+        } else {
+            self.index -= 1;
+        }
+        Ok(())
+    }
+
+    pub fn cursor_right(&mut self, song: &Song) -> anyhow::Result<()> {
+        if self.index == song.tracks.len() - 1 {
+            self.index = 0;
+        } else {
+            self.index += 1;
+        }
+        Ok(())
+    }
 }
 
 fn song_directory() -> PathBuf {
