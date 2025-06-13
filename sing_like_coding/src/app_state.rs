@@ -56,6 +56,7 @@ pub enum LaneCommand {
     CursorUp,
     Dup,
     NoteDelte,
+    NoteMove(i64, i64),
     NoteUpdate(i16, i16, i16, bool),
     Paste,
     SelectMode,
@@ -110,40 +111,71 @@ impl CursorTrack {
         }
     }
 
-    pub fn up(&mut self, _song: &Song) {
-        if self.line != 0 {
-            self.line -= 1;
+    pub fn up(&self, _song: &Song) -> Self {
+        let mut cursor = self.clone();
+        if cursor.line != 0 {
+            cursor.line -= 1;
         }
+        cursor
     }
 
-    pub fn down(&mut self, _song: &Song) {
-        self.line += 1;
+    pub fn down(&self, _song: &Song) -> Self {
+        let mut cursor = self.clone();
+        cursor.line += 1;
+        cursor
     }
 
-    pub fn left(&mut self, song: &Song) {
-        if self.lane == 0 {
-            if self.track == 0 {
-                self.track = song.tracks.len() - 1;
+    pub fn left(&self, song: &Song) -> Self {
+        let mut cursor = self.clone();
+        if cursor.lane == 0 {
+            if cursor.track == 0 {
+                cursor.track = song.tracks.len() - 1;
             } else {
-                self.track -= 1;
+                cursor.track -= 1;
             }
-            self.lane = song.tracks[self.track].lanes.len() - 1;
+            cursor.lane = song.tracks[cursor.track].lanes.len() - 1;
         } else {
-            self.lane -= 1;
+            cursor.lane -= 1;
         }
+        cursor
     }
 
-    pub fn right(&mut self, song: &Song) {
-        if self.lane == song.tracks[self.track].lanes.len() - 1 {
-            self.lane = 0;
-            if self.track + 1 == song.tracks.len() {
-                self.track = 0;
+    pub fn right(&self, song: &Song) -> Self {
+        let mut cursor = self.clone();
+        if cursor.lane == song.tracks[cursor.track].lanes.len() - 1 {
+            cursor.lane = 0;
+            if cursor.track + 1 == song.tracks.len() {
+                cursor.track = 0;
             } else {
-                self.track += 1;
+                cursor.track += 1;
             }
         } else {
-            self.lane += 1;
+            cursor.lane += 1;
         }
+        cursor
+    }
+
+    pub fn move_by(&self, lane_delta: i64, line_delta: i64, song: &Song) -> Self {
+        let mut cursor = self.clone();
+        if lane_delta < 0 {
+            for _ in 0..(lane_delta.abs()) {
+                cursor = cursor.left(song);
+            }
+        } else {
+            for _ in 0..lane_delta {
+                cursor = cursor.right(song);
+            }
+        }
+        if line_delta < 0 {
+            for _ in 0..(line_delta.abs()) {
+                cursor = cursor.down(song);
+            }
+        } else {
+            for _ in 0..line_delta {
+                cursor = cursor.up(song);
+            }
+        }
+        cursor
     }
 }
 
@@ -266,21 +298,21 @@ impl<'a> AppState<'a> {
     }
 
     pub fn cursor_up(&mut self) {
-        self.cursor_track.up(&self.song);
+        self.cursor_track = self.cursor_track.up(&self.song);
     }
 
     pub fn cursor_down(&mut self) {
-        self.cursor_track.down(&self.song);
+        self.cursor_track = self.cursor_track.down(&self.song);
     }
 
     pub fn cursor_left(&mut self) {
-        self.cursor_track.left(&self.song);
+        self.cursor_track = self.cursor_track.left(&self.song);
         self.selected_tracks.clear();
         self.selected_tracks.push(self.cursor_track.track);
     }
 
     pub fn cursor_right(&mut self) {
-        self.cursor_track.right(&self.song);
+        self.cursor_track = self.cursor_track.right(&self.song);
         self.selected_tracks.clear();
         self.selected_tracks.push(self.cursor_track.track);
     }
@@ -402,6 +434,9 @@ impl<'a> AppState<'a> {
             UiCommand::Track(LaneCommand::NoteDelte) => self
                 .view_sender
                 .send(SingerCommand::NoteDelete(self.cursor_track.clone()))?,
+            UiCommand::Track(LaneCommand::NoteMove(lane_delta, line_delta)) => {
+                self.note_move(*lane_delta, *line_delta)?;
+            }
             UiCommand::Track(LaneCommand::NoteUpdate(
                 key_delta,
                 velociy_delta,
@@ -588,9 +623,9 @@ impl<'a> AppState<'a> {
                     } else {
                         self.view_sender.send(SingerCommand::NoteDelete(cursor))?;
                     }
-                    cursor.down(&self.song);
+                    cursor = cursor.down(&self.song);
                 }
-                cursor.right(&self.song);
+                cursor = cursor.right(&self.song);
                 cursor.line = self.cursor_track.line;
             }
 
@@ -598,6 +633,42 @@ impl<'a> AppState<'a> {
             min.line += line_delta;
             max.line += line_delta;
         }
+
+        Ok(())
+    }
+
+    fn note_move(&mut self, lane_delta: i64, line_delta: i64) -> anyhow::Result<()> {
+        if self.selection_track_min.is_some() {
+            let notess = self.notes_selected_cloned();
+            for (cursor, _note) in notess.clone().into_iter().flatten().filter_map(|x| x) {
+                self.view_sender.send(SingerCommand::NoteDelete(cursor))?;
+            }
+            for (cursor, note) in notess.into_iter().flatten().filter_map(|x| x) {
+                let cursor = cursor.move_by(lane_delta, line_delta, &self.song);
+                self.view_sender.send(SingerCommand::Note(cursor, note))?;
+            }
+
+            self.selection_track_min = self
+                .selection_track_min
+                .as_ref()
+                .map(|x| x.move_by(lane_delta, line_delta, &self.song));
+            self.selection_track_max = self
+                .selection_track_max
+                .as_ref()
+                .map(|x| x.move_by(lane_delta, line_delta, &self.song));
+        } else if let Some(note) = self.song.note(&self.cursor_track) {
+            self.view_sender
+                .send(SingerCommand::NoteDelete(self.cursor_track.clone()))?;
+            let cursor = self
+                .cursor_track
+                .move_by(lane_delta, line_delta, &self.song);
+            self.view_sender
+                .send(SingerCommand::Note(cursor, note.clone()))?;
+        }
+
+        self.cursor_track = self
+            .cursor_track
+            .move_by(lane_delta, line_delta, &self.song);
 
         Ok(())
     }
@@ -614,9 +685,9 @@ impl<'a> AppState<'a> {
                         } else {
                             self.view_sender.send(SingerCommand::NoteDelete(cursor))?;
                         }
-                        cursor.down(&self.song);
+                        cursor = cursor.down(&self.song);
                     }
-                    cursor.right(&self.song);
+                    cursor = cursor.right(&self.song);
                     cursor.line = self.cursor_track.line;
                 }
             }

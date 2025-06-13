@@ -148,6 +148,38 @@ impl MainView {
                 UiCommand::Track(LaneCommand::NoteUpdate(0, 0, 0x10, false)),
             ),
             (
+                (Modifier::CAS, Key::J),
+                UiCommand::Track(LaneCommand::NoteMove(0, -1)),
+            ),
+            (
+                (Modifier::CAS, Key::ArrowDown),
+                UiCommand::Track(LaneCommand::NoteMove(0, -1)),
+            ),
+            (
+                (Modifier::CAS, Key::K),
+                UiCommand::Track(LaneCommand::NoteMove(0, 1)),
+            ),
+            (
+                (Modifier::CAS, Key::ArrowUp),
+                UiCommand::Track(LaneCommand::NoteMove(0, 1)),
+            ),
+            (
+                (Modifier::CAS, Key::H),
+                UiCommand::Track(LaneCommand::NoteMove(-1, 0)),
+            ),
+            (
+                (Modifier::CAS, Key::ArrowLeft),
+                UiCommand::Track(LaneCommand::NoteMove(-1, 0)),
+            ),
+            (
+                (Modifier::CAS, Key::L),
+                UiCommand::Track(LaneCommand::NoteMove(1, 0)),
+            ),
+            (
+                (Modifier::CAS, Key::ArrowRight),
+                UiCommand::Track(LaneCommand::NoteMove(1, 0)),
+            ),
+            (
                 (Modifier::None, Key::J),
                 UiCommand::Track(LaneCommand::CursorDown),
             ),
