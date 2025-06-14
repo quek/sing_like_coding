@@ -119,6 +119,7 @@ impl Singer {
             process_elasped_avg: 0.0,
         };
         this.track_add();
+        this.track_add();
         this.song_state_mut().init(&this);
         this
     }

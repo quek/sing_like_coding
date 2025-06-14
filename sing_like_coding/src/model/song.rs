@@ -27,7 +27,11 @@ impl Song {
 
     pub fn track_add(&mut self) {
         let mut track = Track::new();
-        track.name = format!("T{:02X}", self.tracks.len() + 1);
+        track.name = if self.tracks.is_empty() {
+            "Main".to_string()
+        } else {
+            format!("T{:02X}", self.tracks.len())
+        };
         self.tracks.push(track);
     }
 
