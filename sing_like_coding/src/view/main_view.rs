@@ -491,20 +491,17 @@ impl MainView {
         state: &AppState,
         ui: &Ui,
     ) -> (Range<usize>, Option<usize>) {
-        let visible_width = ui.clip_rect().width();
-
+        let available_width = ui.available_width();
         let flatten_lane_index = state
             .track_lane_to_flatten_lane_index_map
             .get(&(state.cursor_track.track, state.cursor_track.lane))
             .cloned()
             .unwrap_or(0);
         let offset_cursor = state.offset_flatten_lanes[flatten_lane_index];
-
-        // let offset_cursor = state.offset_tracks[state.cursor_track.track];
-        let offset_left = (offset_cursor - (visible_width / 2.0)).max(0.0);
+        let offset_left = (offset_cursor - (available_width / 2.0) + state.width_lane).max(0.0);
         let flatten_lane_index_start = (offset_left / state.width_lane).floor();
         let flatten_lane_index_end =
-            (flatten_lane_index_start + (visible_width / state.width_lane)).ceil();
+            (flatten_lane_index_start + (available_width / state.width_lane)).ceil();
         let flatten_lane_index_start =
             (flatten_lane_index_start as usize).clamp(0, state.flatten_lane_index_max);
         let flatten_lane_index_end = (flatten_lane_index_end as usize).clamp(
@@ -518,15 +515,8 @@ impl MainView {
             .get(flatten_lane_index_end)
             .unwrap_or(&state.song.tracks.len());
         let track_range = visiblef_track_start..visiblef_track_end;
-        log::debug!(
-            "offset_cursor {} offset_left {} flatten_lane_index_start {} track_range {:?}",
-            offset_cursor,
-            offset_left,
-            flatten_lane_index_start,
-            track_range
-        );
         let lane_start =
-            Some(state.flatten_lane_index_to_track_lane_vec[flatten_lane_index_start].0);
+            Some(state.flatten_lane_index_to_track_lane_vec[flatten_lane_index_start].1);
 
         (track_range, lane_start)
     }
