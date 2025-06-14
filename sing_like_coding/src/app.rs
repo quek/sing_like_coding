@@ -95,6 +95,7 @@ impl<'a> eframe::App for AppMain<'a> {
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if let Some(receiver_main_thread_to_communicator) = self.recevier_from_main_thread.take() {
+            let hwnd = get_hwnd(frame);
             let mut communicator = Communicator::new(
                 receiver_main_thread_to_communicator,
                 self.sender_communicator_to_main_thread.take().unwrap(),
@@ -102,13 +103,12 @@ impl<'a> eframe::App for AppMain<'a> {
             )
             .unwrap();
             tokio::spawn(async move {
-                communicator.run().await.unwrap();
+                communicator.run(hwnd).await.unwrap();
             });
 
             self.singer.lock().unwrap().gui_context = Some(ctx.clone());
 
             self.state.gui_context = Some(ctx.clone());
-            self.state.hwnd = get_hwnd(frame);
         }
         let _ = self.view.view(ctx, &mut self.device, &mut self.state);
 

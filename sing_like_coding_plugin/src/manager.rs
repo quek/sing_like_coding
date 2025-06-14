@@ -29,6 +29,7 @@ pub struct Manager {
     event_quit_all: HANDLE,
     hosts: Vec<Vec<Host>>,
     clap_manager: ClapManager,
+    hwnd: isize,
 }
 
 pub const EVENT_QUIT_ALL_NAME: &str = "SingLikeCoding.Plugin.Quit.All";
@@ -57,6 +58,7 @@ impl Manager {
             event_quit_all,
             hosts: vec![],
             clap_manager: ClapManager::new(),
+            hwnd: 0,
         })
     }
 
@@ -67,7 +69,11 @@ impl Manager {
         loop {
             if let Ok(message) = self.receiver_from_loop.try_recv() {
                 match message {
-                    MainToPlugin::Load(id, clap_id, track_index, gui_open_p, hwnd) => {
+                    MainToPlugin::Hwnd(hwnd) => {
+                        self.hwnd = hwnd;
+                        self.sender_to_loop.send(PluginToMain::DidHwnd)?;
+                    }
+                    MainToPlugin::Load(id, clap_id, track_index, gui_open_p) => {
                         log::debug!("will load {id}");
                         let description = self.clap_manager.description(&clap_id).unwrap();
                         let host = Host::new(
@@ -75,7 +81,7 @@ impl Manager {
                             description,
                             self.sender_from_plugin.clone(),
                             gui_open_p,
-                            hwnd,
+                            self.hwnd,
                         )?;
                         loop {
                             if self.hosts.len() > track_index {

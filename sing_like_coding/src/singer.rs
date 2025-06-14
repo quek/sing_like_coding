@@ -12,7 +12,7 @@ use std::{
 
 use crate::{
     app_state::{AppStateCommand, CursorTrack},
-    model::{lane::Lane, note::Note, song::Song},
+    model::{lane::Lane, note::Note, song::Song, track::Track},
     song_state::SongState,
     util::next_id,
     view::stereo_peak_meter::DB_MIN,
@@ -23,7 +23,6 @@ use common::{
     clap_manager::ClapManager,
     event::Event,
     module::Module,
-    plugin::description::Description,
     plugin_ref::PluginRef,
     process_data::ProcessData,
     process_track_context::ProcessTrackContext,
@@ -45,17 +44,18 @@ pub enum SingerCommand {
     NoteOn(usize, i16, i16, f64, usize),
     #[allow(dead_code)]
     NoteOff(usize, i16, i16, f64, usize),
-    PluginLoad(usize, Description, isize),
+    PluginLoad(usize, String, String),
     PluginDelete(usize, usize),
     TrackAdd,
     TrackDelete(usize),
+    TrackInsert(usize, Track),
     TrackMute(usize, bool),
     TrackSolo(usize, bool),
     TrackPan(usize, f32),
     TrackVolume(usize, f32),
     LaneAdd(usize),
     SongFile(String),
-    SongOpen(String, isize),
+    SongOpen(String),
 }
 
 pub struct Singer {
@@ -154,9 +154,8 @@ impl Singer {
     pub fn plugin_load(
         &mut self,
         track_index: usize,
-        description: &Description,
+        clap_plugin_id: String,
         gui_open_p: bool,
-        hwnd: isize,
     ) -> Result<usize> {
         let id = next_id();
 
@@ -170,10 +169,9 @@ impl Singer {
 
         self.sender_to_plugin.send(MainToPlugin::Load(
             id,
-            description.id.clone(),
+            clap_plugin_id,
             track_index,
             gui_open_p,
-            hwnd,
         ))?;
 
         Ok(id)
@@ -353,7 +351,7 @@ impl Singer {
         Ok(())
     }
 
-    pub fn song_open(&mut self, song_file: String, hwnd: isize) -> Result<()> {
+    pub fn song_open(&mut self, song_file: String) -> Result<()> {
         let file = File::open(&song_file)?;
         let reader = BufReader::new(file);
         let song = serde_json::from_reader(reader)?;
@@ -377,7 +375,7 @@ impl Singer {
         }
 
         for (track_index, description, module_index) in xs {
-            self.plugin_load(track_index, description.unwrap(), false, hwnd)?;
+            self.plugin_load(track_index, description.unwrap().id.clone(), false)?;
             self.sender_to_plugin.send(MainToPlugin::StateLoad(
                 track_index,
                 module_index,
@@ -472,6 +470,28 @@ impl Singer {
         self.shmems.remove(track_index);
         Ok(())
     }
+
+    fn track_insert(&mut self, track_index: usize, track: Track) -> Result<()> {
+        self.song.track_insert(track_index, track);
+        self.process_track_contexts
+            .insert(track_index, ProcessTrackContext::default());
+        self.shmems.insert(track_index, vec![]);
+        for module_index in 0..self.song.tracks[track_index].modules.len() {
+            let clap_plugin_id = self.song.tracks[track_index].modules[module_index]
+                .id
+                .clone();
+            self.plugin_load(track_index, clap_plugin_id, false)?;
+            self.sender_to_plugin.send(MainToPlugin::StateLoad(
+                track_index,
+                module_index,
+                self.song.tracks[track_index].modules[module_index]
+                    .state
+                    .take()
+                    .unwrap(),
+            ))?;
+        }
+        Ok(())
+    }
 }
 
 async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerCommand>) -> Result<()> {
@@ -524,15 +544,12 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                     singer.send_song()?;
                 }
             }
-            SingerCommand::PluginLoad(track_index, description, hwnd) => {
-                log::debug!("will send MainToPlugin::Load {:?}", description);
-
+            SingerCommand::PluginLoad(track_index, clap_plugin_id, name) => {
                 let mut singer = singer.lock().unwrap();
-                singer.plugin_load(track_index, &description, true, hwnd)?;
-                singer.song.tracks[track_index].modules.push(Module::new(
-                    description.id.clone(),
-                    description.name.clone(),
-                ));
+                singer.plugin_load(track_index, clap_plugin_id.clone(), true)?;
+                singer.song.tracks[track_index]
+                    .modules
+                    .push(Module::new(clap_plugin_id, name));
 
                 singer.send_song()?;
             }
@@ -562,6 +579,11 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
             SingerCommand::TrackDelete(track_index) => {
                 let mut singer = singer.lock().unwrap();
                 singer.track_delete(track_index)?;
+                singer.send_song()?;
+            }
+            SingerCommand::TrackInsert(track_index, track) => {
+                let mut singer = singer.lock().unwrap();
+                singer.track_insert(track_index, track)?;
                 singer.send_song()?;
             }
             SingerCommand::TrackMute(track_index, mute) => {
@@ -604,10 +626,10 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                 singer.song_file = Some(song_file);
                 singer.send_state();
             }
-            SingerCommand::SongOpen(song_file, hwnd) => {
+            SingerCommand::SongOpen(song_file) => {
                 let mut singer = singer.lock().unwrap();
                 singer.song_close()?;
-                singer.song_open(song_file, hwnd)?;
+                singer.song_open(song_file)?;
                 singer.send_song()?;
                 singer.send_state();
             }

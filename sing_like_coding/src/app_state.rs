@@ -229,7 +229,6 @@ pub enum FocusedPart {
 }
 
 pub struct AppState<'a> {
-    pub hwnd: isize,
     pub focused_part: FocusedPart,
     pub follow_p: bool,
     pub cursor_track: CursorTrack,
@@ -265,7 +264,6 @@ impl<'a> AppState<'a> {
         let song_state = unsafe { &*(song_state_shmem.as_ptr() as *const SongState) };
 
         Self {
-            hwnd: 0,
             focused_part: FocusedPart::Lane,
             follow_p: true,
             cursor_track: CursorTrack {
@@ -557,7 +555,6 @@ impl<'a> AppState<'a> {
             self.song_open_p = true;
             self.sender_to_singer.send(SingerCommand::SongOpen(
                 path.to_str().map(|s| s.to_string()).unwrap(),
-                self.hwnd,
             ))?;
         }
         Ok(())
@@ -929,6 +926,12 @@ impl<'a> AppState<'a> {
     }
 
     fn track_paste(&mut self) -> anyhow::Result<()> {
+        if let Ok(text) = Clipboard::new()?.get_text() {
+            if let Ok(track) = serde_json::from_str::<Track>(&text) {
+                self.sender_to_singer
+                    .send(SingerCommand::TrackInsert(self.track_state.index, track))?;
+            }
+        }
         Ok(())
     }
 

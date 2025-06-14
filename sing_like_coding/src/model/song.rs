@@ -35,6 +35,10 @@ impl Song {
         self.tracks.remove(track_index);
     }
 
+    pub fn track_insert(&mut self, track_index: usize, track: Track) {
+        self.tracks.insert(track_index, track);
+    }
+
     pub fn note(&self, cursor: &CursorTrack) -> Option<&Note> {
         self.tracks
             .get(cursor.track)

@@ -74,8 +74,8 @@ impl RootView {
                 {
                     state.sender_to_singer.send(SingerCommand::PluginLoad(
                         state.track_state.index,
-                        description.clone(),
-                        state.hwnd,
+                        description.id,
+                        description.name,
                     ))?;
 
                     self.plugin_select_view = None;

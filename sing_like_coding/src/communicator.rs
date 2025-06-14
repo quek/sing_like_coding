@@ -24,12 +24,15 @@ impl Communicator {
         })
     }
 
-    pub async fn run(&mut self) -> anyhow::Result<()> {
+    pub async fn run(&mut self, hwnd: isize) -> anyhow::Result<()> {
         let mut pipe = ServerOptions::new().create(PIPE_CTRL_NAME)?;
         let _child = Command::new("sing_like_coding_plugin.exe")
             .stdout(Stdio::inherit())
             .spawn()?;
         pipe.connect().await?;
+
+        send(&mut pipe, &MainToPlugin::Hwnd(hwnd)).await?;
+        let _did_hwnd: PluginToMain = receive(&mut pipe).await?;
 
         loop {
             let message = self.receiver_from_main.recv()?;
