@@ -251,9 +251,12 @@ pub struct AppState<'a> {
 
     // for MainView layout.
     pub offset_tracks: Vec<f32>,
+    pub offset_flatten_lanes: Vec<f32>,
     pub width_lane: f32,
     pub flatten_lane_index_max: usize,
     pub flatten_lane_index_to_track_index_vec: Vec<usize>,
+    pub track_lane_to_flatten_lane_index_map: HashMap<(usize, usize), usize>,
+    pub flatten_lane_index_to_track_lane_vec: Vec<(usize, usize)>,
 }
 
 impl<'a> AppState<'a> {
@@ -298,9 +301,12 @@ impl<'a> AppState<'a> {
             callbacks_plugin_to_main: Default::default(),
             gui_context: None,
             offset_tracks: vec![],
+            offset_flatten_lanes: vec![],
             width_lane: 1.0,
             flatten_lane_index_max: 0,
             flatten_lane_index_to_track_index_vec: Default::default(),
+            track_lane_to_flatten_lane_index_map: Default::default(),
+            flatten_lane_index_to_track_lane_vec: vec![],
         }
     }
 
@@ -595,18 +601,26 @@ impl<'a> AppState<'a> {
 
     pub fn compute_track_offsets(&mut self) {
         self.offset_tracks.clear();
+        self.offset_flatten_lanes.clear();
         self.flatten_lane_index_to_track_index_vec.clear();
+        self.track_lane_to_flatten_lane_index_map.clear();
+        self.flatten_lane_index_to_track_lane_vec.clear();
         self.flatten_lane_index_max = 0;
         let mut acc = 0.0;
         for (track_index, track) in self.song.tracks.iter().enumerate() {
             self.offset_tracks.push(acc);
-            acc += self.width_lane * track.lanes.len() as f32;
-            for _lane in &track.lanes {
+            for lane_index in 0..track.lanes.len() {
+                self.offset_flatten_lanes.push(acc);
+                acc += self.width_lane;
                 self.flatten_lane_index_to_track_index_vec.push(track_index);
+                self.track_lane_to_flatten_lane_index_map
+                    .insert((track_index, lane_index), self.flatten_lane_index_max);
+                self.flatten_lane_index_to_track_lane_vec
+                    .push((track_index, lane_index));
                 self.flatten_lane_index_max += 1;
             }
         }
-        self.flatten_lane_index_max.saturating_sub(1);
+        self.flatten_lane_index_max = self.flatten_lane_index_max.saturating_sub(1);
     }
 
     fn notes_copy(&mut self) -> anyhow::Result<()> {

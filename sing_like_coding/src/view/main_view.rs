@@ -427,38 +427,18 @@ impl MainView {
                 ui.horizontal(|ui| -> anyhow::Result<()> {
                     self.view_ruler(state, ui, &line_range)?;
 
-                    let visible_width = ui.clip_rect().width();
-                    let offset_cursor = state.offset_tracks[state.cursor_track.track];
-                    let offset_left = (offset_cursor - (visible_width / 2.0)).max(0.0);
-                    let flatten_lane_index_start = (offset_left / state.width_lane).floor();
-                    let flatten_lane_index_end =
-                        (flatten_lane_index_start + (visible_width / state.width_lane)).ceil();
-                    let flatten_lane_index_start =
-                        (flatten_lane_index_start as usize).clamp(0, state.flatten_lane_index_max);
-                    let flatten_lane_index_end = (flatten_lane_index_end as usize).clamp(
-                        flatten_lane_index_start + 1,
-                        state.flatten_lane_index_max + 1,
-                    );
-                    let visiblef_track_start = *state
-                        .flatten_lane_index_to_track_index_vec
-                        .get(flatten_lane_index_start)
-                        .unwrap_or(&0);
-                    let visiblef_track_end = *state
-                        .flatten_lane_index_to_track_index_vec
-                        .get(flatten_lane_index_end)
-                        .unwrap_or(&state.song.tracks.len());
-                    let track_range = visiblef_track_start..visiblef_track_end;
-                    log::debug!(
-                        "offset_cursor {} offset_left {} flatten_lane_index_start {} track_range {:?}",
-                        offset_cursor,
-                        offset_left,
-                        flatten_lane_index_start,
-                        track_range
-                    );
-
+                    let (track_range, mut lane_start) = self.compute_visible_lane_range(state, ui);
                     for track_index in track_range {
-                        self.view_track(state, ui, track_index, &line_range, &mut commands)?;
+                        self.view_track(
+                            state,
+                            ui,
+                            track_index,
+                            lane_start.take(),
+                            &line_range,
+                            &mut commands,
+                        )?;
                     }
+
                     Ok(())
                 });
             });
@@ -504,6 +484,51 @@ impl MainView {
         self.height_line = 0.0;
 
         line_range
+    }
+
+    fn compute_visible_lane_range(
+        &self,
+        state: &AppState,
+        ui: &Ui,
+    ) -> (Range<usize>, Option<usize>) {
+        let visible_width = ui.clip_rect().width();
+
+        let flatten_lane_index = state
+            .track_lane_to_flatten_lane_index_map
+            .get(&(state.cursor_track.track, state.cursor_track.lane))
+            .cloned()
+            .unwrap_or(0);
+        let offset_cursor = state.offset_flatten_lanes[flatten_lane_index];
+
+        // let offset_cursor = state.offset_tracks[state.cursor_track.track];
+        let offset_left = (offset_cursor - (visible_width / 2.0)).max(0.0);
+        let flatten_lane_index_start = (offset_left / state.width_lane).floor();
+        let flatten_lane_index_end =
+            (flatten_lane_index_start + (visible_width / state.width_lane)).ceil();
+        let flatten_lane_index_start =
+            (flatten_lane_index_start as usize).clamp(0, state.flatten_lane_index_max);
+        let flatten_lane_index_end = (flatten_lane_index_end as usize).clamp(
+            flatten_lane_index_start + 1,
+            state.flatten_lane_index_max + 1,
+        );
+        let visiblef_track_start =
+            state.flatten_lane_index_to_track_index_vec[flatten_lane_index_start];
+        let visiblef_track_end = *state
+            .flatten_lane_index_to_track_index_vec
+            .get(flatten_lane_index_end)
+            .unwrap_or(&state.song.tracks.len());
+        let track_range = visiblef_track_start..visiblef_track_end;
+        log::debug!(
+            "offset_cursor {} offset_left {} flatten_lane_index_start {} track_range {:?}",
+            offset_cursor,
+            offset_left,
+            flatten_lane_index_start,
+            track_range
+        );
+        let lane_start =
+            Some(state.flatten_lane_index_to_track_lane_vec[flatten_lane_index_start].0);
+
+        (track_range, lane_start)
     }
 
     fn process_shortcut(
@@ -725,10 +750,12 @@ impl MainView {
         state: &mut AppState,
         ui: &mut Ui,
         track_index: usize,
+        lane_start: Option<usize>,
         line_range: &Range<usize>,
     ) -> anyhow::Result<()> {
         ui.horizontal(|ui| -> anyhow::Result<()> {
-            for lane_index in 0..state.song.tracks[track_index].lanes.len() {
+            for lane_index in (lane_start.unwrap_or(0))..state.song.tracks[track_index].lanes.len()
+            {
                 self.view_lane(state, ui, track_index, lane_index, line_range)?;
             }
             Ok(())
@@ -856,6 +883,7 @@ impl MainView {
         state: &mut AppState,
         ui: &mut Ui,
         track_index: usize,
+        lane_start: Option<usize>,
         line_range: &Range<usize>,
         mut commands: &mut Vec<UiCommand>,
     ) -> anyhow::Result<()> {
@@ -875,7 +903,8 @@ impl MainView {
                         height_before_track_header - height_after_track_header;
                 }
 
-                self.view_lanes(state, ui, track_index, line_range).unwrap();
+                self.view_lanes(state, ui, track_index, lane_start, line_range)
+                    .unwrap();
             });
 
             let inner = ui
