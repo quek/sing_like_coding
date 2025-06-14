@@ -9,7 +9,7 @@ use common::{
     dsp::{db_from_norm, db_to_norm},
     protocol::MainToPlugin,
 };
-use eframe::egui::{CentralPanel, Color32, Key, TopBottomPanel, Ui};
+use eframe::egui::{CentralPanel, Color32, Key, ScrollArea, TopBottomPanel, Ui};
 
 use crate::{
     app_state::{
@@ -39,6 +39,10 @@ pub struct MainView {
     shortcut_map_module: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_mixer: HashMap<(Modifier, Key), UiCommand>,
     stereo_peak_level_states: Vec<StereoPeakLevelState>,
+    height_line: f32,
+    height_mixer: f32,
+    height_modules: f32,
+    height_track_header: f32,
 }
 
 impl MainView {
@@ -338,6 +342,10 @@ impl MainView {
             shortcut_map_module,
             shortcut_map_mixer,
             stereo_peak_level_states: vec![],
+            height_line: 30.0,
+            height_mixer: 0.0,
+            height_modules: 0.0,
+            height_track_header: 0.0,
         }
     }
 
@@ -368,7 +376,7 @@ impl MainView {
         });
 
         CentralPanel::default().show(gui_context, |ui: &mut Ui| -> anyhow::Result<()> {
-            if true {
+            if false {
                 ui.label(format!("{:?}", state.cursor_track));
                 ui.label(format!("{:?}", state.selection_track_min));
                 ui.label(format!("{:?}", state.selection_track_max));
@@ -409,20 +417,57 @@ impl MainView {
 
             ui.separator();
 
+            let line_range = self.compute_line_range(ui, state);
+
             with_font_mono(ui, |ui| {
                 if state.song_state.play_p && state.follow_p {
                     state.cursor_track.line = state.song_state.line_play
                 }
-                let line_start = (state.cursor_track.line as i64 - 0x0f).max(0) as usize;
-                let line_end = line_start + 0x20;
-                let line_range = line_start..line_end;
 
                 ui.horizontal(|ui| -> anyhow::Result<()> {
                     self.view_ruler(state, ui, &line_range)?;
 
-                    for track_index in 0..state.song.tracks.len() {
-                        self.view_track(state, ui, track_index, &line_range, &mut commands)?;
-                    }
+                    // 1トラックあたりの幅
+                    let track_width = DEFAULT_TRACK_WIDTH as f32;
+                    // カーソルの現在のトラック
+                    let cursor_track = state.cursor_track.track as f32;
+                    // スクロールさせたい位置 = カーソルを中央に持ってくる
+                    let visible_track_count = 8.0; // 画面に何トラック出すか（仮）
+                    let center_offset = (cursor_track + 0.5) * track_width
+                        - (visible_track_count * track_width / 2.0);
+                    // clamp: 0 以上に制限（左に行きすぎないように）
+                    let scroll_offset = center_offset.max(0.0);
+
+                    ScrollArea::horizontal()
+                        .auto_shrink(false)
+                        .scroll_offset([scroll_offset, 0.0].into())
+                        .show(ui, |ui| -> anyhow::Result<()> {
+                            let total_tracks = state.song.tracks.len();
+
+                            let scroll_offset_x = ui.clip_rect().min.x - ui.min_rect().min.x;
+                            let visible_width = ui.clip_rect().width();
+
+                            let first_visible_track =
+                                (scroll_offset_x / track_width as f32).floor() as usize;
+                            let last_visible_track =
+                                ((scroll_offset_x + visible_width) / track_width as f32).ceil()
+                                    as usize;
+
+                            let first_visible_track = first_visible_track.min(total_tracks);
+                            let last_visible_track = last_visible_track.min(total_tracks);
+
+                            for track_index in first_visible_track..last_visible_track {
+                                self.view_track(
+                                    state,
+                                    ui,
+                                    track_index,
+                                    &line_range,
+                                    &mut commands,
+                                )?;
+                            }
+
+                            Ok(())
+                        });
                     Ok(())
                 });
             });
@@ -434,6 +479,40 @@ impl MainView {
         }
 
         Ok(())
+    }
+
+    fn compute_line_range(&mut self, ui: &mut Ui, state: &AppState) -> Range<usize> {
+        let available_height = ui.available_height()
+            - self.height_track_header
+            - self.height_modules
+            - self.height_mixer;
+
+        let available_rows = (available_height / self.height_line).floor() as usize;
+
+        let center_offset = available_rows / 2;
+        let line_start = state.cursor_track.line.saturating_sub(center_offset);
+        let line_end = line_start + available_rows;
+        let line_range = line_start..line_end;
+
+        log::debug!(
+            "{}",
+            format!(
+                "{}, {}, {}, {}, {}, {:?}",
+                available_height,
+                self.height_track_header,
+                self.height_line,
+                self.height_modules,
+                self.height_mixer,
+                line_range
+            )
+        );
+
+        self.height_track_header = 0.0;
+        self.height_modules = 0.0;
+        self.height_mixer = 0.0;
+        self.height_line = 0.0;
+
+        line_range
     }
 
     fn process_shortcut(
@@ -469,7 +548,7 @@ impl MainView {
         &mut self.stereo_peak_level_states[track_index]
     }
 
-    fn view_fader(
+    fn view_mixer(
         &mut self,
         state: &AppState,
         ui: &mut Ui,
@@ -579,7 +658,7 @@ impl MainView {
     }
 
     fn view_lane(
-        &self,
+        &mut self,
         state: &AppState,
         ui: &mut Ui,
         track_index: usize,
@@ -630,7 +709,14 @@ impl MainView {
                         }
                     });
 
-                LabelBuilder::new(ui, text).bg_color(color).build();
+                if self.height_line == 0.0 {
+                    let height_before = ui.available_height();
+                    LabelBuilder::new(ui, text).bg_color(color).build();
+                    let height_after = ui.available_height();
+                    self.height_line = height_before - height_after;
+                } else {
+                    LabelBuilder::new(ui, text).bg_color(color).build();
+                }
             }
             Ok(())
         });
@@ -638,7 +724,7 @@ impl MainView {
     }
 
     fn view_lanes(
-        &self,
+        &mut self,
         state: &AppState,
         ui: &mut Ui,
         track_index: usize,
@@ -716,7 +802,6 @@ impl MainView {
         {
             state.route = Route::PluginSelect;
         }
-
         Ok(())
     }
 
@@ -779,6 +864,7 @@ impl MainView {
     ) -> anyhow::Result<()> {
         ui.vertical(|ui| -> anyhow::Result<()> {
             with_font_mono(ui, |ui| {
+                let height_before_track_header = ui.available_height();
                 LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
                     .bg_color(if state.cursor_track.track == track_index {
                         state.color_cursor(FocusedPart::Track)
@@ -786,13 +872,27 @@ impl MainView {
                         Color32::BLACK
                     })
                     .build();
+                let height_after_track_header = ui.available_height();
+                if self.height_track_header == 0.0 {
+                    self.height_track_header =
+                        height_before_track_header - height_after_track_header;
+                }
 
                 self.view_lanes(state, ui, track_index, line_range).unwrap();
             });
 
-            self.view_modules(state, ui, track_index)?;
+            let inner = ui
+                .vertical(|ui| -> anyhow::Result<()> { self.view_modules(state, ui, track_index) });
+            if self.height_modules == 0.0 {
+                self.height_modules = inner.response.rect.height();
+            }
 
-            self.view_fader(state, ui, track_index, &mut commands)?;
+            let inner = ui.vertical(|ui| -> anyhow::Result<()> {
+                self.view_mixer(state, ui, track_index, &mut commands)
+            });
+            if self.height_mixer == 0.0 {
+                self.height_mixer = inner.response.rect.height();
+            }
 
             Ok(())
         });
