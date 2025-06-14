@@ -77,14 +77,6 @@ impl MainView {
                 UiCommand::Track(TrackCommand::Dup),
             ),
             (
-                (Modifier::None, Key::E),
-                UiCommand::Track(TrackCommand::SelectMode),
-            ),
-            (
-                (Modifier::None, Key::Escape),
-                UiCommand::Track(TrackCommand::SelectClear),
-            ),
-            (
                 (Modifier::None, Key::Delete),
                 UiCommand::Track(TrackCommand::Delete),
             ),
@@ -788,7 +780,7 @@ impl MainView {
         ui.vertical(|ui| -> anyhow::Result<()> {
             with_font_mono(ui, |ui| {
                 LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
-                    .bg_color(if state.track_state.index == track_index {
+                    .bg_color(if state.cursor_track.track == track_index {
                         state.color_cursor(FocusedPart::Track)
                     } else {
                         Color32::BLACK

@@ -60,8 +60,6 @@ pub enum TrackCommand {
     MoveLeft,
     MoveRight,
     Paste,
-    SelectClear,
-    SelectMode,
 }
 
 pub enum LaneCommand {
@@ -247,7 +245,6 @@ pub struct AppState<'a> {
     song_open_p: bool,
     _song_state_shmem: Shmem,
     pub song_state: &'a SongState,
-    pub track_state: TrackState,
     callbacks_plugin_to_main:
         VecDeque<Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>>>,
     pub gui_context: Option<eframe::egui::Context>,
@@ -292,7 +289,6 @@ impl<'a> AppState<'a> {
             song_open_p: false,
             _song_state_shmem: song_state_shmem,
             song_state,
-            track_state: Default::default(),
             callbacks_plugin_to_main: Default::default(),
             gui_context: None,
         }
@@ -833,27 +829,14 @@ impl<'a> AppState<'a> {
     pub fn run_track_command(&mut self, command: &TrackCommand) -> anyhow::Result<()> {
         match command {
             TrackCommand::Copy => self.track_copy()?,
-            TrackCommand::CursorLeft => self.track_state.cursor_left(&self.song)?,
-            TrackCommand::CursorRight => self.track_state.cursor_right(&self.song)?,
+            TrackCommand::CursorLeft => self.track_prev(),
+            TrackCommand::CursorRight => self.track_next(),
             TrackCommand::Cut => self.track_cut()?,
             TrackCommand::Delete => self.track_delete()?,
             TrackCommand::Dup => {}
             TrackCommand::MoveLeft => {}
             TrackCommand::MoveRight => {}
             TrackCommand::Paste => self.track_paste()?,
-            TrackCommand::SelectClear => {}
-            TrackCommand::SelectMode => {
-                self.track_state.select_p = !self.track_state.select_p;
-                if self.track_state.select_p {
-                    self.track_state.select_min = self.track_state.index;
-                    self.track_state.select_max = self.track_state.index;
-                } else if self.track_state.select_min < self.track_state.index {
-                    self.track_state.select_max = self.track_state.index;
-                } else {
-                    self.track_state.select_max = self.track_state.select_min;
-                    self.track_state.select_min = self.track_state.index;
-                }
-            }
         }
         Ok(())
     }
@@ -883,9 +866,10 @@ impl<'a> AppState<'a> {
     }
 
     fn track_copy(&mut self) -> anyhow::Result<()> {
-        let modules_len = self.song.tracks[self.track_state.index].modules.len();
+        let track_index = self.cursor_track.track;
+        let modules_len = self.song.tracks[track_index].modules.len();
         if modules_len == 0 {
-            let json = serde_json::to_string_pretty(&self.song.tracks[self.track_state.index])?;
+            let json = serde_json::to_string_pretty(&self.song.tracks[track_index])?;
             let mut clipboard = Clipboard::new().unwrap();
             clipboard.set_text(&json)?;
         } else {
@@ -894,7 +878,7 @@ impl<'a> AppState<'a> {
                     if module_index + 1 == modules_len {
                         Box::new(|state, _command| {
                             let json = serde_json::to_string_pretty(
-                                &state.song.tracks[state.track_state.index],
+                                &state.song.tracks[state.cursor_track.track],
                             )?;
                             let mut clipboard = Clipboard::new().unwrap();
                             clipboard.set_text(&json)?;
@@ -903,10 +887,7 @@ impl<'a> AppState<'a> {
                     } else {
                         Box::new(|_state, _command| Ok(()))
                     };
-                self.send_to_plugin(
-                    MainToPlugin::StateSave(self.track_state.index, module_index),
-                    callback,
-                )?;
+                self.send_to_plugin(MainToPlugin::StateSave(track_index, module_index), callback)?;
             }
         }
 
@@ -921,7 +902,7 @@ impl<'a> AppState<'a> {
 
     fn track_delete(&mut self) -> anyhow::Result<()> {
         self.sender_to_singer
-            .send(SingerCommand::TrackDelete(self.track_state.index))?;
+            .send(SingerCommand::TrackDelete(self.cursor_track.track))?;
         Ok(())
     }
 
@@ -929,7 +910,7 @@ impl<'a> AppState<'a> {
         if let Ok(text) = Clipboard::new()?.get_text() {
             if let Ok(track) = serde_json::from_str::<Track>(&text) {
                 self.sender_to_singer
-                    .send(SingerCommand::TrackInsert(self.track_state.index, track))?;
+                    .send(SingerCommand::TrackInsert(self.cursor_track.track, track))?;
             }
         }
         Ok(())
@@ -962,34 +943,6 @@ impl<'a> AppState<'a> {
 pub enum AppStateCommand {
     Song(Song),
     Quit,
-}
-
-#[derive(Default)]
-pub struct TrackState {
-    pub index: usize,
-    pub select_p: bool,
-    pub select_min: usize,
-    pub select_max: usize,
-}
-
-impl TrackState {
-    pub fn cursor_left(&mut self, song: &Song) -> anyhow::Result<()> {
-        if self.index == 0 {
-            self.index = song.tracks.len() - 1;
-        } else {
-            self.index -= 1;
-        }
-        Ok(())
-    }
-
-    pub fn cursor_right(&mut self, song: &Song) -> anyhow::Result<()> {
-        if self.index == song.tracks.len() - 1 {
-            self.index = 0;
-        } else {
-            self.index += 1;
-        }
-        Ok(())
-    }
 }
 
 fn song_directory() -> PathBuf {

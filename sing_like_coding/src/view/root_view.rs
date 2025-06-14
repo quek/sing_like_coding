@@ -73,7 +73,7 @@ impl RootView {
                     .view(gui_context)?
                 {
                     state.sender_to_singer.send(SingerCommand::PluginLoad(
-                        state.track_state.index,
+                        state.cursor_track.track,
                         description.id,
                         description.name,
                     ))?;
