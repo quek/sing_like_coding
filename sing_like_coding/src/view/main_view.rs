@@ -494,18 +494,18 @@ impl MainView {
         let line_end = line_start + available_rows;
         let line_range = line_start..line_end;
 
-        log::debug!(
-            "{}",
-            format!(
-                "{}, {}, {}, {}, {}, {:?}",
-                available_height,
-                self.height_track_header,
-                self.height_line,
-                self.height_modules,
-                self.height_mixer,
-                line_range
-            )
-        );
+        // log::debug!(
+        //     "{}",
+        //     format!(
+        //         "{}, {}, {}, {}, {}, {:?}",
+        //         available_height,
+        //         self.height_track_header,
+        //         self.height_line,
+        //         self.height_modules,
+        //         self.height_mixer,
+        //         line_range
+        //     )
+        // );
 
         self.height_track_header = 0.0;
         self.height_modules = 0.0;
