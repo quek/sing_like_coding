@@ -9,7 +9,7 @@ use common::{
     dsp::{db_from_norm, db_to_norm},
     protocol::MainToPlugin,
 };
-use eframe::egui::{CentralPanel, Color32, Key, ScrollArea, TopBottomPanel, Ui};
+use eframe::egui::{CentralPanel, Color32, Key, TopBottomPanel, Ui};
 
 use crate::{
     app_state::{
@@ -427,63 +427,38 @@ impl MainView {
                 ui.horizontal(|ui| -> anyhow::Result<()> {
                     self.view_ruler(state, ui, &line_range)?;
 
-                    let mut nlanes = 0;
-                    for track_index in 0..state.cursor_track.track {
-                        if track_index == state.cursor_track.track {
-                            nlanes += state.cursor_track.lane + 1;
-                        } else {
-                            nlanes += state.song.tracks[track_index].lanes.len();
-                        }
+                    let visible_width = ui.clip_rect().width();
+                    let offset_cursor = state.offset_tracks[state.cursor_track.track];
+                    let offset_left = (offset_cursor - (visible_width / 2.0)).max(0.0);
+                    let flatten_lane_index_start = (offset_left / state.width_lane).floor();
+                    let flatten_lane_index_end =
+                        (flatten_lane_index_start + (visible_width / state.width_lane)).ceil();
+                    let flatten_lane_index_start =
+                        (flatten_lane_index_start as usize).clamp(0, state.flatten_lane_index_max);
+                    let flatten_lane_index_end = (flatten_lane_index_end as usize).clamp(
+                        flatten_lane_index_start + 1,
+                        state.flatten_lane_index_max + 1,
+                    );
+                    let visiblef_track_start = *state
+                        .flatten_lane_index_to_track_index_vec
+                        .get(flatten_lane_index_start)
+                        .unwrap_or(&0);
+                    let visiblef_track_end = *state
+                        .flatten_lane_index_to_track_index_vec
+                        .get(flatten_lane_index_end)
+                        .unwrap_or(&state.song.tracks.len());
+                    let track_range = visiblef_track_start..visiblef_track_end;
+                    log::debug!(
+                        "offset_cursor {} offset_left {} flatten_lane_index_start {} track_range {:?}",
+                        offset_cursor,
+                        offset_left,
+                        flatten_lane_index_start,
+                        track_range
+                    );
+
+                    for track_index in track_range {
+                        self.view_track(state, ui, track_index, &line_range, &mut commands)?;
                     }
-
-                    // スクロールさせたい位置 = カーソルを中央に持ってくる
-                    let visible_lane_count = ui.available_width() / state.width_lane;
-                    let center_offset = (nlanes as f32 + 0.5) * state.width_lane
-                        - (visible_lane_count * state.width_lane / 2.0);
-                    // clamp: 0 以上に制限（左に行きすぎないように）
-                    let scroll_offset = center_offset.max(0.0);
-
-                    ScrollArea::horizontal()
-                        .auto_shrink(false)
-                        .scroll_offset([scroll_offset, 0.0].into())
-                        .show(ui, |ui| -> anyhow::Result<()> {
-                            let scroll_offset_x = ui.clip_rect().min.x - ui.min_rect().min.x;
-                            let visible_width = ui.clip_rect().width();
-
-                            // --- キャッシュを使って可視範囲のトラックを決定 ---
-                            let track_offsets = &state.track_offsets;
-                            let total_tracks = track_offsets.len();
-
-                            // 左端の可視トラック
-                            let first_visible_track = track_offsets
-                                .binary_search_by(|&offset| {
-                                    offset.partial_cmp(&scroll_offset_x).unwrap()
-                                })
-                                .unwrap_or_else(|i| i.saturating_sub(1))
-                                .min(total_tracks.saturating_sub(1));
-
-                            // 右端の可視トラック
-                            let last_visible_track = track_offsets
-                                .binary_search_by(|&offset| {
-                                    offset
-                                        .partial_cmp(&(scroll_offset_x + visible_width))
-                                        .unwrap()
-                                })
-                                .unwrap_or_else(|i| i + 1)
-                                .min(total_tracks);
-
-                            for track_index in first_visible_track..last_visible_track {
-                                self.view_track(
-                                    state,
-                                    ui,
-                                    track_index,
-                                    &line_range,
-                                    &mut commands,
-                                )?;
-                            }
-
-                            Ok(())
-                        });
                     Ok(())
                 });
             });
@@ -737,7 +712,10 @@ impl MainView {
             Ok(())
         });
 
-        state.width_lane = inner.response.rect.width();
+        if state.width_lane <= 1.0 {
+            state.width_lane = inner.response.rect.width();
+            state.compute_track_offsets();
+        }
 
         Ok(())
     }

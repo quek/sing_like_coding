@@ -15,7 +15,7 @@ use common::{
     protocol::{MainToPlugin, PluginToMain},
     shmem::{open_shared_memory, SONG_STATE_NAME},
 };
-use eframe::egui::Color32;
+use eframe::egui::{ahash::HashMap, Color32};
 use rfd::FileDialog;
 use shared_memory::Shmem;
 
@@ -248,8 +248,12 @@ pub struct AppState<'a> {
     callbacks_plugin_to_main:
         VecDeque<Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>>>,
     pub gui_context: Option<eframe::egui::Context>,
-    pub track_offsets: Vec<f32>,
+
+    // for MainView layout.
+    pub offset_tracks: Vec<f32>,
     pub width_lane: f32,
+    pub flatten_lane_index_max: usize,
+    pub flatten_lane_index_to_track_index_vec: Vec<usize>,
 }
 
 impl<'a> AppState<'a> {
@@ -293,8 +297,10 @@ impl<'a> AppState<'a> {
             song_state,
             callbacks_plugin_to_main: Default::default(),
             gui_context: None,
-            track_offsets: vec![],
+            offset_tracks: vec![],
             width_lane: 1.0,
+            flatten_lane_index_max: 0,
+            flatten_lane_index_to_track_index_vec: Default::default(),
         }
     }
 
@@ -587,13 +593,20 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn compute_track_offsets(&mut self) {
-        self.track_offsets.clear();
+    pub fn compute_track_offsets(&mut self) {
+        self.offset_tracks.clear();
+        self.flatten_lane_index_to_track_index_vec.clear();
+        self.flatten_lane_index_max = 0;
         let mut acc = 0.0;
-        for track in &self.song.tracks {
-            self.track_offsets.push(acc);
+        for (track_index, track) in self.song.tracks.iter().enumerate() {
+            self.offset_tracks.push(acc);
             acc += self.width_lane * track.lanes.len() as f32;
+            for _lane in &track.lanes {
+                self.flatten_lane_index_to_track_index_vec.push(track_index);
+                self.flatten_lane_index_max += 1;
+            }
         }
+        self.flatten_lane_index_max.saturating_sub(1);
     }
 
     fn notes_copy(&mut self) -> anyhow::Result<()> {
