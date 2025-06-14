@@ -248,6 +248,8 @@ pub struct AppState<'a> {
     callbacks_plugin_to_main:
         VecDeque<Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>>>,
     pub gui_context: Option<eframe::egui::Context>,
+    pub track_offsets: Vec<f32>,
+    pub width_lane: f32,
 }
 
 impl<'a> AppState<'a> {
@@ -291,6 +293,8 @@ impl<'a> AppState<'a> {
             song_state,
             callbacks_plugin_to_main: Default::default(),
             gui_context: None,
+            track_offsets: vec![],
+            width_lane: 1.0,
         }
     }
 
@@ -342,12 +346,11 @@ impl<'a> AppState<'a> {
                         self.song_open_did(song).unwrap();
                         self.song_open_p = false;
                         self.song_dirty_p = false;
-                        dbg!(1, self.song_dirty_p);
                     } else {
                         self.song = song;
                         self.song_dirty_p = true;
-                        dbg!(2, self.song_dirty_p);
                     }
+                    self.compute_track_offsets();
                 }
                 AppStateCommand::Quit => (),
             }
@@ -582,6 +585,15 @@ impl<'a> AppState<'a> {
         }
 
         Ok(())
+    }
+
+    fn compute_track_offsets(&mut self) {
+        self.track_offsets.clear();
+        let mut acc = 0.0;
+        for track in &self.song.tracks {
+            self.track_offsets.push(acc);
+            acc += self.width_lane * track.lanes.len() as f32;
+        }
     }
 
     fn notes_copy(&mut self) -> anyhow::Result<()> {

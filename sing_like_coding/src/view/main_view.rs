@@ -342,10 +342,10 @@ impl MainView {
             shortcut_map_module,
             shortcut_map_mixer,
             stereo_peak_level_states: vec![],
-            height_line: 30.0,
-            height_mixer: 0.0,
-            height_modules: 0.0,
-            height_track_header: 0.0,
+            height_line: 1.0,
+            height_mixer: 1.0,
+            height_modules: 1.0,
+            height_track_header: 1.0,
         }
     }
 
@@ -427,14 +427,19 @@ impl MainView {
                 ui.horizontal(|ui| -> anyhow::Result<()> {
                     self.view_ruler(state, ui, &line_range)?;
 
-                    // 1トラックあたりの幅
-                    let track_width = DEFAULT_TRACK_WIDTH as f32;
-                    // カーソルの現在のトラック
-                    let cursor_track = state.cursor_track.track as f32;
+                    let mut nlanes = 0;
+                    for track_index in 0..state.cursor_track.track {
+                        if track_index == state.cursor_track.track {
+                            nlanes += state.cursor_track.lane + 1;
+                        } else {
+                            nlanes += state.song.tracks[track_index].lanes.len();
+                        }
+                    }
+
                     // スクロールさせたい位置 = カーソルを中央に持ってくる
-                    let visible_track_count = 8.0; // 画面に何トラック出すか（仮）
-                    let center_offset = (cursor_track + 0.5) * track_width
-                        - (visible_track_count * track_width / 2.0);
+                    let visible_lane_count = ui.available_width() / state.width_lane;
+                    let center_offset = (nlanes as f32 + 0.5) * state.width_lane
+                        - (visible_lane_count * state.width_lane / 2.0);
                     // clamp: 0 以上に制限（左に行きすぎないように）
                     let scroll_offset = center_offset.max(0.0);
 
@@ -442,19 +447,30 @@ impl MainView {
                         .auto_shrink(false)
                         .scroll_offset([scroll_offset, 0.0].into())
                         .show(ui, |ui| -> anyhow::Result<()> {
-                            let total_tracks = state.song.tracks.len();
-
                             let scroll_offset_x = ui.clip_rect().min.x - ui.min_rect().min.x;
                             let visible_width = ui.clip_rect().width();
 
-                            let first_visible_track =
-                                (scroll_offset_x / track_width as f32).floor() as usize;
-                            let last_visible_track =
-                                ((scroll_offset_x + visible_width) / track_width as f32).ceil()
-                                    as usize;
+                            // --- キャッシュを使って可視範囲のトラックを決定 ---
+                            let track_offsets = &state.track_offsets;
+                            let total_tracks = track_offsets.len();
 
-                            let first_visible_track = first_visible_track.min(total_tracks);
-                            let last_visible_track = last_visible_track.min(total_tracks);
+                            // 左端の可視トラック
+                            let first_visible_track = track_offsets
+                                .binary_search_by(|&offset| {
+                                    offset.partial_cmp(&scroll_offset_x).unwrap()
+                                })
+                                .unwrap_or_else(|i| i.saturating_sub(1))
+                                .min(total_tracks.saturating_sub(1));
+
+                            // 右端の可視トラック
+                            let last_visible_track = track_offsets
+                                .binary_search_by(|&offset| {
+                                    offset
+                                        .partial_cmp(&(scroll_offset_x + visible_width))
+                                        .unwrap()
+                                })
+                                .unwrap_or_else(|i| i + 1)
+                                .min(total_tracks);
 
                             for track_index in first_visible_track..last_visible_track {
                                 self.view_track(
@@ -659,13 +675,13 @@ impl MainView {
 
     fn view_lane(
         &mut self,
-        state: &AppState,
+        state: &mut AppState,
         ui: &mut Ui,
         track_index: usize,
         lane_index: usize,
         line_range: &Range<usize>,
     ) -> anyhow::Result<()> {
-        ui.vertical(|ui| -> anyhow::Result<()> {
+        let inner = ui.vertical(|ui| -> anyhow::Result<()> {
             for line in line_range.clone() {
                 let mut color = Color32::BLACK;
                 if state.cursor_track.track == track_index
@@ -720,12 +736,15 @@ impl MainView {
             }
             Ok(())
         });
+
+        state.width_lane = inner.response.rect.width();
+
         Ok(())
     }
 
     fn view_lanes(
         &mut self,
-        state: &AppState,
+        state: &mut AppState,
         ui: &mut Ui,
         track_index: usize,
         line_range: &Range<usize>,
