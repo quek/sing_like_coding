@@ -255,6 +255,8 @@ impl Singer {
             }))
             .collect::<Vec<_>>();
 
+        let main_gains = [buffers[0].1 .2, buffers[0].1 .3, buffers[0].1 .4];
+
         // tracks pan pan volume
         for (buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)) in
             buffers[1..].iter_mut()
@@ -316,8 +318,8 @@ impl Singer {
             }
         }
 
-        // main track pan volume -> audio device
-        let x = if dummy_p {
+        // main track process
+        let main_process_data = if dummy_p {
             &mut dummy
         } else {
             // main track process
@@ -328,17 +330,29 @@ impl Singer {
                 .unwrap()
                 .process_data_mut()
         };
-        let y = &self.song.tracks[0];
+
+        // main track pan volume -> audio device
+        let main_track = &self.song.tracks[0];
         for frame in 0..nframes {
             for channel in 0..nchannels {
-                let value = if y.mute || (solo_any && !y.solo) {
+                // いまは solo はいらない
+                let value = if main_track.mute {
                     0.0
                 } else {
-                    let constp = (x.constant_mask_out & (1 << channel)) != 0;
-                    if constp {
-                        x.buffer_out[channel][0]
+                    let gain = if channel == 0 {
+                        main_gains[0]
+                    } else if channel == 1 {
+                        main_gains[1]
                     } else {
-                        x.buffer_out[channel][frame]
+                        main_gains[2]
+                    };
+                    let constp = (main_process_data.constant_mask_out & (1 << channel)) != 0;
+                    if constp {
+                        main_process_data.buffer_out[channel][0] *= gain;
+                        main_process_data.buffer_out[channel][0]
+                    } else {
+                        main_process_data.buffer_out[channel][frame] *= gain;
+                        main_process_data.buffer_out[channel][frame]
                     }
                 };
                 output[nchannels * frame + channel] = value;
