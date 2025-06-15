@@ -223,9 +223,6 @@ impl Singer {
             .try_for_each(|(track, process_track_context)| track.process(process_track_context))?;
 
         // prepare mixing paramss
-        let mut dummy = ProcessData::new();
-        dummy.prepare();
-        let mut solo_any = false;
         let mut buffers = self
             .process_track_contexts
             .iter_mut()
@@ -236,7 +233,6 @@ impl Singer {
                 })
             })
             .zip(self.song.tracks.iter().map(|track| {
-                solo_any |= track.solo;
                 if (track.pan - 0.5).abs() < 0.001 {
                     (
                         track.mute,
@@ -285,9 +281,11 @@ impl Singer {
             }
         }
 
+        // tracks mute solo -> main track
         let mut dummy = ProcessData::new();
         dummy.prepare();
-        // tracks mute solo -> main track
+        let dummy_p = self.song.tracks[0].modules.is_empty();
+        let solo_any = self.song.tracks.iter().any(|t| t.solo);
         for frame in 0..nframes {
             for channel in 0..nchannels {
                 let value = buffers[1..]
@@ -309,22 +307,26 @@ impl Singer {
                         }
                     })
                     .sum();
-                if buffers[0].0.is_some() {
-                    buffers[0].0.as_mut().unwrap().0[channel][frame] = value;
-                } else {
+                if dummy_p {
                     dummy.buffer_out[channel][frame] = value;
+                } else {
+                    buffers[0].0.as_mut().unwrap().0[channel][frame] = value;
                 }
             }
         }
 
-        // main track process
-        self.song.tracks[0].process(&mut self.process_track_contexts[0])?;
         // main track pan volume -> audio device
-        let x = self.process_track_contexts[0]
-            .plugins
-            .last_mut()
-            .map(|x| x.process_data_mut())
-            .unwrap_or(&mut dummy);
+        let x = if dummy_p {
+            &mut dummy
+        } else {
+            // main track process
+            self.song.tracks[0].process(&mut self.process_track_contexts[0])?;
+            self.process_track_contexts[0]
+                .plugins
+                .last_mut()
+                .unwrap()
+                .process_data_mut()
+        };
         let y = &self.song.tracks[0];
         for frame in 0..nframes {
             for channel in 0..nchannels {
