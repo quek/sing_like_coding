@@ -216,11 +216,13 @@ impl Singer {
         }
         self.all_notef_off_p = false;
 
+        // tracks process
         self.song.tracks[1..]
             .par_iter()
             .zip(self.process_track_contexts[1..].par_iter_mut())
             .try_for_each(|(track, process_track_context)| track.process(process_track_context))?;
 
+        // prepare mixing paramss
         let mut solo_any = false;
         let mut buffers = self
             .process_track_contexts
@@ -254,6 +256,7 @@ impl Singer {
             }))
             .collect::<Vec<_>>();
 
+        // tracks pan pan volume
         for ((buffer, constant_mask), (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)) in
             buffers[1..].iter_mut()
         {
@@ -277,6 +280,7 @@ impl Singer {
             }
         }
 
+        // tracks mute solo -> main track
         for frame in 0..nframes {
             for channel in 0..nchannels {
                 buffers[0].0 .0[channel][frame] = buffers[1..]
@@ -297,7 +301,9 @@ impl Singer {
             }
         }
 
+        // main track process
         self.song.tracks[0].process(&mut self.process_track_contexts[0])?;
+        // main track pan volume -> audio device
         let x = self.process_track_contexts[0]
             .plugins
             .last_mut()
