@@ -402,17 +402,17 @@ impl<'a> AppState<'a> {
             UiCommand::FocusedPartNext => {
                 self.focused_part = match self.focused_part {
                     FocusedPart::Track => FocusedPart::Lane,
-                    FocusedPart::Lane => FocusedPart::Module,
-                    FocusedPart::Module => FocusedPart::Mixer,
-                    FocusedPart::Mixer => FocusedPart::Track,
+                    FocusedPart::Lane => FocusedPart::Mixer,
+                    FocusedPart::Mixer => FocusedPart::Module,
+                    FocusedPart::Module => FocusedPart::Track,
                 }
             }
             UiCommand::FocusedPartPrev => {
                 self.focused_part = match self.focused_part {
-                    FocusedPart::Track => FocusedPart::Mixer,
+                    FocusedPart::Track => FocusedPart::Module,
                     FocusedPart::Lane => FocusedPart::Track,
-                    FocusedPart::Module => FocusedPart::Lane,
-                    FocusedPart::Mixer => FocusedPart::Module,
+                    FocusedPart::Mixer => FocusedPart::Lane,
+                    FocusedPart::Module => FocusedPart::Mixer,
                 }
             }
             UiCommand::PlayToggle => {
