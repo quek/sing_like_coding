@@ -2,12 +2,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Note {
-    pub delay: u8,
-    pub channel: i16,
     pub key: i16,
     pub velocity: f64,
-    #[serde(default)]
+    pub delay: u8,
     pub off: bool,
+    pub channel: i16,
 }
 
 impl Note {
@@ -28,11 +27,11 @@ impl Note {
 impl Default for Note {
     fn default() -> Self {
         Self {
-            delay: 0,
-            channel: 0,
             key: 60,
             velocity: 100.0,
+            delay: 0,
             off: false,
+            channel: 0,
         }
     }
 }
