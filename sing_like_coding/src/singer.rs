@@ -216,10 +216,9 @@ impl Singer {
         }
         self.all_notef_off_p = false;
 
-        self.song
-            .tracks
+        self.song.tracks[1..]
             .par_iter()
-            .zip(self.process_track_contexts.par_iter_mut())
+            .zip(self.process_track_contexts[1..].par_iter_mut())
             .try_for_each(|(track, process_track_context)| track.process(process_track_context))?;
 
         let mut solo_any = false;
@@ -256,7 +255,7 @@ impl Singer {
             .collect::<Vec<_>>();
 
         for ((buffer, constant_mask), (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)) in
-            buffers.iter_mut()
+            buffers[1..].iter_mut()
         {
             for channel in 0..nchannels {
                 let constp = (*constant_mask & (1 << channel)) != 0;
@@ -280,7 +279,7 @@ impl Singer {
 
         for frame in 0..nframes {
             for channel in 0..nchannels {
-                output[nchannels * frame + channel] = buffers
+                buffers[0].0 .0[channel][frame] = buffers[1..]
                     .iter()
                     .map(|((buffer, constant_mask), (mute, solo, _, _, _))| {
                         if *mute || (solo_any && !*solo) {
@@ -295,6 +294,29 @@ impl Singer {
                         }
                     })
                     .sum();
+            }
+        }
+
+        self.song.tracks[0].process(&mut self.process_track_contexts[0])?;
+        let x = self.process_track_contexts[0]
+            .plugins
+            .last_mut()
+            .unwrap()
+            .process_data_mut();
+        let y = &self.song.tracks[0];
+        for frame in 0..nframes {
+            for channel in 0..nchannels {
+                let value = if y.mute || (solo_any && !y.solo) {
+                    0.0
+                } else {
+                    let constp = (x.constant_mask_out & (1 << channel)) != 0;
+                    if constp {
+                        x.buffer_out[channel][0]
+                    } else {
+                        x.buffer_out[channel][frame]
+                    }
+                };
+                output[nchannels * frame + channel] = value;
             }
         }
 
