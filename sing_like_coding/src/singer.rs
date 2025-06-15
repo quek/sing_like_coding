@@ -579,7 +579,6 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
     }
 
     while let Ok(msg) = receiver.recv() {
-        log::debug!("Song 受信 {:?}", msg);
         match msg {
             SingerCommand::Play => {
                 let mut singer = singer.lock().unwrap();
