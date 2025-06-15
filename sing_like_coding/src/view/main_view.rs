@@ -267,6 +267,14 @@ impl MainView {
                 (Modifier::None, Key::Escape),
                 UiCommand::Lane(LaneCommand::SelectClear),
             ),
+            // (
+            //     (Modifier::None, Key::O),
+            //     UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, 0, false, 1)),
+            // ),
+            // (
+            //     (Modifier::S, Key::O),
+            //     UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, 0, false, -1)),
+            // ),
         ];
 
         let shortcut_map_module = [

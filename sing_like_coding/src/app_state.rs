@@ -8,6 +8,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use anyhow::Result;
 use arboard::Clipboard;
 use common::{
     dsp::{db_from_norm, db_to_norm},
@@ -245,8 +246,7 @@ pub struct AppState<'a> {
     song_open_p: bool,
     _song_state_shmem: Shmem,
     pub song_state: &'a SongState,
-    callbacks_plugin_to_main:
-        VecDeque<Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>>>,
+    callbacks_plugin_to_main: VecDeque<Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>>>,
     pub gui_context: Option<eframe::egui::Context>,
 
     // for MainView layout.
@@ -344,7 +344,7 @@ impl<'a> AppState<'a> {
             .and_then(|x| x.modules.get_mut(module_index))
     }
 
-    pub fn receive_from_singer(&mut self) -> anyhow::Result<()> {
+    pub fn receive_from_singer(&mut self) -> Result<()> {
         while let Ok(command) = self.receiver_from_singer.try_recv() {
             match command {
                 AppStateCommand::Song(song) => {
@@ -365,7 +365,7 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    pub fn receive_from_communicator(&mut self) -> anyhow::Result<()> {
+    pub fn receive_from_communicator(&mut self) -> Result<()> {
         while let Ok(mut message) = self.receiver_communicator_to_main_thread.try_recv() {
             match &mut message {
                 PluginToMain::DidStateSave(track_index, module_index, state) => {
@@ -382,7 +382,7 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    pub fn run_ui_command(&mut self, command: &UiCommand) -> anyhow::Result<()> {
+    pub fn run_ui_command(&mut self, command: &UiCommand) -> Result<()> {
         match command {
             UiCommand::Command => {
                 self.route = Route::Command;
@@ -545,14 +545,14 @@ impl<'a> AppState<'a> {
     pub fn send_to_plugin(
         &mut self,
         command: MainToPlugin,
-        callback: Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>>,
-    ) -> anyhow::Result<()> {
+        callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>>,
+    ) -> Result<()> {
         self.callbacks_plugin_to_main.push_back(callback);
         self.sender_to_loop.send(command)?;
         Ok(())
     }
 
-    pub fn song_open(&mut self) -> anyhow::Result<()> {
+    pub fn song_open(&mut self) -> Result<()> {
         if let Some(path) = FileDialog::new()
             .set_directory(song_directory())
             .pick_file()
@@ -565,18 +565,18 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    pub fn song_open_did(&mut self, song: Song) -> anyhow::Result<()> {
+    pub fn song_open_did(&mut self, song: Song) -> Result<()> {
         self.song = song;
         Ok(())
     }
 
-    pub fn song_save(&mut self) -> anyhow::Result<()> {
+    pub fn song_save(&mut self) -> Result<()> {
         let mut callback_p = false;
         let tracks_len = self.song.tracks.len();
         for track_index in 0..tracks_len {
             let modules_len = self.song.tracks[track_index].modules.len();
             for module_index in 0..modules_len {
-                let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>> =
+                let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
                     if track_index + 1 == tracks_len && module_index + 1 == modules_len {
                         callback_p = true;
                         Box::new(|state, _| state.song_save_file())
@@ -617,11 +617,11 @@ impl<'a> AppState<'a> {
         self.flatten_lane_index_max = self.flatten_lane_index_max.saturating_sub(1);
     }
 
-    fn lane_items_copy(&mut self) -> anyhow::Result<()> {
+    fn lane_items_copy(&mut self) -> Result<()> {
         self.lane_items_copy_or_cut(true)
     }
 
-    fn lane_items_copy_or_cut(&mut self, copy_p: bool) -> anyhow::Result<()> {
+    fn lane_items_copy_or_cut(&mut self, copy_p: bool) -> Result<()> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
         }
@@ -667,11 +667,11 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn late_items_cut(&mut self) -> anyhow::Result<()> {
+    fn late_items_cut(&mut self) -> Result<()> {
         self.lane_items_copy_or_cut(false)
     }
 
-    fn lane_items_dup(&mut self) -> anyhow::Result<()> {
+    fn lane_items_dup(&mut self) -> Result<()> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
         }
@@ -704,7 +704,7 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn lane_items_move(&mut self, lane_delta: i64, line_delta: i64) -> anyhow::Result<()> {
+    fn lane_items_move(&mut self, lane_delta: i64, line_delta: i64) -> Result<()> {
         if self.selection_track_min.is_some() {
             let itemss = self.lane_items_selected_cloned();
             for (cursor, _) in itemss.clone().into_iter().flatten().filter_map(|x| x) {
@@ -742,7 +742,7 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn lane_items_paste(&mut self) -> anyhow::Result<()> {
+    fn lane_items_paste(&mut self) -> Result<()> {
         let mut clipboard = Clipboard::new().unwrap();
         if let Ok(text) = clipboard.get_text() {
             let mut cursor = self.cursor_track.clone();
@@ -824,7 +824,7 @@ impl<'a> AppState<'a> {
         velociy_delta: i16,
         delay_delta: i16,
         off: bool,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         if self.selection_track_min.is_some() {
             let itemss = self.lane_items_selected_cloned();
             for (cursor, mut lane_item) in itemss.into_iter().flatten().filter_map(|x| x) {
@@ -882,7 +882,7 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    pub fn run_track_command(&mut self, command: &TrackCommand) -> anyhow::Result<()> {
+    pub fn run_track_command(&mut self, command: &TrackCommand) -> Result<()> {
         match command {
             TrackCommand::Copy => self.track_copy()?,
             TrackCommand::CursorLeft => self.track_prev(),
@@ -897,7 +897,7 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn song_save_file(&mut self) -> anyhow::Result<()> {
+    fn song_save_file(&mut self) -> Result<()> {
         let song_file = if let Some(song_file) = &self.song_state.song_file_get() {
             song_file.into()
         } else {
@@ -921,7 +921,7 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn track_copy(&mut self) -> anyhow::Result<()> {
+    fn track_copy(&mut self) -> Result<()> {
         let track_index = self.cursor_track.track;
         let modules_len = self.song.tracks[track_index].modules.len();
         if modules_len == 0 {
@@ -930,7 +930,7 @@ impl<'a> AppState<'a> {
             clipboard.set_text(&json)?;
         } else {
             for module_index in 0..modules_len {
-                let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> anyhow::Result<()>> =
+                let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
                     if module_index + 1 == modules_len {
                         Box::new(|state, _command| {
                             let json = serde_json::to_string_pretty(
@@ -950,19 +950,19 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn track_cut(&mut self) -> anyhow::Result<()> {
+    fn track_cut(&mut self) -> Result<()> {
         self.track_copy()?;
         self.track_delete()?;
         Ok(())
     }
 
-    fn track_delete(&mut self) -> anyhow::Result<()> {
+    fn track_delete(&mut self) -> Result<()> {
         self.sender_to_singer
             .send(SingerCommand::TrackDelete(self.cursor_track.track))?;
         Ok(())
     }
 
-    fn track_paste(&mut self) -> anyhow::Result<()> {
+    fn track_paste(&mut self) -> Result<()> {
         if let Ok(text) = Clipboard::new()?.get_text() {
             if let Ok(track) = serde_json::from_str::<Track>(&text) {
                 self.sender_to_singer
