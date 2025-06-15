@@ -360,22 +360,6 @@ impl MainView {
         let mut commands = vec![];
 
         TopBottomPanel::top("Top").show(gui_context, |ui| {
-            ui.horizontal(|ui| {
-                let song_name = format!(
-                    "{}{}",
-                    if state.song_dirty_p { "*" } else { "" },
-                    &state.song.name
-                );
-                ui.heading(song_name);
-                ui.label(format!(
-                    "{:.3}ms",
-                    state.song_state.process_elasped_avg * 1000.0
-                ));
-                ui.label(format!("{:.3}%", state.song_state.cpu_usage * 100.0));
-            });
-        });
-
-        CentralPanel::default().show(gui_context, |ui: &mut Ui| -> anyhow::Result<()> {
             if false {
                 ui.label(format!("{:?}", state.cursor_track));
                 ui.label(format!("{:?}", state.selection_track_min));
@@ -384,7 +368,14 @@ impl MainView {
                 ui.label(format!("{:?}", state.song_state.tracks[1]));
                 ui.label(format!("{:?}", state.song_state.tracks[2]));
             }
-            ui.horizontal(|ui| -> anyhow::Result<()> {
+            ui.horizontal(|ui| -> Result<()> {
+                let song_name = format!(
+                    "{}{}",
+                    if state.song_dirty_p { "*" } else { "" },
+                    &state.song.name
+                );
+                ui.heading(song_name);
+
                 if ui.button("Play").clicked() {
                     state.sender_to_singer.send(SingerCommand::Play)?;
                 }
@@ -412,11 +403,16 @@ impl MainView {
                     }
                 }
 
+                ui.label(format!(
+                    "{:.3}ms",
+                    state.song_state.process_elasped_avg * 1000.0
+                ));
+                ui.label(format!("{:.3}%", state.song_state.cpu_usage * 100.0));
                 Ok(())
             });
+        });
 
-            ui.separator();
-
+        CentralPanel::default().show(gui_context, |ui: &mut Ui| -> anyhow::Result<()> {
             let line_range = self.compute_line_range(ui, state);
 
             with_font_mono(ui, |ui| {
