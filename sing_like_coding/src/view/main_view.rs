@@ -897,16 +897,16 @@ impl MainView {
                     .unwrap();
             });
 
-            let inner = ui
-                .vertical(|ui| -> anyhow::Result<()> { self.view_modules(state, ui, track_index) });
-            self.height_modules = inner.response.rect.height().max(self.height_modules);
-
             let inner = ui.vertical(|ui| -> anyhow::Result<()> {
                 self.view_mixer(state, ui, track_index, &mut commands)
             });
             if self.height_mixer == 0.0 {
                 self.height_mixer = inner.response.rect.height();
             }
+
+            let inner = ui
+                .vertical(|ui| -> anyhow::Result<()> { self.view_modules(state, ui, track_index) });
+            self.height_modules = inner.response.rect.height().max(self.height_modules);
 
             Ok(())
         });
