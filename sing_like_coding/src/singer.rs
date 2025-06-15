@@ -309,6 +309,7 @@ impl Singer {
                     .sum();
                 if dummy_p {
                     dummy.buffer_out[channel][frame] = value;
+                    dummy.constant_mask_out = 0;
                 } else {
                     buffers[0].0.as_mut().unwrap().0[channel][frame] = value;
                 }
