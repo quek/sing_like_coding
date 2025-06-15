@@ -12,7 +12,7 @@ use std::{
 
 use crate::{
     app_state::{AppStateCommand, CursorTrack},
-    model::{lane::Lane, note::Note, song::Song, track::Track},
+    model::{lane::Lane, lane_item::LaneItem, song::Song, track::Track},
     song_state::SongState,
     util::next_id,
     view::stereo_peak_meter::DB_MIN,
@@ -38,8 +38,8 @@ pub enum SingerCommand {
     Stop,
     Loop,
     Song,
-    Note(CursorTrack, Note),
-    NoteDelete(CursorTrack),
+    LaneItem(CursorTrack, LaneItem),
+    LaneItemDelete(CursorTrack),
     #[allow(dead_code)]
     NoteOn(usize, i16, i16, f64, usize),
     #[allow(dead_code)]
@@ -596,7 +596,7 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                 singer.send_state();
             }
             SingerCommand::Song => singer.lock().unwrap().send_song()?,
-            SingerCommand::Note(cursor, note) => {
+            SingerCommand::LaneItem(cursor, lane_item) => {
                 let mut singer = singer.lock().unwrap();
                 let song = &mut singer.song;
                 if let Some(Some(lane)) = song
@@ -604,11 +604,11 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                     .get_mut(cursor.track)
                     .map(|x| x.lanes.get_mut(cursor.lane))
                 {
-                    lane.notes.insert(cursor.line, note);
+                    lane.items.insert(cursor.line, lane_item);
                     singer.send_song()?;
                 }
             }
-            SingerCommand::NoteDelete(cursor) => {
+            SingerCommand::LaneItemDelete(cursor) => {
                 let mut singer = singer.lock().unwrap();
                 let song = &mut singer.song;
                 if let Some(Some(lane)) = song
@@ -616,7 +616,7 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                     .get_mut(cursor.track)
                     .map(|x| x.lanes.get_mut(cursor.lane))
                 {
-                    lane.notes.remove(&cursor.line);
+                    lane.items.remove(&cursor.line);
                     singer.send_song()?;
                 }
             }

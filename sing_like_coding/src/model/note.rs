@@ -25,6 +25,18 @@ impl Note {
     }
 }
 
+impl Default for Note {
+    fn default() -> Self {
+        Self {
+            delay: 0,
+            channel: 0,
+            key: 60,
+            velocity: 100.0,
+            off: false,
+        }
+    }
+}
+
 pub fn midi_to_note_name(midi: i16) -> Option<String> {
     if midi > 127 {
         return None;

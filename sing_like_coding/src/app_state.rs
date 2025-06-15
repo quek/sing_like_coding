@@ -21,7 +21,7 @@ use shared_memory::Shmem;
 
 use crate::{
     command::{track_add::TrackAdd, Command},
-    model::{note::Note, song::Song, track::Track},
+    model::{lane_item::LaneItem, song::Song, track::Track},
     singer::SingerCommand,
     song_state::SongState,
     view::{
@@ -70,9 +70,9 @@ pub enum LaneCommand {
     CursorRight,
     CursorUp,
     Dup,
-    NoteDelete,
-    NoteMove(i64, i64),
-    NoteUpdate(i16, i16, i16, bool),
+    LaneItemDelete,
+    LaneItemMove(i64, i64),
+    LaneItemUpdate(i16, i16, i16, bool),
     Paste,
     SelectMode,
     SelectClear,
@@ -231,7 +231,7 @@ pub struct AppState<'a> {
     pub follow_p: bool,
     pub cursor_track: CursorTrack,
     pub cursor_module: CursorModule,
-    pub note_last: Note,
+    pub lane_item_last: LaneItem,
     pub route: Route,
     pub select_p: bool,
     pub selection_track_min: Option<CursorTrack>,
@@ -278,13 +278,7 @@ impl<'a> AppState<'a> {
                 line: 0,
             },
             cursor_module: CursorModule { index: 0 },
-            note_last: Note {
-                delay: 0,
-                channel: 0,
-                key: 60,
-                velocity: 100.0,
-                off: false,
-            },
+            lane_item_last: LaneItem::default(),
             route: Route::Track,
             select_p: false,
             selection_track_min: Default::default(),
@@ -452,27 +446,27 @@ impl<'a> AppState<'a> {
             UiCommand::LaneAdd => self
                 .sender_to_singer
                 .send(SingerCommand::LaneAdd(self.cursor_track.track))?,
-            UiCommand::Lane(LaneCommand::Copy) => self.notes_copy()?,
-            UiCommand::Lane(LaneCommand::Cut) => self.notes_cut()?,
-            UiCommand::Lane(LaneCommand::Paste) => self.notes_paste()?,
+            UiCommand::Lane(LaneCommand::Copy) => self.lane_items_copy()?,
+            UiCommand::Lane(LaneCommand::Cut) => self.late_items_cut()?,
+            UiCommand::Lane(LaneCommand::Paste) => self.lane_items_paste()?,
             UiCommand::Lane(LaneCommand::CursorUp) => self.cursor_up(),
             UiCommand::Lane(LaneCommand::CursorDown) => self.cursor_down(),
             UiCommand::Lane(LaneCommand::CursorLeft) => self.cursor_left(),
             UiCommand::Lane(LaneCommand::CursorRight) => self.cursor_right(),
-            UiCommand::Lane(LaneCommand::Dup) => self.notes_dup()?,
-            UiCommand::Lane(LaneCommand::NoteDelete) => self
+            UiCommand::Lane(LaneCommand::Dup) => self.lane_items_dup()?,
+            UiCommand::Lane(LaneCommand::LaneItemDelete) => self
                 .sender_to_singer
-                .send(SingerCommand::NoteDelete(self.cursor_track.clone()))?,
-            UiCommand::Lane(LaneCommand::NoteMove(lane_delta, line_delta)) => {
-                self.note_move(*lane_delta, *line_delta)?;
+                .send(SingerCommand::LaneItemDelete(self.cursor_track.clone()))?,
+            UiCommand::Lane(LaneCommand::LaneItemMove(lane_delta, line_delta)) => {
+                self.lane_items_move(*lane_delta, *line_delta)?;
             }
-            UiCommand::Lane(LaneCommand::NoteUpdate(
+            UiCommand::Lane(LaneCommand::LaneItemUpdate(
                 key_delta,
                 velociy_delta,
                 delay_delta,
                 off,
             )) => {
-                self.note_update(*key_delta, *velociy_delta, *delay_delta, *off)?;
+                self.lane_items_update(*key_delta, *velociy_delta, *delay_delta, *off)?;
             }
             UiCommand::Lane(LaneCommand::SelectMode) => {
                 self.select_p = !self.select_p;
@@ -480,7 +474,7 @@ impl<'a> AppState<'a> {
                     self.selection_track_min = Some(self.cursor_track);
                     self.selection_track_max = None;
                 } else {
-                    let range = self.notes_selection_range().unwrap();
+                    let range = self.lane_items_selection_range().unwrap();
                     self.selection_track_min = Some(range.0);
                     self.selection_track_max = Some(range.1);
                 }
@@ -623,16 +617,16 @@ impl<'a> AppState<'a> {
         self.flatten_lane_index_max = self.flatten_lane_index_max.saturating_sub(1);
     }
 
-    fn notes_copy(&mut self) -> anyhow::Result<()> {
-        self.notes_copy_or_cut(true)
+    fn lane_items_copy(&mut self) -> anyhow::Result<()> {
+        self.lane_items_copy_or_cut(true)
     }
 
-    fn notes_copy_or_cut(&mut self, copy_p: bool) -> anyhow::Result<()> {
+    fn lane_items_copy_or_cut(&mut self, copy_p: bool) -> anyhow::Result<()> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
         }
         if let (Some(min), Some(max)) = (&self.selection_track_min, &self.selection_track_max) {
-            let mut notess = vec![];
+            let mut itemss = vec![];
             for track_index in min.track..=max.track {
                 if let Some(track) = self.song.tracks.get(track_index) {
                     let lane_start = if track_index == min.track {
@@ -647,11 +641,11 @@ impl<'a> AppState<'a> {
                     };
                     for lane_index in lane_start..=lane_end {
                         if let Some(lane) = track.lanes.get(lane_index) {
-                            let mut notes = vec![];
+                            let mut items = vec![];
                             for line in min.line..=max.line {
-                                notes.push(lane.note(line).clone());
+                                items.push(lane.item(line).clone());
                                 if !copy_p {
-                                    self.sender_to_singer.send(SingerCommand::NoteDelete(
+                                    self.sender_to_singer.send(SingerCommand::LaneItemDelete(
                                         CursorTrack {
                                             track: track_index,
                                             lane: lane_index,
@@ -660,12 +654,12 @@ impl<'a> AppState<'a> {
                                     ))?;
                                 }
                             }
-                            notess.push(notes);
+                            itemss.push(items);
                         }
                     }
                 }
             }
-            let json = serde_json::to_string_pretty(&notess)?;
+            let json = serde_json::to_string_pretty(&itemss)?;
             let mut clipboard = Clipboard::new().unwrap();
             clipboard.set_text(&json)?;
         }
@@ -673,28 +667,28 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn notes_cut(&mut self) -> anyhow::Result<()> {
-        self.notes_copy_or_cut(false)
+    fn late_items_cut(&mut self) -> anyhow::Result<()> {
+        self.lane_items_copy_or_cut(false)
     }
 
-    fn notes_dup(&mut self) -> anyhow::Result<()> {
+    fn lane_items_dup(&mut self) -> anyhow::Result<()> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
         }
-        let notess = self.notes_selected_cloned();
+        let itemss = self.lane_items_selected_cloned();
         if let (Some(min), Some(max)) =
             (&mut self.selection_track_min, &mut self.selection_track_max)
         {
             self.cursor_track.line = max.line + 1;
             let mut cursor = self.cursor_track.clone();
-            for notes in notess.into_iter() {
-                for note in notes.into_iter() {
-                    if let Some((_line, note)) = note {
+            for items in itemss.into_iter() {
+                for item in items.into_iter() {
+                    if let Some((_, item)) = item {
                         self.sender_to_singer
-                            .send(SingerCommand::Note(cursor, note))?;
+                            .send(SingerCommand::LaneItem(cursor, item))?;
                     } else {
                         self.sender_to_singer
-                            .send(SingerCommand::NoteDelete(cursor))?;
+                            .send(SingerCommand::LaneItemDelete(cursor))?;
                     }
                     cursor = cursor.down(&self.song);
                 }
@@ -710,17 +704,17 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn note_move(&mut self, lane_delta: i64, line_delta: i64) -> anyhow::Result<()> {
+    fn lane_items_move(&mut self, lane_delta: i64, line_delta: i64) -> anyhow::Result<()> {
         if self.selection_track_min.is_some() {
-            let notess = self.notes_selected_cloned();
-            for (cursor, _note) in notess.clone().into_iter().flatten().filter_map(|x| x) {
+            let itemss = self.lane_items_selected_cloned();
+            for (cursor, _) in itemss.clone().into_iter().flatten().filter_map(|x| x) {
                 self.sender_to_singer
-                    .send(SingerCommand::NoteDelete(cursor))?;
+                    .send(SingerCommand::LaneItemDelete(cursor))?;
             }
-            for (cursor, note) in notess.into_iter().flatten().filter_map(|x| x) {
+            for (cursor, item) in itemss.into_iter().flatten().filter_map(|x| x) {
                 let cursor = cursor.move_by(lane_delta, line_delta, &self.song);
                 self.sender_to_singer
-                    .send(SingerCommand::Note(cursor, note))?;
+                    .send(SingerCommand::LaneItem(cursor, item))?;
             }
 
             self.selection_track_min = self
@@ -731,14 +725,14 @@ impl<'a> AppState<'a> {
                 .selection_track_max
                 .as_ref()
                 .map(|x| x.move_by(lane_delta, line_delta, &self.song));
-        } else if let Some(note) = self.song.note(&self.cursor_track) {
+        } else if let Some(item) = self.song.lane_item(&self.cursor_track) {
             self.sender_to_singer
-                .send(SingerCommand::NoteDelete(self.cursor_track.clone()))?;
+                .send(SingerCommand::LaneItemDelete(self.cursor_track.clone()))?;
             let cursor = self
                 .cursor_track
                 .move_by(lane_delta, line_delta, &self.song);
             self.sender_to_singer
-                .send(SingerCommand::Note(cursor, note.clone()))?;
+                .send(SingerCommand::LaneItem(cursor, item.clone()))?;
         }
 
         self.cursor_track = self
@@ -748,19 +742,19 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn notes_paste(&mut self) -> anyhow::Result<()> {
+    fn lane_items_paste(&mut self) -> anyhow::Result<()> {
         let mut clipboard = Clipboard::new().unwrap();
         if let Ok(text) = clipboard.get_text() {
             let mut cursor = self.cursor_track.clone();
-            if let Ok(notess) = serde_json::from_str::<Vec<Vec<Option<Note>>>>(&text) {
-                for notes in notess.into_iter() {
-                    for note in notes.into_iter() {
-                        if let Some(note) = note {
+            if let Ok(itemss) = serde_json::from_str::<Vec<Vec<Option<LaneItem>>>>(&text) {
+                for items in itemss.into_iter() {
+                    for item in items.into_iter() {
+                        if let Some(item) = item {
                             self.sender_to_singer
-                                .send(SingerCommand::Note(cursor, note))?;
+                                .send(SingerCommand::LaneItem(cursor, item))?;
                         } else {
                             self.sender_to_singer
-                                .send(SingerCommand::NoteDelete(cursor))?;
+                                .send(SingerCommand::LaneItemDelete(cursor))?;
                         }
                         cursor = cursor.down(&self.song);
                     }
@@ -773,9 +767,9 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn notes_selected_cloned(&mut self) -> Vec<Vec<Option<(CursorTrack, Note)>>> {
-        let mut notess = vec![];
-        if let Some((min, max)) = self.notes_selection_range() {
+    fn lane_items_selected_cloned(&mut self) -> Vec<Vec<Option<(CursorTrack, LaneItem)>>> {
+        let mut itemss = vec![];
+        if let Some((min, max)) = self.lane_items_selection_range() {
             for track_index in min.track..=max.track {
                 if let Some(track) = self.song.tracks.get(track_index) {
                     let lane_start = if track_index == min.track {
@@ -790,29 +784,29 @@ impl<'a> AppState<'a> {
                     };
                     for lane_index in lane_start..=lane_end {
                         if let Some(lane) = track.lanes.get(lane_index) {
-                            let mut notes = vec![];
+                            let mut items = vec![];
                             for line in min.line..=max.line {
-                                notes.push(lane.note(line).cloned().map(|note| {
+                                items.push(lane.item(line).cloned().map(|item| {
                                     (
                                         CursorTrack {
                                             track: track_index,
                                             lane: lane_index,
                                             line,
                                         },
-                                        note,
+                                        item,
                                     )
                                 }));
                             }
-                            notess.push(notes);
+                            itemss.push(items);
                         }
                     }
                 }
             }
         }
-        notess
+        itemss
     }
 
-    fn notes_selection_range(&self) -> Option<(CursorTrack, CursorTrack)> {
+    fn lane_items_selection_range(&self) -> Option<(CursorTrack, CursorTrack)> {
         if let Some(min) = &self.selection_track_min {
             let max = self
                 .selection_track_max
@@ -824,7 +818,7 @@ impl<'a> AppState<'a> {
         }
     }
 
-    fn note_update(
+    fn lane_items_update(
         &mut self,
         key_delta: i16,
         velociy_delta: i16,
@@ -832,33 +826,56 @@ impl<'a> AppState<'a> {
         off: bool,
     ) -> anyhow::Result<()> {
         if self.selection_track_min.is_some() {
-            let notess = self.notes_selected_cloned();
-            for (cursor, mut note) in notess.into_iter().flatten().filter_map(|x| x) {
-                if note.off {
-                    continue;
+            let itemss = self.lane_items_selected_cloned();
+            for (cursor, mut lane_item) in itemss.into_iter().flatten().filter_map(|x| x) {
+                match &mut lane_item {
+                    LaneItem::Note(note) => {
+                        if note.off {
+                            continue;
+                        }
+                        note.key = (note.key + key_delta).clamp(0, 127);
+                        note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
+                        note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
+                    }
+                    LaneItem::Point(_point) => {
+                        // TODO point.value += point_delta;
+                    }
                 }
-                note.key = (note.key + key_delta).clamp(0, 127);
-                note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
-                note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
                 self.sender_to_singer
-                    .send(SingerCommand::Note(cursor, note))
+                    .send(SingerCommand::LaneItem(cursor, lane_item))
                     .unwrap();
             }
         } else {
-            if let Some(note) = self.song.note(&self.cursor_track) {
-                if !note.off {
-                    let mut note = note.clone();
-                    note.key = (note.key + key_delta).clamp(0, 127);
-                    note.velocity = (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
-                    note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
-                    self.note_last = note;
+            if let Some(lane_item) = self.song.lane_item(&self.cursor_track) {
+                match lane_item {
+                    LaneItem::Note(note) => {
+                        if !note.off {
+                            let mut note = note.clone();
+                            note.key = (note.key + key_delta).clamp(0, 127);
+                            note.velocity =
+                                (note.velocity + velociy_delta as f64).clamp(0.0, 127.0);
+                            note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
+                            self.lane_item_last = LaneItem::Note(note);
+                        }
+                    }
+                    LaneItem::Point(point) => {
+                        let point = point.clone();
+                        // TODO point.value += point_delta;
+                        self.lane_item_last = LaneItem::Point(point);
+                    }
                 }
             }
 
-            let mut note = self.note_last.clone();
-            note.off = off;
+            let mut lane_item = self.lane_item_last.clone();
+            match &mut lane_item {
+                LaneItem::Note(note) => note.off = off,
+                LaneItem::Point(_) => {}
+            }
             self.sender_to_singer
-                .send(SingerCommand::Note(self.cursor_track.clone(), note))
+                .send(SingerCommand::LaneItem(
+                    self.cursor_track.clone(),
+                    lane_item,
+                ))
                 .unwrap();
         }
 

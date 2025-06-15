@@ -17,6 +17,7 @@ use crate::{
         UiCommand,
     },
     device::Device,
+    model::lane_item::LaneItem,
     singer::SingerCommand,
     util::with_font_mono,
 };
@@ -88,131 +89,131 @@ impl MainView {
         let shortcut_map_lane = [
             (
                 (Modifier::C, Key::J),
-                UiCommand::Lane(LaneCommand::NoteUpdate(-1, 0, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(-1, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::ArrowDown),
-                UiCommand::Lane(LaneCommand::NoteUpdate(-1, 0, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(-1, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::K),
-                UiCommand::Lane(LaneCommand::NoteUpdate(1, 0, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(1, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::ArrowUp),
-                UiCommand::Lane(LaneCommand::NoteUpdate(1, 0, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(1, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::H),
-                UiCommand::Lane(LaneCommand::NoteUpdate(-12, 0, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(-12, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::ArrowLeft),
-                UiCommand::Lane(LaneCommand::NoteUpdate(-12, 0, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(-12, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::L),
-                UiCommand::Lane(LaneCommand::NoteUpdate(12, 0, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(12, 0, 0, false)),
             ),
             (
                 (Modifier::C, Key::ArrowRight),
-                UiCommand::Lane(LaneCommand::NoteUpdate(12, 0, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(12, 0, 0, false)),
             ),
             (
                 (Modifier::A, Key::J),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, -1, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, -1, 0, false)),
             ),
             (
                 (Modifier::A, Key::ArrowDown),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, -1, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, -1, 0, false)),
             ),
             (
                 (Modifier::A, Key::K),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 1, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 1, 0, false)),
             ),
             (
                 (Modifier::A, Key::ArrowUp),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 1, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 1, 0, false)),
             ),
             (
                 (Modifier::A, Key::H),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, -0x10, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, -0x10, 0, false)),
             ),
             (
                 (Modifier::A, Key::ArrowLeft),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, -0x10, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, -0x10, 0, false)),
             ),
             (
                 (Modifier::A, Key::L),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0x10, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0x10, 0, false)),
             ),
             (
                 (Modifier::A, Key::ArrowRight),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0x10, 0, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0x10, 0, false)),
             ),
             (
                 (Modifier::CA, Key::J),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, -1, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, -1, false)),
             ),
             (
                 (Modifier::CA, Key::ArrowDown),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, -1, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, -1, false)),
             ),
             (
                 (Modifier::CA, Key::K),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, 1, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, 1, false)),
             ),
             (
                 (Modifier::CA, Key::ArrowUp),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, 1, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, 1, false)),
             ),
             (
                 (Modifier::CA, Key::H),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, -0x10, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, -0x10, false)),
             ),
             (
                 (Modifier::CA, Key::ArrowLeft),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, -0x10, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, -0x10, false)),
             ),
             (
                 (Modifier::CA, Key::L),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, 0x10, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, 0x10, false)),
             ),
             (
                 (Modifier::CA, Key::ArrowRight),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, 0x10, false)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, 0x10, false)),
             ),
             (
                 (Modifier::CAS, Key::J),
-                UiCommand::Lane(LaneCommand::NoteMove(0, -1)),
+                UiCommand::Lane(LaneCommand::LaneItemMove(0, -1)),
             ),
             (
                 (Modifier::CAS, Key::ArrowDown),
-                UiCommand::Lane(LaneCommand::NoteMove(0, -1)),
+                UiCommand::Lane(LaneCommand::LaneItemMove(0, -1)),
             ),
             (
                 (Modifier::CAS, Key::K),
-                UiCommand::Lane(LaneCommand::NoteMove(0, 1)),
+                UiCommand::Lane(LaneCommand::LaneItemMove(0, 1)),
             ),
             (
                 (Modifier::CAS, Key::ArrowUp),
-                UiCommand::Lane(LaneCommand::NoteMove(0, 1)),
+                UiCommand::Lane(LaneCommand::LaneItemMove(0, 1)),
             ),
             (
                 (Modifier::CAS, Key::H),
-                UiCommand::Lane(LaneCommand::NoteMove(-1, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemMove(-1, 0)),
             ),
             (
                 (Modifier::CAS, Key::ArrowLeft),
-                UiCommand::Lane(LaneCommand::NoteMove(-1, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemMove(-1, 0)),
             ),
             (
                 (Modifier::CAS, Key::L),
-                UiCommand::Lane(LaneCommand::NoteMove(1, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemMove(1, 0)),
             ),
             (
                 (Modifier::CAS, Key::ArrowRight),
-                UiCommand::Lane(LaneCommand::NoteMove(1, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemMove(1, 0)),
             ),
             (
                 (Modifier::None, Key::J),
@@ -256,11 +257,11 @@ impl MainView {
             ),
             (
                 (Modifier::None, Key::Period),
-                UiCommand::Lane(LaneCommand::NoteUpdate(0, 0, 0, true)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, 0, true)),
             ),
             (
                 (Modifier::None, Key::Delete),
-                UiCommand::Lane(LaneCommand::NoteDelete),
+                UiCommand::Lane(LaneCommand::LaneItemDelete),
             ),
             (
                 (Modifier::None, Key::Escape),
@@ -695,20 +696,21 @@ impl MainView {
                         }
                     }
                 };
-                let text = state.song.tracks[track_index].lanes[lane_index]
-                    .note(line)
-                    .map_or("--- -- --".to_string(), |note| {
-                        if note.off {
-                            format!("{:<3}    {:02X}", note.note_name(), note.delay)
-                        } else {
-                            format!(
-                                "{:<3} {:02X} {:02X}",
-                                note.note_name(),
-                                note.velocity as i32,
-                                note.delay
-                            )
-                        }
-                    });
+                let text = match state.song.tracks[track_index].lanes[lane_index].item(line) {
+                    Some(LaneItem::Note(note)) if note.off => {
+                        format!("{:<3}    {:02X}", note.note_name(), note.delay)
+                    }
+                    Some(LaneItem::Note(note)) => format!(
+                        "{:<3} {:02X} {:02X}",
+                        note.note_name(),
+                        note.velocity as i32,
+                        note.delay
+                    ),
+                    Some(LaneItem::Point(point)) => {
+                        format!("{:02X}       ", point.value)
+                    }
+                    None => "--- -- --".to_string(),
+                };
 
                 if self.height_line == 0.0 {
                     let height_before = ui.available_height();

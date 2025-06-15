@@ -2,26 +2,26 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::note::Note;
+use super::lane_item::LaneItem;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lane {
-    pub notes: HashMap<usize, Note>,
+    pub items: HashMap<usize, LaneItem>,
 }
 
 impl Lane {
     pub fn new() -> Self {
         Self {
-            notes: Default::default(),
+            items: Default::default(),
         }
     }
 
-    pub fn note(&self, line: usize) -> Option<&Note> {
-        self.notes.get(&line)
+    pub fn item(&self, line: usize) -> Option<&LaneItem> {
+        self.items.get(&line)
     }
 
     #[allow(dead_code)]
-    pub fn note_mut(&mut self, line: usize) -> Option<&mut Note> {
-        self.notes.get_mut(&line)
+    pub fn item_mut(&mut self, line: usize) -> Option<&mut LaneItem> {
+        self.items.get_mut(&line)
     }
 }

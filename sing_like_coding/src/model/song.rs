@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app_state::CursorTrack;
 
-use super::{note::Note, track::Track};
+use super::{lane_item::LaneItem, track::Track};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Song {
@@ -43,10 +43,10 @@ impl Song {
         self.tracks.insert(track_index, track);
     }
 
-    pub fn note(&self, cursor: &CursorTrack) -> Option<&Note> {
+    pub fn lane_item(&self, cursor: &CursorTrack) -> Option<&LaneItem> {
         self.tracks
             .get(cursor.track)
             .and_then(|x| x.lanes.get(cursor.lane))
-            .and_then(|x| x.note(cursor.line))
+            .and_then(|x| x.item(cursor.line))
     }
 }
