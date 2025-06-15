@@ -226,10 +226,18 @@ impl Singer {
         let mut buffers = self
             .process_track_contexts
             .iter_mut()
-            .map(|x| {
+            .enumerate()
+            .map(|(i, x)| {
                 x.plugins.last_mut().map(|plugin_ref: &mut PluginRef| {
                     let constant_mask = plugin_ref.process_data_mut().constant_mask_out;
-                    (&mut plugin_ref.process_data_mut().buffer_out, constant_mask)
+                    (
+                        if i == 0 {
+                            &mut plugin_ref.process_data_mut().buffer_in
+                        } else {
+                            &mut plugin_ref.process_data_mut().buffer_out
+                        },
+                        constant_mask,
+                    )
                 })
             })
             .zip(self.song.tracks.iter().map(|track| {
