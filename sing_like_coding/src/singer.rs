@@ -223,14 +223,17 @@ impl Singer {
             .try_for_each(|(track, process_track_context)| track.process(process_track_context))?;
 
         // prepare mixing paramss
+        let mut dummy = ProcessData::new();
+        dummy.prepare();
         let mut solo_any = false;
         let mut buffers = self
             .process_track_contexts
             .iter_mut()
-            .filter_map(|x| x.plugins.last_mut())
-            .map(|plugin_ref: &mut PluginRef| {
-                let constant_mask = plugin_ref.process_data_mut().constant_mask_out;
-                (&mut plugin_ref.process_data_mut().buffer_out, constant_mask)
+            .map(|x| {
+                x.plugins.last_mut().map(|plugin_ref: &mut PluginRef| {
+                    let constant_mask = plugin_ref.process_data_mut().constant_mask_out;
+                    (&mut plugin_ref.process_data_mut().buffer_out, constant_mask)
+                })
             })
             .zip(self.song.tracks.iter().map(|track| {
                 solo_any |= track.solo;
@@ -257,47 +260,60 @@ impl Singer {
             .collect::<Vec<_>>();
 
         // tracks pan pan volume
-        for ((buffer, constant_mask), (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)) in
+        for (buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)) in
             buffers[1..].iter_mut()
         {
-            for channel in 0..nchannels {
-                let constp = (*constant_mask & (1 << channel)) != 0;
-                let gain = if channel == 0 {
-                    *gain_ch0
-                } else if channel == 1 {
-                    *gain_ch1
-                } else {
-                    *gain_ch_restg
-                };
+            if let Some((buffer, constant_mask)) = buffer_constant_mask {
+                for channel in 0..nchannels {
+                    let constp = (*constant_mask & (1 << channel)) != 0;
+                    let gain = if channel == 0 {
+                        *gain_ch0
+                    } else if channel == 1 {
+                        *gain_ch1
+                    } else {
+                        *gain_ch_restg
+                    };
 
-                if constp {
-                    buffer[channel][0] *= gain;
-                } else {
-                    for frame in 0..nframes {
-                        buffer[channel][frame] *= gain;
+                    if constp {
+                        buffer[channel][0] *= gain;
+                    } else {
+                        for frame in 0..nframes {
+                            buffer[channel][frame] *= gain;
+                        }
                     }
                 }
             }
         }
 
+        let mut dummy = ProcessData::new();
+        dummy.prepare();
         // tracks mute solo -> main track
         for frame in 0..nframes {
             for channel in 0..nchannels {
-                buffers[0].0 .0[channel][frame] = buffers[1..]
+                let value = buffers[1..]
                     .iter()
-                    .map(|((buffer, constant_mask), (mute, solo, _, _, _))| {
-                        if *mute || (solo_any && !*solo) {
-                            0.0
-                        } else {
-                            let constp = (*constant_mask & (1 << channel)) != 0;
-                            if constp {
-                                buffer[channel][0]
+                    .map(|(buffer_constant_mask, (mute, solo, _, _, _))| {
+                        if let Some((buffer, constant_mask)) = &buffer_constant_mask {
+                            if *mute || (solo_any && !*solo) {
+                                0.0
                             } else {
-                                buffer[channel][frame]
+                                let constp = (*constant_mask & (1 << channel)) != 0;
+                                if constp {
+                                    buffer[channel][0]
+                                } else {
+                                    buffer[channel][frame]
+                                }
                             }
+                        } else {
+                            0.0
                         }
                     })
                     .sum();
+                if buffers[0].0.is_some() {
+                    buffers[0].0.as_mut().unwrap().0[channel][frame] = value;
+                } else {
+                    dummy.buffer_out[channel][frame] = value;
+                }
             }
         }
 
@@ -307,8 +323,8 @@ impl Singer {
         let x = self.process_track_contexts[0]
             .plugins
             .last_mut()
-            .unwrap()
-            .process_data_mut();
+            .map(|x| x.process_data_mut())
+            .unwrap_or(&mut dummy);
         let y = &self.song.tracks[0];
         for frame in 0..nframes {
             for channel in 0..nchannels {
