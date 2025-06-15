@@ -26,7 +26,8 @@ use clap_sys::{
             CLAP_LOG_INFO, CLAP_LOG_WARNING,
         },
         params::{
-            clap_host_params, clap_param_clear_flags, clap_param_rescan_flags, CLAP_EXT_PARAMS,
+            clap_host_params, clap_param_clear_flags, clap_param_rescan_flags, clap_plugin_params,
+            CLAP_EXT_PARAMS,
         },
         state::{clap_plugin_state, CLAP_EXT_STATE},
     },
@@ -59,6 +60,7 @@ pub struct Plugin {
     pub plugin: Option<*const clap_plugin>,
     gui: Option<*const clap_plugin_gui>,
     state: Option<*const clap_plugin_state>,
+    params: Option<*const clap_plugin_params>,
     pub gui_open_p: bool,
     window_handler: Option<*mut c_void>,
     process_start_p: bool,
@@ -126,6 +128,7 @@ impl Plugin {
             plugin: None,
             gui: None,
             state: None,
+            params: None,
             gui_open_p: false,
             window_handler: None,
             process_start_p: false,
@@ -335,6 +338,12 @@ impl Plugin {
                 as *const clap_plugin_state;
             if !state.is_null() {
                 self.state = Some(state);
+            }
+
+            let params = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_PARAMS.as_ptr())
+                as *const clap_plugin_params;
+            if !params.is_null() {
+                self.params = Some(params);
             }
 
             self.plugin = Some(plugin);
