@@ -827,8 +827,8 @@ impl<'a> AppState<'a> {
 
     fn lane_items_update(
         &mut self,
-        key_or_param_value: i16,
-        velocity_or_value_delta: i16,
+        key_or_value_delta: i16,
+        velocity_or_param_delta: i16,
         delay_delta: i16,
         off: bool,
         module_delta: i16,
@@ -841,9 +841,9 @@ impl<'a> AppState<'a> {
                         if note.off {
                             continue;
                         }
-                        note.key = (note.key + key_or_param_value).clamp(0, 127);
+                        note.key = (note.key + key_or_value_delta).clamp(0, 127);
                         note.velocity =
-                            (note.velocity + velocity_or_value_delta as f64).clamp(0.0, 127.0);
+                            (note.velocity + velocity_or_param_delta as f64).clamp(0.0, 127.0);
                         note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
                     }
                     LaneItem::Point(point) => {
@@ -854,9 +854,9 @@ impl<'a> AppState<'a> {
                             .saturating_add_signed(module_delta as isize);
                         point.param_id = point
                             .param_id
-                            .saturating_add_signed(key_or_param_value as i32);
+                            .saturating_add_signed(velocity_or_param_delta as i32);
                         point.value =
-                            (point.value as i16 + velocity_or_value_delta).clamp(0, 0xff) as u8;
+                            (point.value as i16 + key_or_value_delta).clamp(0, 0xff) as u8;
                         point.delay = (point.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
                     }
                 }
@@ -869,22 +869,21 @@ impl<'a> AppState<'a> {
                 if let Some(mut lane_item) = self.song.lane_item(&self.cursor_track).cloned() {
                     match &mut lane_item {
                         LaneItem::Note(note) => {
-                            note.key = (note.key + key_or_param_value).clamp(0, 127);
+                            note.key = (note.key + key_or_value_delta).clamp(0, 127);
                             note.velocity =
-                                (note.velocity + velocity_or_value_delta as f64).clamp(0.0, 127.0);
+                                (note.velocity + velocity_or_param_delta as f64).clamp(0.0, 127.0);
                             note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
                             note.off = off;
                         }
                         LaneItem::Point(point) => {
-                            let mut point = point.clone();
                             point.module_index = point
                                 .module_index
                                 .saturating_add_signed(module_delta as isize);
                             point.param_id = point
                                 .param_id
-                                .saturating_add_signed(key_or_param_value as i32);
+                                .saturating_add_signed(velocity_or_param_delta as i32);
                             point.value =
-                                (point.value as i16 + velocity_or_value_delta).clamp(0, 0xff) as u8;
+                                (point.value as i16 + key_or_value_delta).clamp(0, 0xff) as u8;
                             point.delay = (point.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
                         }
                     }
