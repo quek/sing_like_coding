@@ -345,7 +345,7 @@ impl Singer {
             }
         }
 
-        self.compute_song_state();
+        self.compute_song_state(if dummy_p { Some(&dummy) } else { None });
 
         self.steady_time += nframes as i64;
 
@@ -462,12 +462,19 @@ impl Singer {
         });
     }
 
-    fn compute_song_state(&mut self) {
+    fn compute_song_state(&mut self, dummy: Option<&ProcessData>) {
         let song_state = self.song_state_mut();
         let process_data_list = self
             .process_track_contexts
             .iter()
-            .map(|x| x.plugins.last().map(|x| x.process_data()))
+            .enumerate()
+            .map(|(i, x)| {
+                if i == 0 && dummy.is_some() {
+                    dummy
+                } else {
+                    x.plugins.last().map(|x| x.process_data())
+                }
+            })
             .collect::<Vec<_>>();
         for track_index in 0..process_data_list.len() {
             if let Some(process_data) = &process_data_list[track_index] {
