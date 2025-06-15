@@ -815,6 +815,10 @@ impl MainView {
             .clicked()
         {
             state.route = Route::PluginSelect;
+            if state.cursor_track.track != track_index {
+                state.cursor_track.track = track_index;
+                state.cursor_track.lane = 0;
+            }
         }
         Ok(())
     }
