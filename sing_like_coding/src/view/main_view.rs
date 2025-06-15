@@ -413,13 +413,12 @@ impl MainView {
         });
 
         CentralPanel::default().show(gui_context, |ui: &mut Ui| -> anyhow::Result<()> {
+            if state.song_state.play_p && state.follow_p {
+                state.cursor_track.line = state.song_state.line_play
+            }
             let line_range = self.compute_line_range(ui, state);
 
             with_font_mono(ui, |ui| {
-                if state.song_state.play_p && state.follow_p {
-                    state.cursor_track.line = state.song_state.line_play
-                }
-
                 ui.horizontal(|ui| -> anyhow::Result<()> {
                     self.view_ruler(state, ui, &line_range)?;
 
