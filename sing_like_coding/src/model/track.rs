@@ -51,16 +51,18 @@ impl Track {
         let data = context.plugins[module_index].process_data_mut();
         for event in context.event_list_input.iter() {
             match event {
-                Event::NoteOn(key, velocity, delay) => data.note_on(*key, *velocity, 0, *delay),
-                Event::NoteOff(key, delay) => data.note_off(*key, 0, *delay),
+                Event::NoteOn(key, velocity, delay) => {
+                    data.input_note_on(*key, *velocity, 0, *delay)
+                }
+                Event::NoteOff(key, delay) => data.input_note_off(*key, 0, *delay),
                 Event::NoteAllOff => {
                     for key in context.on_keys.drain(..).filter_map(|x| x) {
-                        data.note_off(key, 0, 0);
+                        data.input_note_off(key, 0, 0);
                     }
                 }
                 Event::ParamValue(mindex, param_id, value, delay) => {
                     if *mindex == module_index {
-                        data.param_value(*param_id, *value, *delay)
+                        data.input_param_value(*param_id, *value, *delay)
                     }
                 }
             }

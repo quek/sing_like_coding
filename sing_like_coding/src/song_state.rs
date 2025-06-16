@@ -1,3 +1,4 @@
+use clap_sys::id::clap_id;
 use common::process_data::MAX_CHANNELS;
 
 use crate::singer::Singer;
@@ -18,6 +19,9 @@ pub struct SongState {
     pub process_elasped_avg: f64,
     pub cpu_usage: f64,
     pub tracks: [TrackState; MAX_TRACKS],
+    pub param_track_index: usize,
+    pub param_module_index: usize,
+    pub param_id: clap_id,
 }
 
 impl SongState {
@@ -35,6 +39,7 @@ impl SongState {
                 *peak = DB_MIN;
             }
         }
+        self.param_track_index = usize::MAX;
     }
 
     pub fn song_file_get(&self) -> Option<String> {

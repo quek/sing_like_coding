@@ -68,36 +68,45 @@ impl RootView {
             Route::Track => self.main_view.view(gui_context, state, device)?,
             Route::Command => self.command_view.view(gui_context, state)?,
             Route::ParamSelect => {
-                let param_select_view = self
-                    .param_select_view
-                    .get_or_insert_with(|| ParamSelectView::new());
-                match param_select_view.view(
-                    gui_context,
-                    &state.song.tracks[state.cursor_track.track].modules,
-                    &state.param_select_view_params,
-                )? {
-                    ReturnState::Selected(module_index, param) => {
-                        self.param_select_view = None;
-                        state.route = Route::Track;
-                        state.param_set(module_index, param)?;
-                    }
-                    ReturnState::Params(module_index) => {
-                        let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
-                            Box::new(|state, command| {
-                                if let PluginToMain::DidParams(params) = command {
-                                    state.param_select_view_params = params;
-                                }
-                                Ok(())
-                            });
-                        state.send_to_plugin(
-                            MainToPlugin::Params(state.cursor_track.track, module_index),
-                            callback,
-                        )?;
-                    }
-                    ReturnState::Continue => {}
-                    ReturnState::Cancel => {
-                        self.param_select_view = None;
-                        state.route = Route::Track;
+                if state.song_state.param_track_index == state.cursor_track.track {
+                    self.param_select_view = None;
+                    state.route = Route::Track;
+                    state.param_set(
+                        state.song_state.param_module_index,
+                        state.song_state.param_id,
+                    )?;
+                } else {
+                    let param_select_view = self
+                        .param_select_view
+                        .get_or_insert_with(|| ParamSelectView::new());
+                    match param_select_view.view(
+                        gui_context,
+                        &state.song.tracks[state.cursor_track.track].modules,
+                        &state.param_select_view_params,
+                    )? {
+                        ReturnState::Selected(module_index, param) => {
+                            self.param_select_view = None;
+                            state.route = Route::Track;
+                            state.param_set(module_index, param.id)?;
+                        }
+                        ReturnState::Params(module_index) => {
+                            let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
+                                Box::new(|state, command| {
+                                    if let PluginToMain::DidParams(params) = command {
+                                        state.param_select_view_params = params;
+                                    }
+                                    Ok(())
+                                });
+                            state.send_to_plugin(
+                                MainToPlugin::Params(state.cursor_track.track, module_index),
+                                callback,
+                            )?;
+                        }
+                        ReturnState::Continue => {}
+                        ReturnState::Cancel => {
+                            self.param_select_view = None;
+                            state.route = Route::Track;
+                        }
                     }
                 }
             }

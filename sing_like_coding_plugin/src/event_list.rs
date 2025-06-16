@@ -4,11 +4,14 @@ use clap_sys::{
     events::{
         clap_event_header, clap_event_midi, clap_event_note, clap_event_param_value,
         clap_input_events, clap_output_events, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI,
-        CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_END, CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON,
-        CLAP_EVENT_PARAM_VALUE,
+        CLAP_EVENT_MIDI2, CLAP_EVENT_MIDI_SYSEX, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_END,
+        CLAP_EVENT_NOTE_EXPRESSION, CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON,
+        CLAP_EVENT_PARAM_GESTURE_BEGIN, CLAP_EVENT_PARAM_GESTURE_END, CLAP_EVENT_PARAM_MOD,
+        CLAP_EVENT_PARAM_VALUE, CLAP_EVENT_TRANSPORT,
     },
     id::clap_id,
 };
+use common::event::Event;
 
 pub struct EventListInput {
     events: Vec<*const clap_event_header>,
@@ -143,8 +146,9 @@ impl Drop for EventListInput {
 }
 
 pub struct EventListOutput {
-    events: Vec<*const clap_event_header>,
+    pub events: Vec<Event>,
     clap_output_events: clap_output_events,
+    pub samples_per_delay: f64,
 }
 
 impl EventListOutput {
@@ -155,6 +159,7 @@ impl EventListOutput {
                 ctx: null_mut(),
                 try_push: Some(Self::try_push),
             },
+            samples_per_delay: 1.0,
         });
         let ptr = this.as_mut().get_mut() as *mut _ as *mut c_void;
         this.as_mut().clap_output_events.ctx = ptr;
@@ -170,43 +175,45 @@ impl EventListOutput {
         event: *const clap_event_header,
     ) -> bool {
         let this = unsafe { &mut *((*list).ctx as *mut Self) };
-        let copied = unsafe { *event }; // shallow copy of header
-        log::debug!("EventListOutput try_push {:?}", copied);
-        this.events.push(Box::into_raw(Box::new(copied)));
+        let event_header = unsafe { &*event };
+        let delay = (event_header.time as f64 / this.samples_per_delay).round() as usize;
+        match event_header.type_ {
+            CLAP_EVENT_NOTE_ON => {
+                let event_note: &clap_event_note = unsafe { &*(event as *const clap_event_note) };
+                this.events
+                    .push(Event::NoteOn(event_note.key, event_note.velocity, delay))
+            }
+            CLAP_EVENT_NOTE_OFF => {
+                let event_note: &clap_event_note = unsafe { &*(event as *const clap_event_note) };
+                this.events.push(Event::NoteOff(event_note.key, delay))
+            }
+            CLAP_EVENT_NOTE_CHOKE => {}
+            CLAP_EVENT_NOTE_END => {}
+            CLAP_EVENT_NOTE_EXPRESSION => {}
+            CLAP_EVENT_PARAM_VALUE => {
+                let event_param_value = unsafe { &*(event as *const clap_event_param_value) };
+                this.events.push(Event::ParamValue(
+                    0,
+                    event_param_value.param_id,
+                    event_param_value.value,
+                    delay,
+                ))
+            }
+            CLAP_EVENT_PARAM_MOD => {}
+            CLAP_EVENT_PARAM_GESTURE_BEGIN => {}
+            CLAP_EVENT_PARAM_GESTURE_END => {}
+            CLAP_EVENT_TRANSPORT => {}
+            CLAP_EVENT_MIDI => {}
+            CLAP_EVENT_MIDI_SYSEX => {}
+            CLAP_EVENT_MIDI2 => {}
+            _ => {
+                log::warn!("Unknown event type {}!", event_header.type_);
+            }
+        }
         true
     }
 
     pub fn clear(&mut self) {
-        for &ptr in &self.events {
-            if !ptr.is_null() {
-                unsafe {
-                    match (*ptr).type_ {
-                        CLAP_EVENT_NOTE_ON
-                        | CLAP_EVENT_NOTE_OFF
-                        | CLAP_EVENT_NOTE_CHOKE
-                        | CLAP_EVENT_NOTE_END => {
-                            drop(Box::from_raw(ptr as *mut clap_event_note));
-                        }
-                        CLAP_EVENT_MIDI => {
-                            drop(Box::from_raw(ptr as *mut clap_event_midi));
-                        }
-                        CLAP_EVENT_PARAM_VALUE => {
-                            drop(Box::from_raw(ptr as *mut clap_event_param_value));
-                        }
-                        _ => {
-                            log::warn!("EventListOutput clear type {:?}", (*ptr).type_);
-                            drop(Box::from_raw(ptr as *mut clap_event_header));
-                        }
-                    }
-                }
-            }
-        }
         self.events.clear();
-    }
-}
-
-impl Drop for EventListOutput {
-    fn drop(&mut self) {
-        self.clear();
     }
 }

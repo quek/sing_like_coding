@@ -561,6 +561,7 @@ impl Plugin {
 
         let samples_per_delay =
             (context.sample_rate * 60.0) / (context.bpm * context.lpb as f64 * 256.0);
+        self.event_list_output.samples_per_delay = samples_per_delay;
         for i in 0..context.nevents_input {
             let event = &context.events_input[i];
             match &event.kind {
@@ -614,8 +615,22 @@ impl Plugin {
 
         context.constant_mask_out = audio_output.constant_mask;
 
-        // TODO out_events
         self.event_list_input.clear();
+
+        for event in self.event_list_output.events.iter() {
+            match event {
+                common::event::Event::NoteOn(key, velocity, delay) => {
+                    context.output_note_on(*key, *velocity, 0, *delay);
+                }
+                common::event::Event::NoteOff(key, delay) => {
+                    context.output_note_off(*key, 0, *delay);
+                }
+                common::event::Event::NoteAllOff => { /* nothing to do */ }
+                common::event::Event::ParamValue(_module_index, param_id, value, delay) => {
+                    context.output_param_value(*param_id, *value, *delay);
+                }
+            }
+        }
         self.event_list_output.clear();
 
         Ok(())

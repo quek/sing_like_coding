@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::Result;
 use arboard::Clipboard;
+use clap_sys::id::clap_id;
 use common::{
     dsp::{db_from_norm, db_to_norm},
     module::Module,
@@ -351,11 +352,11 @@ impl<'a> AppState<'a> {
             .and_then(|x| x.modules.get_mut(module_index))
     }
 
-    pub fn param_set(&mut self, module_index: usize, param: Param) -> Result<()> {
+    pub fn param_set(&mut self, module_index: usize, param_id: clap_id) -> Result<()> {
         self.sender_to_singer.send(SingerCommand::PointNew(
             self.cursor_track,
             module_index,
-            param,
+            param_id,
         ))?;
 
         Ok(())
@@ -649,22 +650,6 @@ impl<'a> AppState<'a> {
             return Ok(());
         }
         self.route = Route::ParamSelect;
-        // if let Some(LaneItem::Point(point)) = self.song.lane_item(&self.cursor_track) {
-        //     let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
-        //         Box::new(|state, command| {
-        //             match command {
-        //                 PluginToMain::DidParams(params) => {
-        //                     state.route = Route::ParamSelect(params);
-        //                 }
-        //                 _ => {}
-        //             }
-        //             Ok(())
-        //         });
-        //     self.send_to_plugin(
-        //         MainToPlugin::Params(self.cursor_track.track, point.module_index),
-        //         callback,
-        //     )?;
-        // }
         Ok(())
     }
 

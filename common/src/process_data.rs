@@ -4,7 +4,7 @@ use crate::dsp::linear_to_db;
 
 pub const MAX_CHANNELS: usize = 2;
 pub const MAX_FRAMES: usize = 2048;
-pub const MAX_EVENTS: usize = 64;
+pub const MAX_EVENTS: usize = 512;
 
 #[repr(C)]
 pub struct ProcessData {
@@ -17,6 +17,8 @@ pub struct ProcessData {
     pub steady_time: i64,
     pub nevents_input: usize,
     pub events_input: [Event; MAX_EVENTS],
+    pub nevents_output: usize,
+    pub events_output: [Event; MAX_EVENTS],
     pub buffer_in: [[f32; MAX_FRAMES]; MAX_CHANNELS],
     pub buffer_out: [[f32; MAX_FRAMES]; MAX_CHANNELS],
     pub constant_mask_in: u64,
@@ -63,6 +65,16 @@ impl ProcessData {
                 value: 0.0,
                 delay: 0,
             }; MAX_EVENTS],
+            nevents_output: 0,
+            events_output: [Event {
+                kind: EventKind::NoteOn,
+                key: 0,
+                velocity: 0.0,
+                channel: 0,
+                param_id: 0,
+                value: 0.0,
+                delay: 0,
+            }; MAX_EVENTS],
             buffer_in: [[0.0; MAX_FRAMES]; MAX_CHANNELS],
             buffer_out: [[0.0; MAX_FRAMES]; MAX_CHANNELS],
             constant_mask_in: 0,
@@ -91,7 +103,7 @@ impl ProcessData {
         }
     }
 
-    pub fn note_on(&mut self, key: i16, velocity: f64, channel: i16, delay: usize) {
+    pub fn input_note_on(&mut self, key: i16, velocity: f64, channel: i16, delay: usize) {
         if self.nevents_input == MAX_EVENTS {
             panic!();
         }
@@ -103,7 +115,7 @@ impl ProcessData {
         self.nevents_input += 1;
     }
 
-    pub fn note_off(&mut self, key: i16, channel: i16, delay: usize) {
+    pub fn input_note_off(&mut self, key: i16, channel: i16, delay: usize) {
         if self.nevents_input == MAX_EVENTS {
             panic!();
         }
@@ -115,7 +127,7 @@ impl ProcessData {
         self.nevents_input += 1;
     }
 
-    pub fn param_value(&mut self, param_id: clap_id, value: f64, delay: usize) {
+    pub fn input_param_value(&mut self, param_id: clap_id, value: f64, delay: usize) {
         if self.nevents_input == MAX_EVENTS {
             panic!();
         }
@@ -124,5 +136,40 @@ impl ProcessData {
         self.events_input[self.nevents_input].value = value;
         self.events_input[self.nevents_input].delay = delay;
         self.nevents_input += 1;
+    }
+
+    pub fn output_note_on(&mut self, key: i16, velocity: f64, channel: i16, delay: usize) {
+        if self.nevents_output == MAX_EVENTS {
+            panic!();
+        }
+        self.events_output[self.nevents_output].kind = EventKind::NoteOn;
+        self.events_output[self.nevents_output].key = key;
+        self.events_output[self.nevents_output].velocity = velocity;
+        self.events_output[self.nevents_output].channel = channel;
+        self.events_output[self.nevents_output].delay = delay;
+        self.nevents_output += 1;
+    }
+
+    pub fn output_note_off(&mut self, key: i16, channel: i16, delay: usize) {
+        if self.nevents_output == MAX_EVENTS {
+            panic!();
+        }
+        self.events_output[self.nevents_output].kind = EventKind::NoteOff;
+        self.events_output[self.nevents_output].key = key;
+        self.events_output[self.nevents_output].velocity = 0.0;
+        self.events_output[self.nevents_output].channel = channel;
+        self.events_output[self.nevents_output].delay = delay;
+        self.nevents_output += 1;
+    }
+
+    pub fn output_param_value(&mut self, param_id: clap_id, value: f64, delay: usize) {
+        if self.nevents_output == MAX_EVENTS {
+            panic!();
+        }
+        self.events_output[self.nevents_output].kind = EventKind::ParamValue;
+        self.events_output[self.nevents_output].param_id = param_id;
+        self.events_output[self.nevents_output].value = value;
+        self.events_output[self.nevents_output].delay = delay;
+        self.nevents_output += 1;
     }
 }

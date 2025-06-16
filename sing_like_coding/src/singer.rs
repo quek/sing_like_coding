@@ -19,13 +19,13 @@ use crate::{
 };
 
 use anyhow::Result;
+use clap_sys::id::clap_id;
 use common::{
     clap_manager::ClapManager,
     event::Event,
     module::Module,
-    plugin::param::Param,
     plugin_ref::PluginRef,
-    process_data::ProcessData,
+    process_data::{EventKind, ProcessData},
     process_track_context::ProcessTrackContext,
     protocol::MainToPlugin,
     shmem::{create_shared_memory, process_data_name, SONG_STATE_NAME},
@@ -47,7 +47,7 @@ pub enum SingerCommand {
     NoteOff(usize, i16, i16, f64, usize),
     PluginLoad(usize, String, String),
     PluginDelete(usize, usize),
-    PointNew(CursorTrack, usize, Param),
+    PointNew(CursorTrack, usize, clap_id),
     TrackAdd,
     TrackDelete(usize),
     TrackInsert(usize, Track),
@@ -381,6 +381,7 @@ impl Singer {
             }
         }
 
+        self.song_state_mut().param_track_index = usize::MAX;
         self.compute_song_state(if dummy_p { Some(&dummy) } else { None });
 
         self.steady_time += nframes as i64;
@@ -425,24 +426,22 @@ impl Singer {
         &mut self,
         cursor: CursorTrack,
         module_index: usize,
-        param: Param,
+        param_id: clap_id,
     ) -> Result<()> {
         let automation_params = &mut self.song.tracks[cursor.track].automation_params;
         let automation_params_index = if let Some(index) = automation_params
             .iter()
-            .position(|x| *x == (module_index, param.id))
+            .position(|x| *x == (module_index, param_id))
         {
             index
         } else {
-            automation_params.push((module_index, param.id));
+            automation_params.push((module_index, param_id));
             automation_params.len() - 1
         };
 
-        let value = (param.default_value.clamp(0.0, 1.0) * 255.0) as u8;
-
         let point = Point {
             automation_params_index,
-            value,
+            value: 0,
             delay: 0,
         };
         self.lane_item_set(cursor, LaneItem::Point(point))?;
@@ -549,6 +548,26 @@ impl Singer {
             } else {
                 for channel in 0..2 {
                     song_state.tracks[track_index].peaks[channel] = DB_MIN;
+                }
+            }
+        }
+
+        'top: for (track_index, context) in self.process_track_contexts.iter().enumerate() {
+            for (module_index, plugin) in context.plugins.iter().enumerate() {
+                let process_data = plugin.process_data();
+                for event_index in 0..process_data.nevents_output {
+                    let event = &process_data.events_input[event_index];
+                    if let common::process_data::Event {
+                        kind: EventKind::ParamValue,
+                        param_id,
+                        ..
+                    } = event
+                    {
+                        song_state.param_module_index = module_index;
+                        song_state.param_id = *param_id;
+                        song_state.param_track_index = track_index;
+                        break 'top;
+                    }
                 }
             }
         }
@@ -671,9 +690,9 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
 
                 singer.send_song()?;
             }
-            SingerCommand::PointNew(cursor, module_index, param) => {
+            SingerCommand::PointNew(cursor, module_index, param_id) => {
                 let mut singer = singer.lock().unwrap();
-                singer.point_new(cursor, module_index, param)?;
+                singer.point_new(cursor, module_index, param_id)?;
                 singer.send_song()?;
             }
             SingerCommand::NoteOn(track_index, key, _channel, velocity, delay) => {
