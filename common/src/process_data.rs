@@ -1,3 +1,5 @@
+use clap_sys::id::clap_id;
+
 use crate::dsp::linear_to_db;
 
 pub const MAX_CHANNELS: usize = 2;
@@ -28,6 +30,8 @@ pub struct Event {
     pub key: i16,
     pub velocity: f64,
     pub channel: i16,
+    pub param_id: clap_id,
+    pub value: f64,
     pub delay: usize,
 }
 
@@ -36,6 +40,7 @@ pub struct Event {
 pub enum EventKind {
     NoteOn = 1,
     NoteOff = 2,
+    ParamValue = 3,
 }
 
 impl ProcessData {
@@ -54,6 +59,8 @@ impl ProcessData {
                 key: 0,
                 velocity: 0.0,
                 channel: 0,
+                param_id: 0,
+                value: 0.0,
                 delay: 0,
             }; MAX_EVENTS],
             buffer_in: [[0.0; MAX_FRAMES]; MAX_CHANNELS],
@@ -104,6 +111,17 @@ impl ProcessData {
         self.events_input[self.nevents_input].key = key;
         self.events_input[self.nevents_input].velocity = 0.0;
         self.events_input[self.nevents_input].channel = channel;
+        self.events_input[self.nevents_input].delay = delay;
+        self.nevents_input += 1;
+    }
+
+    pub fn param_value(&mut self, param_id: clap_id, value: f64, delay: usize) {
+        if self.nevents_input == MAX_EVENTS {
+            panic!();
+        }
+        self.events_input[self.nevents_input].kind = EventKind::ParamValue;
+        self.events_input[self.nevents_input].param_id = param_id;
+        self.events_input[self.nevents_input].value = value;
         self.events_input[self.nevents_input].delay = delay;
         self.nevents_input += 1;
     }

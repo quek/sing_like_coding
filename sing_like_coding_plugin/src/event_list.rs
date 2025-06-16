@@ -1,9 +1,13 @@
 use std::{ffi::c_void, pin::Pin, ptr::null_mut};
 
-use clap_sys::events::{
-    clap_event_header, clap_event_midi, clap_event_note, clap_input_events, clap_output_events,
-    CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_END,
-    CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON,
+use clap_sys::{
+    events::{
+        clap_event_header, clap_event_midi, clap_event_note, clap_event_param_value,
+        clap_input_events, clap_output_events, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI,
+        CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_END, CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON,
+        CLAP_EVENT_PARAM_VALUE,
+    },
+    id::clap_id,
 };
 
 pub struct EventListInput {
@@ -45,7 +49,6 @@ impl EventListInput {
             .unwrap_or(std::ptr::null())
     }
 
-    #[allow(dead_code)]
     pub fn note_on(&mut self, key: i16, channel: i16, velocity: f64, time: u32) {
         let event = Box::new(clap_event_note {
             header: clap_event_header {
@@ -65,7 +68,6 @@ impl EventListInput {
             .push(Box::into_raw(event) as *const clap_event_header);
     }
 
-    #[allow(dead_code)]
     pub fn note_off(&mut self, key: i16, channel: i16, velocity: f64, time: u32) {
         let event = Box::new(clap_event_note {
             header: clap_event_header {
@@ -85,6 +87,27 @@ impl EventListInput {
             .push(Box::into_raw(event) as *const clap_event_header);
     }
 
+    pub fn param_value(&mut self, param_id: clap_id, value: f64, time: u32) {
+        let event = Box::new(clap_event_param_value {
+            header: clap_event_header {
+                size: size_of::<clap_event_note>() as u32,
+                time,
+                space_id: CLAP_CORE_EVENT_SPACE_ID,
+                type_: CLAP_EVENT_PARAM_VALUE,
+                flags: 0,
+            },
+            param_id,
+            cookie: null_mut(),
+            note_id: -1,
+            port_index: 0,
+            channel: 0,
+            key: 0,
+            value,
+        });
+        self.events
+            .push(Box::into_raw(event) as *const clap_event_header);
+    }
+
     pub fn clear(&mut self) {
         for &ptr in &self.events {
             if !ptr.is_null() {
@@ -98,6 +121,9 @@ impl EventListInput {
                         }
                         CLAP_EVENT_MIDI => {
                             drop(Box::from_raw(ptr as *mut clap_event_midi));
+                        }
+                        CLAP_EVENT_PARAM_VALUE => {
+                            drop(Box::from_raw(ptr as *mut clap_event_param_value));
                         }
                         _ => {
                             unreachable!();
@@ -163,6 +189,9 @@ impl EventListOutput {
                         }
                         CLAP_EVENT_MIDI => {
                             drop(Box::from_raw(ptr as *mut clap_event_midi));
+                        }
+                        CLAP_EVENT_PARAM_VALUE => {
+                            drop(Box::from_raw(ptr as *mut clap_event_param_value));
                         }
                         _ => {
                             log::warn!("EventListOutput clear type {:?}", (*ptr).type_);

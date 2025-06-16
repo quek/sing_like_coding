@@ -51,10 +51,10 @@ impl Track {
             let line_end = range.end / 0x100;
             for line in line_start..=line_end {
                 for (lane_index, lane) in self.lanes.iter().enumerate() {
-                    if let Some((line, note)) = lane.items.get_key_value(&line) {
-                        match note {
+                    if let Some((line, item)) = lane.items.get_key_value(&line) {
+                        let time = *line * 0x100 + item.delay() as usize;
+                        match item {
                             LaneItem::Note(note) => {
-                                let time = *line * 0x100 + note.delay as usize;
                                 if range.contains(&time) {
                                     let delay = time - range.start;
                                     if let Some(Some(key)) = context.on_keys.get(lane_index).take()
@@ -74,7 +74,16 @@ impl Track {
                                     }
                                 }
                             }
-                            LaneItem::Point(_point) => {}
+                            LaneItem::Point(point) => {
+                                if range.contains(&time) {
+                                    let delay = time - range.start;
+                                    context.event_list_input.push(Event::ParamValue(
+                                        point.param_id,
+                                        point.value as f64 / 255.0,
+                                        delay,
+                                    ))
+                                }
+                            }
                         }
                     }
                 }
@@ -102,6 +111,9 @@ impl Track {
                     for key in context.on_keys.drain(..).filter_map(|x| x) {
                         data.note_off(key, 0, 0);
                     }
+                }
+                Event::ParamValue(param_id, value, delay) => {
+                    data.param_value(param_id, value, delay)
                 }
             }
         }

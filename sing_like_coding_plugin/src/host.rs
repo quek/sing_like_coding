@@ -57,7 +57,7 @@ impl Host {
         self.plugin.state_load(state)
     }
 
-    pub fn params(&self) -> Result<Vec<Param>> {
+    pub fn params(&mut self) -> Result<Vec<Param>> {
         self.plugin.params()
     }
 

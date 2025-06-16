@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     ffi::{c_char, c_void, CStr, CString},
     path::Path,
     pin::Pin,
@@ -61,7 +62,7 @@ pub struct Plugin {
     pub plugin: Option<*const clap_plugin>,
     gui: Option<*const clap_plugin_gui>,
     state: Option<*const clap_plugin_state>,
-    params: Option<*const clap_plugin_params>,
+    ext_params: Option<*const clap_plugin_params>,
     pub gui_open_p: bool,
     window_handler: Option<*mut c_void>,
     process_start_p: bool,
@@ -74,6 +75,7 @@ pub struct Plugin {
     host_log: clap_host_log,
     host_params: clap_host_params,
     hwnd: isize,
+    params: BTreeMap<clap_id, Param>,
 }
 
 pub const NAME: &CStr = cstr!("Sing Like Coding");
@@ -129,7 +131,7 @@ impl Plugin {
             plugin: None,
             gui: None,
             state: None,
-            params: None,
+            ext_params: None,
             gui_open_p: false,
             window_handler: None,
             process_start_p: false,
@@ -142,6 +144,7 @@ impl Plugin {
             host_log,
             host_params,
             hwnd,
+            params: Default::default(),
         });
 
         let ptr = this.as_mut().get_mut() as *mut _ as *mut c_void;
@@ -344,7 +347,7 @@ impl Plugin {
             let params = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_PARAMS.as_ptr())
                 as *const clap_plugin_params;
             if !params.is_null() {
-                self.params = Some(params);
+                self.ext_params = Some(params);
             }
 
             self.plugin = Some(plugin);
@@ -456,17 +459,17 @@ impl Plugin {
         Ok(())
     }
 
-    pub fn params(&self) -> Result<Vec<Param>> {
+    pub fn params(&mut self) -> Result<Vec<Param>> {
         unsafe {
             let plugin = &*(self.plugin.unwrap());
-            let params = &*self.params.unwrap();
+            let ext_params = &*self.ext_params.unwrap();
 
-            let count = params.count.unwrap()(plugin);
-            let mut result = Vec::new();
+            let count = ext_params.count.unwrap()(plugin);
+            self.params.clear();
 
             for param_index in 0..count {
                 let mut param_info: clap_param_info = std::mem::zeroed();
-                if !params.get_info.unwrap()(plugin, param_index, &mut param_info) {
+                if !ext_params.get_info.unwrap()(plugin, param_index, &mut param_info) {
                     continue;
                 }
 
@@ -478,21 +481,24 @@ impl Plugin {
                     .into_owned();
 
                 let mut value = 0.0;
-                params.get_value.unwrap()(plugin, param_info.id, &mut value);
+                ext_params.get_value.unwrap()(plugin, param_info.id, &mut value);
 
-                result.push(Param {
-                    id: param_info.id,
-                    flags: param_info.flags,
-                    name,
-                    module,
-                    min_value: param_info.min_value,
-                    max_value: param_info.max_value,
-                    default_value: param_info.default_value,
-                    value,
-                });
+                self.params.insert(
+                    param_info.id,
+                    Param {
+                        id: param_info.id,
+                        flags: param_info.flags,
+                        name,
+                        module,
+                        min_value: param_info.min_value,
+                        max_value: param_info.max_value,
+                        default_value: param_info.default_value,
+                        value,
+                    },
+                );
             }
 
-            Ok(result)
+            Ok(self.params.values().cloned().collect::<Vec<_>>())
         }
     }
 
@@ -573,6 +579,15 @@ impl Plugin {
                         event.velocity,
                         (event.delay as f64 * samples_per_delay).round() as u32,
                     );
+                }
+                EventKind::ParamValue => {
+                    if self.params.contains_key(&event.param_id) {
+                        self.event_list_input.param_value(
+                            event.param_id,
+                            event.value,
+                            (event.delay as f64 * samples_per_delay).round() as u32,
+                        );
+                    }
                 }
             }
         }
