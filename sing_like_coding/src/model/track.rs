@@ -37,7 +37,61 @@ impl Track {
         }
     }
 
-    pub fn compute_midi(&self, context: &mut ProcessTrackContext) {
+    pub fn process(&self, context: &mut ProcessTrackContext) -> Result<()> {
+        self.compute_midi(context);
+        let module_len = self.modules.len();
+        for module_index in 0..module_len {
+            self.process_module(context, module_index)?;
+        }
+
+        Ok(())
+    }
+
+    fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
+        let data = context.plugins[module_index].process_data_mut();
+        for event in context.event_list_input.iter() {
+            match event {
+                Event::NoteOn(key, velocity, delay) => data.note_on(*key, *velocity, 0, *delay),
+                Event::NoteOff(key, delay) => data.note_off(*key, 0, *delay),
+                Event::NoteAllOff => {
+                    for key in context.on_keys.drain(..).filter_map(|x| x) {
+                        data.note_off(key, 0, 0);
+                    }
+                }
+                Event::ParamValue(mindex, param_id, value, delay) => {
+                    if *mindex == module_index {
+                        data.param_value(*param_id, *value, *delay)
+                    }
+                }
+            }
+        }
+
+        if module_index > 0 {
+            let (left, right) = context.plugins.split_at_mut(module_index);
+            let prev = &mut left[module_index - 1];
+            let curr = &mut right[0];
+
+            let constant_mask = prev.process_data_mut().constant_mask_out;
+            curr.process_data_mut().constant_mask_in = constant_mask;
+
+            let buffer_out = &prev.process_data_mut().buffer_out;
+            let buffer_in = &mut curr.process_data_mut().buffer_in;
+
+            for ch in 0..context.nchannels {
+                if (constant_mask & (1 << ch)) == 0 {
+                    buffer_in[ch].copy_from_slice(&buffer_out[ch]);
+                } else {
+                    buffer_in[ch][0] = buffer_out[ch][0];
+                }
+            }
+        }
+
+        context.plugins[module_index].process()?;
+
+        Ok(())
+    }
+
+    fn compute_midi(&self, context: &mut ProcessTrackContext) {
         if !context.play_p {
             return;
         }
@@ -95,59 +149,5 @@ impl Track {
                 }
             }
         }
-    }
-
-    pub fn process(&self, context: &mut ProcessTrackContext) -> Result<()> {
-        self.compute_midi(context);
-        let module_len = self.modules.len();
-        for module_index in 0..module_len {
-            self.process_module(context, module_index)?;
-        }
-
-        Ok(())
-    }
-
-    fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
-        let data = context.plugins[module_index].process_data_mut();
-        for event in context.event_list_input.drain(..) {
-            match event {
-                Event::NoteOn(key, velocity, delay) => data.note_on(key, velocity, 0, delay),
-                Event::NoteOff(key, delay) => data.note_off(key, 0, delay),
-                Event::NoteAllOff => {
-                    for key in context.on_keys.drain(..).filter_map(|x| x) {
-                        data.note_off(key, 0, 0);
-                    }
-                }
-                Event::ParamValue(mindex, param_id, value, delay) => {
-                    if mindex == module_index {
-                        data.param_value(param_id, value, delay)
-                    }
-                }
-            }
-        }
-
-        if module_index > 0 {
-            let (left, right) = context.plugins.split_at_mut(module_index);
-            let prev = &mut left[module_index - 1];
-            let curr = &mut right[0];
-
-            let constant_mask = prev.process_data_mut().constant_mask_out;
-            curr.process_data_mut().constant_mask_in = constant_mask;
-
-            let buffer_out = &prev.process_data_mut().buffer_out;
-            let buffer_in = &mut curr.process_data_mut().buffer_in;
-
-            for ch in 0..context.nchannels {
-                if (constant_mask & (1 << ch)) == 0 {
-                    buffer_in[ch].copy_from_slice(&buffer_out[ch]);
-                } else {
-                    buffer_in[ch][0] = buffer_out[ch][0];
-                }
-            }
-        }
-
-        context.plugins[module_index].process()?;
-
-        Ok(())
     }
 }
