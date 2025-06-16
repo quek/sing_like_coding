@@ -4,7 +4,7 @@ use crate::dsp::linear_to_db;
 
 pub const MAX_CHANNELS: usize = 2;
 pub const MAX_FRAMES: usize = 2048;
-pub const MAX_EVENTS: usize = 512;
+pub const MAX_EVENTS: usize = 128;
 
 #[repr(C)]
 pub struct ProcessData {
@@ -95,6 +95,7 @@ impl ProcessData {
 
     pub fn prepare(&mut self) {
         self.nevents_input = 0;
+        self.nevents_output = 0;
         for channel in 0..MAX_CHANNELS {
             self.buffer_in[channel][0] = 0.0;
             self.buffer_out[channel][0] = 0.0;
