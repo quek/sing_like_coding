@@ -698,6 +698,14 @@ impl<'a> AppState<'a> {
             let json = serde_json::to_string_pretty(&itemss)?;
             let mut clipboard = Clipboard::new().unwrap();
             clipboard.set_text(&json)?;
+        } else if let Some(lane_item) = self.song.lane_item(&self.cursor_track) {
+            let json = serde_json::to_string_pretty(&vec![vec![Some(lane_item)]])?;
+            let mut clipboard = Clipboard::new().unwrap();
+            clipboard.set_text(&json)?;
+            if !copy_p {
+                self.sender_to_singer
+                    .send(SingerCommand::LaneItemDelete(self.cursor_track.clone()))?;
+            }
         }
 
         Ok(())
