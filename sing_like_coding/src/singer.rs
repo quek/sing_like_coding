@@ -556,7 +556,7 @@ impl Singer {
             for (module_index, plugin) in context.plugins.iter().enumerate() {
                 let process_data = plugin.process_data();
                 for event_index in 0..process_data.nevents_output {
-                    let event = &process_data.events_input[event_index];
+                    let event = &process_data.events_output[event_index];
                     if let common::process_data::Event {
                         kind: EventKind::ParamValue,
                         param_id,

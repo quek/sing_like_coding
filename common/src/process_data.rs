@@ -26,7 +26,7 @@ pub struct ProcessData {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Event {
     pub kind: EventKind,
     pub key: i16,
@@ -38,7 +38,7 @@ pub struct Event {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum EventKind {
     NoteOn = 1,
     NoteOff = 2,
