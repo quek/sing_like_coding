@@ -1,7 +1,8 @@
 use std::{path::Path, pin::Pin, sync::mpsc::Sender};
 
+use anyhow::Result;
 use common::{
-    plugin::description::Description,
+    plugin::{description::Description, param::Param},
     process_data::ProcessData,
     shmem::{
         event_quit_name, event_request_name, event_response_name, open_shared_memory,
@@ -32,7 +33,7 @@ impl Host {
         sender: Sender<PluginPtr>,
         gui_open_p: bool,
         hwnd: isize,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         let (event_quit_name, _x) = event_quit_name(id);
         let event_quit =
             unsafe { CreateEventA(None, false.into(), false.into(), event_quit_name)? };
@@ -52,21 +53,25 @@ impl Host {
         Ok(Self { event_quit, plugin })
     }
 
-    pub fn load(&mut self, state: Vec<u8>) -> anyhow::Result<()> {
+    pub fn load(&mut self, state: Vec<u8>) -> Result<()> {
         self.plugin.state_load(state)
     }
 
-    pub fn unload(&mut self) -> anyhow::Result<()> {
+    pub fn params(&self) -> Result<Vec<Param>> {
+        self.plugin.params()
+    }
+
+    pub fn unload(&mut self) -> Result<()> {
         unsafe { SetEvent(self.event_quit) }?;
         Ok(())
     }
 
-    pub fn save(&mut self) -> anyhow::Result<Vec<u8>> {
+    pub fn save(&mut self) -> Result<Vec<u8>> {
         self.plugin.state_save()
     }
 }
 
-async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> anyhow::Result<()> {
+async fn process_loop(id: usize, plugin_ptr: PluginPtr) -> Result<()> {
     let shmem = open_shared_memory::<ProcessData>(&process_data_name(id))?;
     let process_data: &mut ProcessData = unsafe { &mut *(shmem.as_ptr() as *mut ProcessData) };
 

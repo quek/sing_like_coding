@@ -111,6 +111,13 @@ impl Manager {
                         }
                         self.sender_to_loop.send(PluginToMain::DidGuiOpen)?;
                     }
+                    MainToPlugin::Params(track_index, module_index) => {
+                        let mut params = vec![];
+                        if let Some(host) = self.host(track_index, module_index) {
+                            params = host.params()?;
+                        }
+                        self.sender_to_loop.send(PluginToMain::DidParams(params))?;
+                    }
                     MainToPlugin::StateLoad(track_index, module_index, state) => {
                         if let Some(host) = self.host(track_index, module_index) {
                             host.load(state)?;

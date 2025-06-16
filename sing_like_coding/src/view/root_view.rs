@@ -1,15 +1,18 @@
 use anyhow::Result;
+use common::plugin::param::Param;
 use eframe::egui::{ahash::HashMap, Key};
 
 use crate::{
     app_state::{AppState, UiCommand},
     device::Device,
     singer::SingerCommand,
+    view::param_select_view::ReturnState,
 };
 
 use super::{
     command_view::CommandView,
     main_view::MainView,
+    param_select_view::ParamSelectView,
     plugin_select_view::PluginSelectView,
     shortcut_key::{shortcut_key, Modifier},
 };
@@ -19,12 +22,14 @@ pub enum Route {
     Track,
     Command,
     PluginSelect,
+    ParamSelect(Vec<Param>),
 }
 
 pub struct RootView {
     shortcut_map: HashMap<(Modifier, Key), UiCommand>,
     main_view: MainView,
     command_view: CommandView,
+    param_select_view: Option<ParamSelectView>,
     plugin_select_view: Option<PluginSelectView>,
 }
 
@@ -43,6 +48,7 @@ impl RootView {
             shortcut_map,
             main_view: MainView::new(),
             command_view: CommandView::new(),
+            param_select_view: None,
             plugin_select_view: None,
         }
     }
@@ -61,17 +67,29 @@ impl RootView {
         match &state.route {
             Route::Track => self.main_view.view(gui_context, state, device)?,
             Route::Command => self.command_view.view(gui_context, state)?,
-            Route::PluginSelect => {
-                if self.plugin_select_view.is_none() {
-                    self.plugin_select_view = Some(PluginSelectView::new());
+            Route::ParamSelect(params) => {
+                let param_select_view = self
+                    .param_select_view
+                    .get_or_insert_with(|| ParamSelectView::new(params.clone()));
+                match param_select_view.view(gui_context)? {
+                    ReturnState::Selected(param) => {
+                        self.param_select_view = None;
+                        state.route = Route::Track;
+                        state.param_set(param);
+                    }
+                    ReturnState::Continue => {}
+                    ReturnState::Cancel => {
+                        self.param_select_view = None;
+                        state.route = Route::Track;
+                    }
                 }
-
-                if let Some(description) = self
+            }
+            Route::PluginSelect => {
+                let plugin_select_view = self
                     .plugin_select_view
-                    .as_mut()
-                    .unwrap()
-                    .view(gui_context)?
-                {
+                    .get_or_insert_with(|| PluginSelectView::new());
+
+                if let Some(description) = plugin_select_view.view(gui_context)? {
                     state.sender_to_singer.send(SingerCommand::PluginLoad(
                         state.cursor_track.track,
                         description.id,

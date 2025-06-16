@@ -20,7 +20,6 @@ impl Lane {
         self.items.get(&line)
     }
 
-    #[allow(dead_code)]
     pub fn item_mut(&mut self, line: usize) -> Option<&mut LaneItem> {
         self.items.get_mut(&line)
     }

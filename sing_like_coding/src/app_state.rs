@@ -13,6 +13,7 @@ use arboard::Clipboard;
 use common::{
     dsp::{db_from_norm, db_to_norm},
     module::Module,
+    plugin::param::Param,
     protocol::{MainToPlugin, PluginToMain},
     shmem::{open_shared_memory, SONG_STATE_NAME},
 };
@@ -64,6 +65,7 @@ pub enum TrackCommand {
 }
 
 pub enum LaneCommand {
+    AutomationParamSelect,
     Copy,
     Cut,
     CursorDown,
@@ -344,6 +346,12 @@ impl<'a> AppState<'a> {
             .and_then(|x| x.modules.get_mut(module_index))
     }
 
+    pub fn param_set(&mut self, param: Param) {
+        if let Some(LaneItem::Point(point)) = self.song.lane_item_mut(&self.cursor_track) {
+            point.param_id = param.id;
+        }
+    }
+
     pub fn receive_from_singer(&mut self) -> Result<()> {
         while let Ok(command) = self.receiver_from_singer.try_recv() {
             match command {
@@ -446,6 +454,9 @@ impl<'a> AppState<'a> {
             UiCommand::LaneAdd => self
                 .sender_to_singer
                 .send(SingerCommand::LaneAdd(self.cursor_track.track))?,
+            UiCommand::Lane(LaneCommand::AutomationParamSelect) => {
+                self.automation_param_select()?
+            }
             UiCommand::Lane(LaneCommand::Copy) => self.lane_items_copy()?,
             UiCommand::Lane(LaneCommand::Cut) => self.late_items_cut()?,
             UiCommand::Lane(LaneCommand::Paste) => self.lane_items_paste()?,
@@ -622,6 +633,26 @@ impl<'a> AppState<'a> {
             }
         }
         self.flatten_lane_index_max = self.flatten_lane_index_max.saturating_sub(1);
+    }
+
+    fn automation_param_select(&mut self) -> Result<()> {
+        if let Some(LaneItem::Point(point)) = self.song.lane_item(&self.cursor_track) {
+            let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
+                Box::new(|state, command| {
+                    match command {
+                        PluginToMain::DidParams(params) => {
+                            state.route = Route::ParamSelect(params);
+                        }
+                        _ => {}
+                    }
+                    Ok(())
+                });
+            self.send_to_plugin(
+                MainToPlugin::Params(self.cursor_track.track, point.module_index),
+                callback,
+            )?;
+        }
+        Ok(())
     }
 
     fn lane_items_copy(&mut self) -> Result<()> {
@@ -903,9 +934,8 @@ impl<'a> AppState<'a> {
                 ))
                 .unwrap();
 
-            match lane_item {
-                LaneItem::Note(Note { off: true, .. }) => (),
-                _ => self.lane_item_last = lane_item,
+            if let LaneItem::Note(Note { off: false, .. }) = lane_item {
+                self.lane_item_last = lane_item;
             }
         }
 

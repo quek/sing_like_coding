@@ -26,8 +26,8 @@ use clap_sys::{
             CLAP_LOG_INFO, CLAP_LOG_WARNING,
         },
         params::{
-            clap_host_params, clap_param_clear_flags, clap_param_rescan_flags, clap_plugin_params,
-            CLAP_EXT_PARAMS,
+            clap_host_params, clap_param_clear_flags, clap_param_info, clap_param_rescan_flags,
+            clap_plugin_params, CLAP_EXT_PARAMS,
         },
         state::{clap_plugin_state, CLAP_EXT_STATE},
     },
@@ -40,6 +40,7 @@ use clap_sys::{
 };
 use common::{
     cstr,
+    plugin::param::Param,
     process_data::{EventKind, ProcessData},
 };
 use libloading::{Library, Symbol};
@@ -453,6 +454,46 @@ impl Plugin {
             destroy_handler(self.window_handler.take().unwrap());
         }
         Ok(())
+    }
+
+    pub fn params(&self) -> Result<Vec<Param>> {
+        unsafe {
+            let plugin = &*(self.plugin.unwrap());
+            let params = &*self.params.unwrap();
+
+            let count = params.count.unwrap()(plugin);
+            let mut result = Vec::new();
+
+            for param_index in 0..count {
+                let mut param_info: clap_param_info = std::mem::zeroed();
+                if !params.get_info.unwrap()(plugin, param_index, &mut param_info) {
+                    continue;
+                }
+
+                let name = CStr::from_ptr(param_info.name.as_ptr())
+                    .to_string_lossy()
+                    .into_owned();
+                let module = CStr::from_ptr(param_info.module.as_ptr())
+                    .to_string_lossy()
+                    .into_owned();
+
+                let mut value = 0.0;
+                params.get_value.unwrap()(plugin, param_index, &mut value);
+
+                result.push(Param {
+                    id: param_info.id,
+                    flags: param_info.flags,
+                    name,
+                    module,
+                    min_value: param_info.min_value,
+                    max_value: param_info.max_value,
+                    default_value: param_info.default_value,
+                    value,
+                });
+            }
+
+            Ok(result)
+        }
     }
 
     pub fn process(&mut self, context: &mut ProcessData) -> Result<()> {
