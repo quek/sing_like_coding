@@ -20,7 +20,7 @@ impl Lane {
         self.items.get(&line)
     }
 
-    pub fn item_mut(&mut self, line: usize) -> Option<&mut LaneItem> {
-        self.items.get_mut(&line)
-    }
+    // pub fn item_mut(&mut self, line: usize) -> Option<&mut LaneItem> {
+    //     self.items.get_mut(&line)
+    // }
 }

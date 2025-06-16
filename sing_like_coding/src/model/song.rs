@@ -50,10 +50,10 @@ impl Song {
             .and_then(|x| x.item(cursor.line))
     }
 
-    pub fn lane_item_mut(&mut self, cursor: &CursorTrack) -> Option<&mut LaneItem> {
-        self.tracks
-            .get_mut(cursor.track)
-            .and_then(|x| x.lanes.get_mut(cursor.lane))
-            .and_then(|x| x.item_mut(cursor.line))
-    }
+    // pub fn lane_item_mut(&mut self, cursor: &CursorTrack) -> Option<&mut LaneItem> {
+    //     self.tracks
+    //         .get_mut(cursor.track)
+    //         .and_then(|x| x.lanes.get_mut(cursor.lane))
+    //         .and_then(|x| x.item_mut(cursor.line))
+    // }
 }

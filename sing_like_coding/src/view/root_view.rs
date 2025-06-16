@@ -75,7 +75,7 @@ impl RootView {
                     ReturnState::Selected(param) => {
                         self.param_select_view = None;
                         state.route = Route::Track;
-                        state.param_set(param);
+                        state.param_set(param)?;
                     }
                     ReturnState::Continue => {}
                     ReturnState::Cancel => {

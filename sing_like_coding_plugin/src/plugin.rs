@@ -478,7 +478,7 @@ impl Plugin {
                     .into_owned();
 
                 let mut value = 0.0;
-                params.get_value.unwrap()(plugin, param_index, &mut value);
+                params.get_value.unwrap()(plugin, param_info.id, &mut value);
 
                 result.push(Param {
                     id: param_info.id,

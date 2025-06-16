@@ -346,10 +346,16 @@ impl<'a> AppState<'a> {
             .and_then(|x| x.modules.get_mut(module_index))
     }
 
-    pub fn param_set(&mut self, param: Param) {
-        if let Some(LaneItem::Point(point)) = self.song.lane_item_mut(&self.cursor_track) {
+    pub fn param_set(&mut self, param: Param) -> Result<()> {
+        if let Some(LaneItem::Point(point)) = self.song.lane_item(&self.cursor_track) {
+            let mut point = point.clone();
             point.param_id = param.id;
+            self.sender_to_singer.send(SingerCommand::LaneItem(
+                self.cursor_track,
+                LaneItem::Point(point),
+            ))?;
         }
+        Ok(())
     }
 
     pub fn receive_from_singer(&mut self) -> Result<()> {
