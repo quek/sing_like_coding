@@ -719,7 +719,7 @@ impl MainView {
                             })
                             // point を他のトラックに移動した場合など
                             .unwrap_or("---".to_string());
-                        format!("{} {:02X} {:02X}", param, poin t.value, point.delay)
+                        format!("{} {:02X} {:02X}", param, point.value, point.delay)
                     }
                     None => "--- -- --".to_string(),
                 };
