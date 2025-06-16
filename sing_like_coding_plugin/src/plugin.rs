@@ -59,7 +59,7 @@ mod window;
 pub struct Plugin {
     clap_host: clap_host,
     lib: Option<Library>,
-    pub plugin: Option<*const clap_plugin>,
+    pub plugin: *const clap_plugin,
     gui: Option<*const clap_plugin_gui>,
     state: Option<*const clap_plugin_state>,
     ext_params: Option<*const clap_plugin_params>,
@@ -128,7 +128,7 @@ impl Plugin {
         let mut this = Box::pin(Self {
             clap_host,
             lib: None,
-            plugin: None,
+            plugin: null(),
             gui: None,
             state: None,
             ext_params: None,
@@ -350,7 +350,7 @@ impl Plugin {
                 self.ext_params = Some(params);
             }
 
-            self.plugin = Some(plugin);
+            self.plugin = clap_plugin;
 
             self.params().unwrap();
         }
@@ -385,7 +385,7 @@ impl Plugin {
             return Ok(());
         }
         log::debug!("gui_open did gui_available");
-        let plugin = unsafe { &*(self.plugin.unwrap()) };
+        let plugin = unsafe { &*self.plugin };
         let gui = unsafe { &*self.gui.unwrap() };
         unsafe {
             if !gui.is_api_supported.unwrap()(plugin, CLAP_WINDOW_API_WIN32.as_ptr(), false) {
@@ -451,7 +451,7 @@ impl Plugin {
             return Ok(());
         }
         self.gui_open_p = false;
-        let plugin = unsafe { &*(self.plugin.unwrap()) };
+        let plugin = unsafe { &*self.plugin };
         let gui = unsafe { &*self.gui.unwrap() };
         unsafe {
             gui.hide.unwrap()(plugin);
@@ -463,7 +463,7 @@ impl Plugin {
 
     pub fn params(&mut self) -> Result<Vec<Param>> {
         unsafe {
-            let plugin = &*(self.plugin.unwrap());
+            let plugin = &*self.plugin;
             let ext_params = &*self.ext_params.unwrap();
 
             let count = ext_params.count.unwrap()(plugin);
@@ -607,7 +607,7 @@ impl Plugin {
             in_events,
             out_events,
         };
-        let plugin = unsafe { &*(self.plugin.unwrap()) };
+        let plugin = unsafe { &*self.plugin };
         // log::debug!("before process");
         let status = unsafe { plugin.process.unwrap()(plugin, &prc) };
         // log::debug!("after process {status}");
@@ -642,7 +642,7 @@ impl Plugin {
         if self.process_start_p {
             return Ok(());
         }
-        let plugin = unsafe { &*(self.plugin.unwrap()) };
+        let plugin = unsafe { &*self.plugin };
         // let sample_rate = self.supported_stream_config.sample_rate().0 as f64;
         // min_frames_count が 0 だと activate できないみたい
         // let (min_frames_count, max_frames_count): (u32, u32) =
@@ -664,7 +664,7 @@ impl Plugin {
         if !self.process_start_p {
             return Ok(());
         }
-        let plugin = unsafe { &*(self.plugin.unwrap()) };
+        let plugin = unsafe { &*self.plugin };
         unsafe {
             plugin.stop_processing.unwrap()(plugin);
             plugin.deactivate.unwrap()(plugin);
@@ -677,7 +677,7 @@ impl Plugin {
         let istream = IStream::new(state);
         if let Some(state) = &self.state {
             unsafe {
-                let plugin = &*(self.plugin.unwrap());
+                let plugin = &*self.plugin;
                 let state = &**state;
                 state.load.unwrap()(plugin, istream.as_raw());
             }
@@ -689,7 +689,7 @@ impl Plugin {
         let ostream = OStream::new();
         if let Some(state) = &self.state {
             unsafe {
-                let plugin = &*(self.plugin.unwrap());
+                let plugin = &*self.plugin;
                 let state = &**state;
                 state.save.unwrap()(plugin, ostream.as_raw());
             }
@@ -702,8 +702,8 @@ impl Drop for Plugin {
     fn drop(&mut self) {
         let _ = self.gui_close();
         let _ = self.stop();
-        if let Some(plugin) = self.plugin {
-            let plugin = unsafe { &*plugin };
+        if !self.plugin.is_null() {
+            let plugin = unsafe { &*self.plugin };
             unsafe { plugin.destroy.unwrap()(plugin) };
         }
 

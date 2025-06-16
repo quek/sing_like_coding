@@ -154,7 +154,7 @@ impl Manager {
 
             if let Ok(plugin_ptr) = self.receiver_from_plugin.try_recv() {
                 let plugin = unsafe { plugin_ptr.as_mut() };
-                let plugin = unsafe { &*plugin.plugin.unwrap() };
+                let plugin = unsafe { &*plugin.plugin };
                 log::debug!("will on_main_thread");
                 unsafe { plugin.on_main_thread.unwrap()(plugin) };
                 log::debug!("did on_main_thread");
