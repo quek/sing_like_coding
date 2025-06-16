@@ -351,6 +351,8 @@ impl Plugin {
             }
 
             self.plugin = Some(plugin);
+
+            self.params().unwrap();
         }
     }
 
