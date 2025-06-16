@@ -45,6 +45,7 @@ pub enum SingerCommand {
     NoteOn(usize, i16, i16, f64, usize),
     #[allow(dead_code)]
     NoteOff(usize, i16, i16, f64, usize),
+    PluginLatency(usize, u32),
     PluginLoad(usize, String, String),
     PluginDelete(usize, usize),
     PointNew(CursorTrack, usize, clap_id),
@@ -163,6 +164,20 @@ impl Singer {
         {
             lane.items.insert(cursor.line, lane_item);
         }
+        Ok(())
+    }
+
+    pub fn plugin_latency_set(&mut self, id: usize, latency: u32) -> Result<()> {
+        if let Some(plugin_ref) = self
+            .process_track_contexts
+            .iter_mut()
+            .flat_map(|c| c.plugins.iter_mut())
+            .find(|plugin_ref| plugin_ref.id == id)
+        {
+            plugin_ref.latency = latency;
+            dbg!(plugin_ref.latency);
+        }
+
         Ok(())
     }
 
@@ -674,6 +689,11 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                     lane.items.remove(&cursor.line);
                     singer.send_song()?;
                 }
+            }
+            SingerCommand::PluginLatency(id, latency) => {
+                let mut singer = singer.lock().unwrap();
+                singer.plugin_latency_set(id, latency)?;
+                singer.send_song()?;
             }
             SingerCommand::PluginLoad(track_index, clap_plugin_id, name) => {
                 let mut singer = singer.lock().unwrap();

@@ -83,15 +83,12 @@ impl Manager {
                             gui_open_p,
                             self.hwnd,
                         )?;
-                        loop {
-                            if self.hosts.len() > track_index {
-                                break;
-                            }
-                            self.hosts.push(vec![]);
-                        }
+                        let latency = host.latency();
+                        self.hosts.resize_with(track_index + 1, || vec![]);
                         self.hosts[track_index].push(host);
 
-                        self.sender_to_loop.send(PluginToMain::DidLoad)?;
+                        self.sender_to_loop
+                            .send(PluginToMain::DidLoad(id, latency))?;
                     }
                     MainToPlugin::Unload(track_index, module_index) => {
                         if let Some(host) = self.host(track_index, module_index) {

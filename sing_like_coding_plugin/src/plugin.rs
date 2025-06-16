@@ -21,7 +21,7 @@ use clap_sys::{
             clap_host_gui, clap_plugin_gui, clap_window, clap_window_handle, CLAP_EXT_GUI,
             CLAP_WINDOW_API_WIN32,
         },
-        latency::{clap_host_latency, CLAP_EXT_LATENCY},
+        latency::{clap_host_latency, clap_plugin_latency, CLAP_EXT_LATENCY},
         log::{
             clap_host_log, clap_log_severity, CLAP_EXT_LOG, CLAP_LOG_DEBUG, CLAP_LOG_ERROR,
             CLAP_LOG_INFO, CLAP_LOG_WARNING,
@@ -60,9 +60,10 @@ pub struct Plugin {
     clap_host: clap_host,
     lib: Option<Library>,
     pub plugin: *const clap_plugin,
-    gui: Option<*const clap_plugin_gui>,
-    state: Option<*const clap_plugin_state>,
+    ext_gui: Option<*const clap_plugin_gui>,
+    ext_latency: Option<*const clap_plugin_latency>,
     ext_params: Option<*const clap_plugin_params>,
+    ext_state: Option<*const clap_plugin_state>,
     pub gui_open_p: bool,
     window_handler: Option<*mut c_void>,
     process_start_p: bool,
@@ -129,9 +130,10 @@ impl Plugin {
             clap_host,
             lib: None,
             plugin: null(),
-            gui: None,
-            state: None,
+            ext_gui: None,
+            ext_latency: None,
             ext_params: None,
+            ext_state: None,
             gui_open_p: false,
             window_handler: None,
             process_start_p: false,
@@ -335,19 +337,25 @@ impl Plugin {
             let gui = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_GUI.as_ptr())
                 as *const clap_plugin_gui;
             if !gui.is_null() {
-                self.gui = Some(gui);
+                self.ext_gui = Some(gui);
             }
 
-            let state = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_STATE.as_ptr())
-                as *const clap_plugin_state;
-            if !state.is_null() {
-                self.state = Some(state);
+            let latency = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_LATENCY.as_ptr())
+                as *const clap_plugin_latency;
+            if !latency.is_null() {
+                self.ext_latency = Some(latency);
             }
 
             let params = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_PARAMS.as_ptr())
                 as *const clap_plugin_params;
             if !params.is_null() {
                 self.ext_params = Some(params);
+            }
+
+            let state = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_STATE.as_ptr())
+                as *const clap_plugin_state;
+            if !state.is_null() {
+                self.ext_state = Some(state);
             }
 
             self.plugin = clap_plugin;
@@ -357,10 +365,10 @@ impl Plugin {
     }
 
     pub fn gui_available(&self) -> bool {
-        if self.gui.is_none() {
+        if self.ext_gui.is_none() {
             return false;
         }
-        let gui = unsafe { &*self.gui.unwrap() };
+        let gui = unsafe { &*self.ext_gui.unwrap() };
         gui.is_api_supported.is_some()
             && gui.get_preferred_api.is_some()
             && gui.create.is_some()
@@ -386,7 +394,7 @@ impl Plugin {
         }
         log::debug!("gui_open did gui_available");
         let plugin = unsafe { &*self.plugin };
-        let gui = unsafe { &*self.gui.unwrap() };
+        let gui = unsafe { &*self.ext_gui.unwrap() };
         unsafe {
             if !gui.is_api_supported.unwrap()(plugin, CLAP_WINDOW_API_WIN32.as_ptr(), false) {
                 log::debug!("GUI API not supported");
@@ -452,13 +460,21 @@ impl Plugin {
         }
         self.gui_open_p = false;
         let plugin = unsafe { &*self.plugin };
-        let gui = unsafe { &*self.gui.unwrap() };
+        let gui = unsafe { &*self.ext_gui.unwrap() };
         unsafe {
             gui.hide.unwrap()(plugin);
             gui.destroy.unwrap()(plugin);
             destroy_handler(self.window_handler.take().unwrap());
         }
         Ok(())
+    }
+
+    pub fn latency(&self) -> Option<u32> {
+        unsafe {
+            let ext_latency = &*self.ext_latency?;
+            let get = ext_latency.get?;
+            Some(get(self.plugin))
+        }
     }
 
     pub fn params(&mut self) -> Result<Vec<Param>> {
@@ -675,7 +691,7 @@ impl Plugin {
 
     pub fn state_load(&mut self, state: Vec<u8>) -> anyhow::Result<()> {
         let istream = IStream::new(state);
-        if let Some(state) = &self.state {
+        if let Some(state) = &self.ext_state {
             unsafe {
                 let plugin = &*self.plugin;
                 let state = &**state;
@@ -687,7 +703,7 @@ impl Plugin {
 
     pub fn state_save(&mut self) -> anyhow::Result<Vec<u8>> {
         let ostream = OStream::new();
-        if let Some(state) = &self.state {
+        if let Some(state) = &self.ext_state {
             unsafe {
                 let plugin = &*self.plugin;
                 let state = &**state;

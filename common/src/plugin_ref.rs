@@ -10,9 +10,11 @@ use crate::{
 
 #[derive(Clone)]
 pub struct PluginRef {
+    pub id: usize,
     pub ptr: *mut ProcessData,
     pub event_request: HANDLE,
     pub event_response: HANDLE,
+    pub latency: u32,
 }
 
 impl PluginRef {
@@ -38,9 +40,11 @@ impl PluginRef {
         };
 
         Ok(Self {
+            id,
             ptr,
             event_request,
             event_response,
+            latency: 0,
         })
     }
 

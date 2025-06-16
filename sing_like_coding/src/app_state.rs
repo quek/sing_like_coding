@@ -386,12 +386,21 @@ impl<'a> AppState<'a> {
     pub fn receive_from_communicator(&mut self) -> Result<()> {
         while let Ok(mut message) = self.receiver_communicator_to_main_thread.try_recv() {
             match &mut message {
+                PluginToMain::DidHwnd => {}
+                PluginToMain::DidLoad(id, latency) => self
+                    .sender_to_singer
+                    .send(SingerCommand::PluginLatency(*id, *latency))?,
+                PluginToMain::DidUnload(_, _) => {}
+                PluginToMain::DidGuiOpen => {}
+                PluginToMain::DidParams(_params) => {}
+                PluginToMain::DidStateLoad => {}
                 PluginToMain::DidStateSave(track_index, module_index, state) => {
                     if let Some(module) = self.module_mut(*track_index, *module_index) {
                         module.state = Some(std::mem::take(state));
                     }
                 }
-                _ => {}
+                PluginToMain::DidScan => {}
+                PluginToMain::Quit => {}
             }
             if let Some(callback) = self.callbacks_plugin_to_main.pop_front() {
                 callback(self, message)?;

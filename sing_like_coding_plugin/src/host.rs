@@ -53,6 +53,10 @@ impl Host {
         Ok(Self { event_quit, plugin })
     }
 
+    pub fn latency(&self) -> u32 {
+        self.plugin.latency().unwrap_or(0)
+    }
+
     pub fn load(&mut self, state: Vec<u8>) -> Result<()> {
         self.plugin.state_load(state)
     }

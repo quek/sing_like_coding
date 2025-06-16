@@ -19,7 +19,7 @@ pub enum MainToPlugin {
 #[derive(Encode, Decode, PartialEq, Debug)]
 pub enum PluginToMain {
     DidHwnd,
-    DidLoad,
+    DidLoad(usize, u32), // id, latency
     DidUnload(usize, usize),
     DidGuiOpen,
     DidParams(Vec<Param>),
