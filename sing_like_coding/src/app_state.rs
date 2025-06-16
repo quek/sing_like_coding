@@ -750,6 +750,12 @@ impl<'a> AppState<'a> {
             let line_delta = max.line - min.line + 1;
             min.line += line_delta;
             max.line += line_delta;
+        } else if let Some(item) = self.song.lane_item(&self.cursor_track) {
+            self.cursor_track.line += 1;
+            self.sender_to_singer.send(SingerCommand::LaneItem(
+                self.cursor_track.clone(),
+                item.clone(),
+            ))?;
         }
 
         Ok(())
@@ -914,11 +920,7 @@ impl<'a> AppState<'a> {
                 }
                 lane_item
             } else {
-                if value_delta != 0 {
-                    return Ok(());
-                } else {
-                    self.lane_item_last.clone()
-                }
+                self.lane_item_last.clone()
             };
 
             self.sender_to_singer
