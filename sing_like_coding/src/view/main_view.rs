@@ -719,10 +719,11 @@ impl MainView {
                         note.delay
                     ),
                     Some(LaneItem::Point(point)) => {
-                        let module = (('a' as u8) + point.module_index as u8) as char;
+                        let (module_index, param_id) = state.song.tracks[track_index]
+                            .automation_params[point.automation_params_index];
                         format!(
-                            "{}{:02X} {:02X} {:02X}",
-                            module, point.param_id, point.value, point.delay
+                            "{:X} {:X} {:02X} {:02X}",
+                            module_index, param_id, point.value, point.delay
                         )
                     }
                     None => "--- -- --".to_string(),

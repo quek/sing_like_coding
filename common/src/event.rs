@@ -5,5 +5,5 @@ pub enum Event {
     NoteOn(i16, f64, usize),
     NoteOff(i16, usize),
     NoteAllOff,
-    ParamValue(clap_id, f64, usize),
+    ParamValue(usize, clap_id, f64, usize),
 }

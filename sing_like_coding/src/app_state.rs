@@ -251,6 +251,8 @@ pub struct AppState<'a> {
     callbacks_plugin_to_main: VecDeque<Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>>>,
     pub gui_context: Option<eframe::egui::Context>,
 
+    pub params: Vec<Param>,
+
     // for MainView layout.
     pub offset_tracks: Vec<f32>,
     pub offset_flatten_lanes: Vec<f32>,
@@ -296,6 +298,9 @@ impl<'a> AppState<'a> {
             song_state,
             callbacks_plugin_to_main: Default::default(),
             gui_context: None,
+
+            params: vec![],
+
             offset_tracks: vec![],
             offset_flatten_lanes: vec![],
             width_lane: 1.0,
@@ -346,15 +351,31 @@ impl<'a> AppState<'a> {
             .and_then(|x| x.modules.get_mut(module_index))
     }
 
-    pub fn param_set(&mut self, param: Param) -> Result<()> {
-        if let Some(LaneItem::Point(point)) = self.song.lane_item(&self.cursor_track) {
-            let mut point = point.clone();
-            point.param_id = param.id;
-            self.sender_to_singer.send(SingerCommand::LaneItem(
-                self.cursor_track,
-                LaneItem::Point(point),
-            ))?;
-        }
+    pub fn param_set(&mut self, module_index: usize, param: Param) -> Result<()> {
+        let automation_params = &mut self.song.tracks[self.cursor_track.track].automation_params;
+        let automation_params_index = if let Some(index) = automation_params
+            .iter()
+            .position(|x| *x == (module_index, param.id))
+        {
+            index
+        } else {
+            automation_params.push((module_index, param.id));
+            automation_params.len() - 1
+        };
+
+        let value = (param.default_value.clamp(0.0, 1.0) * 255.0) as u8;
+
+        let point = Point {
+            automation_params_index,
+            value,
+            delay: 0,
+        };
+
+        self.sender_to_singer.send(SingerCommand::LaneItem(
+            self.cursor_track,
+            LaneItem::Point(point),
+        ))?;
+
         Ok(())
     }
 
@@ -642,22 +663,26 @@ impl<'a> AppState<'a> {
     }
 
     fn automation_param_select(&mut self) -> Result<()> {
-        if let Some(LaneItem::Point(point)) = self.song.lane_item(&self.cursor_track) {
-            let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
-                Box::new(|state, command| {
-                    match command {
-                        PluginToMain::DidParams(params) => {
-                            state.route = Route::ParamSelect(params);
-                        }
-                        _ => {}
-                    }
-                    Ok(())
-                });
-            self.send_to_plugin(
-                MainToPlugin::Params(self.cursor_track.track, point.module_index),
-                callback,
-            )?;
+        if self.song.tracks[self.cursor_track.track].modules.is_empty() {
+            return Ok(());
         }
+        self.route = Route::ParamSelect;
+        // if let Some(LaneItem::Point(point)) = self.song.lane_item(&self.cursor_track) {
+        //     let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
+        //         Box::new(|state, command| {
+        //             match command {
+        //                 PluginToMain::DidParams(params) => {
+        //                     state.route = Route::ParamSelect(params);
+        //                 }
+        //                 _ => {}
+        //             }
+        //             Ok(())
+        //         });
+        //     self.send_to_plugin(
+        //         MainToPlugin::Params(self.cursor_track.track, point.module_index),
+        //         callback,
+        //     )?;
+        // }
         Ok(())
     }
 
@@ -884,14 +909,6 @@ impl<'a> AppState<'a> {
                         note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
                     }
                     LaneItem::Point(point) => {
-                        // a01 00 00
-                        // module_index+param_id value delay
-                        point.module_index = point
-                            .module_index
-                            .saturating_add_signed(module_delta as isize);
-                        point.param_id = point
-                            .param_id
-                            .saturating_add_signed(key_or_param_id_delta as i32);
                         point.value =
                             (point.value as i16 + velocity_or_value_delta).clamp(0, 0xff) as u8;
                         point.delay = (point.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
@@ -913,12 +930,6 @@ impl<'a> AppState<'a> {
                             note.off = off;
                         }
                         LaneItem::Point(point) => {
-                            point.module_index = point
-                                .module_index
-                                .saturating_add_signed(module_delta as isize);
-                            point.param_id = point
-                                .param_id
-                                .saturating_add_signed(key_or_param_id_delta as i32);
                             point.value =
                                 (point.value as i16 + velocity_or_value_delta).clamp(0, 0xff) as u8;
                             point.delay = (point.delay as i16 + delay_delta).clamp(0, 0xff) as u8;

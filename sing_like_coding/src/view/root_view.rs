@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::plugin::param::Param;
+use common::protocol::{MainToPlugin, PluginToMain};
 use eframe::egui::{ahash::HashMap, Key};
 
 use crate::{
@@ -22,7 +22,7 @@ pub enum Route {
     Track,
     Command,
     PluginSelect,
-    ParamSelect(Vec<Param>),
+    ParamSelect,
 }
 
 pub struct RootView {
@@ -67,15 +67,35 @@ impl RootView {
         match &state.route {
             Route::Track => self.main_view.view(gui_context, state, device)?,
             Route::Command => self.command_view.view(gui_context, state)?,
-            Route::ParamSelect(params) => {
+            Route::ParamSelect => {
                 let param_select_view = self
                     .param_select_view
-                    .get_or_insert_with(|| ParamSelectView::new(params.clone()));
-                match param_select_view.view(gui_context)? {
-                    ReturnState::Selected(param) => {
+                    .get_or_insert_with(|| ParamSelectView::new());
+                match param_select_view.view(
+                    gui_context,
+                    &state.song.tracks[state.cursor_track.track].modules,
+                    &state.params,
+                )? {
+                    ReturnState::Selected(module_index, param) => {
                         self.param_select_view = None;
                         state.route = Route::Track;
-                        state.param_set(param)?;
+                        state.param_set(module_index, param)?;
+                    }
+                    ReturnState::Params(module_index) => {
+                        let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
+                            Box::new(|state, command| {
+                                match command {
+                                    PluginToMain::DidParams(params) => {
+                                        state.params = params;
+                                    }
+                                    _ => {}
+                                }
+                                Ok(())
+                            });
+                        state.send_to_plugin(
+                            MainToPlugin::Params(state.cursor_track.track, module_index),
+                            callback,
+                        )?;
                     }
                     ReturnState::Continue => {}
                     ReturnState::Cancel => {

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use clap_sys::id::clap_id;
 use common::{
     dsp::db_to_norm, event::Event, module::Module, process_track_context::ProcessTrackContext,
 };
@@ -19,6 +20,7 @@ pub struct Track {
     pub solo: bool,
     pub modules: Vec<Module>,
     pub lanes: Vec<Lane>,
+    pub automation_params: Vec<(usize, clap_id)>, // (module_index, param_id)
 }
 
 impl Track {
@@ -31,6 +33,7 @@ impl Track {
             mute: false,
             modules: vec![],
             lanes: vec![Lane::new()],
+            automation_params: vec![],
         }
     }
 
@@ -77,8 +80,11 @@ impl Track {
                             LaneItem::Point(point) => {
                                 if range.contains(&time) {
                                     let delay = time - range.start;
+                                    let (module_index, param_id) =
+                                        self.automation_params[point.automation_params_index];
                                     context.event_list_input.push(Event::ParamValue(
-                                        point.param_id,
+                                        module_index,
+                                        param_id,
                                         point.value as f64 / 255.0,
                                         delay,
                                     ))
@@ -112,8 +118,10 @@ impl Track {
                         data.note_off(key, 0, 0);
                     }
                 }
-                Event::ParamValue(param_id, value, delay) => {
-                    data.param_value(param_id, value, delay)
+                Event::ParamValue(mindex, param_id, value, delay) => {
+                    if mindex == module_index {
+                        data.param_value(param_id, value, delay)
+                    }
                 }
             }
         }
