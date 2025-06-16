@@ -715,7 +715,8 @@ impl MainView {
                             .automation_params
                             .get(point.automation_params_index)
                             .map(|(module_index, param_id)| {
-                                format!("{:X} {:X}", module_index, param_id)
+                                // 8桁あるけど表示スペースがないので下2桁だけ表示
+                                format!("{:x}{:X}", module_index, param_id % 0x100)
                             })
                             // point を他のトラックに移動した場合など
                             .unwrap_or("---".to_string());
