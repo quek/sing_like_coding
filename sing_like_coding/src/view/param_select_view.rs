@@ -36,6 +36,7 @@ impl ParamSelectView {
                 if let Some(module_index) = self.module_index {
                     if !self.waite_params_p {
                         self.waite_params_p = true;
+                        self.focus_p = true;
                         return Ok(ReturnState::Params(module_index));
                     }
                     self.view_params(gui_context, ui, params)
@@ -112,7 +113,7 @@ impl ParamSelectView {
                 self.queried_params[0].clone(),
             ));
         }
-        if self.focus_p {
+        if self.focus_p && !params.is_empty() {
             self.focus_p = false;
             gui_context.memory_mut(|x| x.request_focus(response.id));
         }

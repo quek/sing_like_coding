@@ -74,7 +74,7 @@ impl RootView {
                 match param_select_view.view(
                     gui_context,
                     &state.song.tracks[state.cursor_track.track].modules,
-                    &state.params,
+                    &state.param_select_view_params,
                 )? {
                     ReturnState::Selected(module_index, param) => {
                         self.param_select_view = None;
@@ -84,11 +84,8 @@ impl RootView {
                     ReturnState::Params(module_index) => {
                         let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
                             Box::new(|state, command| {
-                                match command {
-                                    PluginToMain::DidParams(params) => {
-                                        state.params = params;
-                                    }
-                                    _ => {}
+                                if let PluginToMain::DidParams(params) = command {
+                                    state.param_select_view_params = params;
                                 }
                                 Ok(())
                             });

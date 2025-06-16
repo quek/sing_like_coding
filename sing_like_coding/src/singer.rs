@@ -12,7 +12,7 @@ use std::{
 
 use crate::{
     app_state::{AppStateCommand, CursorTrack},
-    model::{lane::Lane, lane_item::LaneItem, song::Song, track::Track},
+    model::{lane::Lane, lane_item::LaneItem, point::Point, song::Song, track::Track},
     song_state::SongState,
     util::next_id,
     view::stereo_peak_meter::DB_MIN,
@@ -23,6 +23,7 @@ use common::{
     clap_manager::ClapManager,
     event::Event,
     module::Module,
+    plugin::param::Param,
     plugin_ref::PluginRef,
     process_data::ProcessData,
     process_track_context::ProcessTrackContext,
@@ -46,6 +47,7 @@ pub enum SingerCommand {
     NoteOff(usize, i16, i16, f64, usize),
     PluginLoad(usize, String, String),
     PluginDelete(usize, usize),
+    PointNew(CursorTrack, usize, Param),
     TrackAdd,
     TrackDelete(usize),
     TrackInsert(usize, Track),
@@ -150,6 +152,18 @@ impl Singer {
                 self.play_position.end = self.loop_range.start + overflow;
             }
         }
+    }
+
+    pub fn lane_item_set(&mut self, cursor: CursorTrack, lane_item: LaneItem) -> Result<()> {
+        let song = &mut self.song;
+        if let Some(Some(lane)) = song
+            .tracks
+            .get_mut(cursor.track)
+            .map(|x| x.lanes.get_mut(cursor.lane))
+        {
+            lane.items.insert(cursor.line, lane_item);
+        }
+        Ok(())
     }
 
     pub fn plugin_load(
@@ -407,6 +421,35 @@ impl Singer {
         Ok(())
     }
 
+    pub fn point_new(
+        &mut self,
+        cursor: CursorTrack,
+        module_index: usize,
+        param: Param,
+    ) -> Result<()> {
+        let automation_params = &mut self.song.tracks[cursor.track].automation_params;
+        let automation_params_index = if let Some(index) = automation_params
+            .iter()
+            .position(|x| *x == (module_index, param.id))
+        {
+            index
+        } else {
+            automation_params.push((module_index, param.id));
+            automation_params.len() - 1
+        };
+
+        let value = (param.default_value.clamp(0.0, 1.0) * 255.0) as u8;
+
+        let point = Point {
+            automation_params_index,
+            value,
+            delay: 0,
+        };
+        self.lane_item_set(cursor, LaneItem::Point(point))?;
+
+        Ok(())
+    }
+
     pub fn song_close(&mut self) -> Result<()> {
         for track_index in (0..self.song.tracks.len()).rev() {
             for module_index in (0..self.song.tracks[track_index].modules.len()).rev() {
@@ -598,15 +641,8 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
             SingerCommand::Song => singer.lock().unwrap().send_song()?,
             SingerCommand::LaneItem(cursor, lane_item) => {
                 let mut singer = singer.lock().unwrap();
-                let song = &mut singer.song;
-                if let Some(Some(lane)) = song
-                    .tracks
-                    .get_mut(cursor.track)
-                    .map(|x| x.lanes.get_mut(cursor.lane))
-                {
-                    lane.items.insert(cursor.line, lane_item);
-                    singer.send_song()?;
-                }
+                singer.lane_item_set(cursor, lane_item)?;
+                singer.send_song()?;
             }
             SingerCommand::LaneItemDelete(cursor) => {
                 let mut singer = singer.lock().unwrap();
@@ -633,6 +669,11 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                 let mut singer = singer.lock().unwrap();
                 singer.plugin_delete(track_index, module_index)?;
 
+                singer.send_song()?;
+            }
+            SingerCommand::PointNew(cursor, module_index, param) => {
+                let mut singer = singer.lock().unwrap();
+                singer.point_new(cursor, module_index, param)?;
                 singer.send_song()?;
             }
             SingerCommand::NoteOn(track_index, key, _channel, velocity, delay) => {

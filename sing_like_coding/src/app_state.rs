@@ -23,7 +23,7 @@ use shared_memory::Shmem;
 
 use crate::{
     command::{track_add::TrackAdd, Command},
-    model::{lane_item::LaneItem, note::Note, point::Point, song::Song, track::Track},
+    model::{lane_item::LaneItem, note::Note, song::Song, track::Track},
     singer::SingerCommand,
     song_state::SongState,
     view::{
@@ -251,7 +251,7 @@ pub struct AppState<'a> {
     callbacks_plugin_to_main: VecDeque<Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>>>,
     pub gui_context: Option<eframe::egui::Context>,
 
-    pub params: Vec<Param>,
+    pub param_select_view_params: Vec<Param>,
 
     // for MainView layout.
     pub offset_tracks: Vec<f32>,
@@ -299,7 +299,7 @@ impl<'a> AppState<'a> {
             callbacks_plugin_to_main: Default::default(),
             gui_context: None,
 
-            params: vec![],
+            param_select_view_params: vec![],
 
             offset_tracks: vec![],
             offset_flatten_lanes: vec![],
@@ -352,28 +352,10 @@ impl<'a> AppState<'a> {
     }
 
     pub fn param_set(&mut self, module_index: usize, param: Param) -> Result<()> {
-        let automation_params = &mut self.song.tracks[self.cursor_track.track].automation_params;
-        let automation_params_index = if let Some(index) = automation_params
-            .iter()
-            .position(|x| *x == (module_index, param.id))
-        {
-            index
-        } else {
-            automation_params.push((module_index, param.id));
-            automation_params.len() - 1
-        };
-
-        let value = (param.default_value.clamp(0.0, 1.0) * 255.0) as u8;
-
-        let point = Point {
-            automation_params_index,
-            value,
-            delay: 0,
-        };
-
-        self.sender_to_singer.send(SingerCommand::LaneItem(
+        self.sender_to_singer.send(SingerCommand::PointNew(
             self.cursor_track,
-            LaneItem::Point(point),
+            module_index,
+            param,
         ))?;
 
         Ok(())
@@ -503,14 +485,14 @@ impl<'a> AppState<'a> {
                 velociy_delta,
                 delay_delta,
                 off,
-                module_delta,
+                value_delta,
             )) => {
                 self.lane_items_update(
                     *key_delta,
                     *velociy_delta,
                     *delay_delta,
                     *off,
-                    *module_delta,
+                    *value_delta,
                 )?;
             }
             UiCommand::Lane(LaneCommand::SelectMode) => {
@@ -889,11 +871,11 @@ impl<'a> AppState<'a> {
 
     fn lane_items_update(
         &mut self,
-        key_or_param_id_delta: i16,
-        velocity_or_value_delta: i16,
+        key_delta: i16,
+        velocity_delta: i16,
         delay_delta: i16,
         off: bool,
-        module_delta: i16,
+        value_delta: i16,
     ) -> Result<()> {
         if self.selection_track_min.is_some() {
             let itemss = self.lane_items_selected_cloned();
@@ -903,15 +885,12 @@ impl<'a> AppState<'a> {
                         if note.off {
                             continue;
                         }
-                        note.key = (note.key + key_or_param_id_delta).clamp(0, 127);
-                        note.velocity =
-                            (note.velocity + velocity_or_value_delta as f64).clamp(0.0, 127.0);
+                        note.key = (note.key + key_delta).clamp(0, 127);
+                        note.velocity = (note.velocity + velocity_delta as f64).clamp(0.0, 127.0);
                         note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
                     }
                     LaneItem::Point(point) => {
-                        point.value =
-                            (point.value as i16 + velocity_or_value_delta).clamp(0, 0xff) as u8;
-                        point.delay = (point.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
+                        point.value = (point.value as i16 + value_delta).clamp(0, 0xff) as u8;
                     }
                 }
                 self.sender_to_singer
@@ -919,30 +898,28 @@ impl<'a> AppState<'a> {
                     .unwrap();
             }
         } else {
-            let lane_item =
-                if let Some(mut lane_item) = self.song.lane_item(&self.cursor_track).cloned() {
-                    match &mut lane_item {
-                        LaneItem::Note(note) => {
-                            note.key = (note.key + key_or_param_id_delta).clamp(0, 127);
-                            note.velocity =
-                                (note.velocity + velocity_or_value_delta as f64).clamp(0.0, 127.0);
-                            note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
-                            note.off = off;
-                        }
-                        LaneItem::Point(point) => {
-                            point.value =
-                                (point.value as i16 + velocity_or_value_delta).clamp(0, 0xff) as u8;
-                            point.delay = (point.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
-                        }
+            let lane_item = if let Some(mut lane_item) =
+                self.song.lane_item(&self.cursor_track).cloned()
+            {
+                match &mut lane_item {
+                    LaneItem::Note(note) => {
+                        note.key = (note.key + key_delta).clamp(0, 127);
+                        note.velocity = (note.velocity + velocity_delta as f64).clamp(0.0, 127.0);
+                        note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
+                        note.off = off;
                     }
-                    lane_item
+                    LaneItem::Point(point) => {
+                        point.value = (point.value as i16 + value_delta).clamp(0, 0xff) as u8;
+                    }
+                }
+                lane_item
+            } else {
+                if value_delta != 0 {
+                    return Ok(());
                 } else {
-                    if module_delta != 0 {
-                        LaneItem::Point(Point::default())
-                    } else {
-                        self.lane_item_last.clone()
-                    }
-                };
+                    self.lane_item_last.clone()
+                }
+            };
 
             self.sender_to_singer
                 .send(SingerCommand::LaneItem(

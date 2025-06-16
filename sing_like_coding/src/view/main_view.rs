@@ -89,35 +89,35 @@ impl MainView {
         let shortcut_map_lane = [
             (
                 (Modifier::C, Key::J),
-                UiCommand::Lane(LaneCommand::LaneItemUpdate(-1, 0, 0, false, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(-1, 0, 0, false, -1)),
             ),
             (
                 (Modifier::C, Key::ArrowDown),
-                UiCommand::Lane(LaneCommand::LaneItemUpdate(-1, 0, 0, false, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(-1, 0, 0, false, -1)),
             ),
             (
                 (Modifier::C, Key::K),
-                UiCommand::Lane(LaneCommand::LaneItemUpdate(1, 0, 0, false, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(1, 0, 0, false, 1)),
             ),
             (
                 (Modifier::C, Key::ArrowUp),
-                UiCommand::Lane(LaneCommand::LaneItemUpdate(1, 0, 0, false, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(1, 0, 0, false, 1)),
             ),
             (
                 (Modifier::C, Key::H),
-                UiCommand::Lane(LaneCommand::LaneItemUpdate(-12, 0, 0, false, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(-12, 0, 0, false, -0x10)),
             ),
             (
                 (Modifier::C, Key::ArrowLeft),
-                UiCommand::Lane(LaneCommand::LaneItemUpdate(-12, 0, 0, false, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(-12, 0, 0, false, -0x10)),
             ),
             (
                 (Modifier::C, Key::L),
-                UiCommand::Lane(LaneCommand::LaneItemUpdate(12, 0, 0, false, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(12, 0, 0, false, 0x10)),
             ),
             (
                 (Modifier::C, Key::ArrowRight),
-                UiCommand::Lane(LaneCommand::LaneItemUpdate(12, 0, 0, false, 0)),
+                UiCommand::Lane(LaneCommand::LaneItemUpdate(12, 0, 0, false, 0x10)),
             ),
             (
                 (Modifier::A, Key::J),
@@ -269,14 +269,6 @@ impl MainView {
             ),
             (
                 (Modifier::None, Key::O),
-                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, 0, false, 1)),
-            ),
-            (
-                (Modifier::S, Key::O),
-                UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, 0, false, -1)),
-            ),
-            (
-                (Modifier::C, Key::O),
                 UiCommand::Lane(LaneCommand::AutomationParamSelect),
             ),
         ];
