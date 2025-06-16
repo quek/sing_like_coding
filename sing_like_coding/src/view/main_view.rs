@@ -711,12 +711,15 @@ impl MainView {
                         note.delay
                     ),
                     Some(LaneItem::Point(point)) => {
-                        let (module_index, param_id) = state.song.tracks[track_index]
-                            .automation_params[point.automation_params_index];
-                        format!(
-                            "{:X} {:X} {:02X} {:02X}",
-                            module_index, param_id, point.value, point.delay
-                        )
+                        let param = state.song.tracks[track_index]
+                            .automation_params
+                            .get(point.automation_params_index)
+                            .map(|(module_index, param_id)| {
+                                format!("{:X} {:X}", module_index, param_id)
+                            })
+                            // point を他のトラックに移動した場合など
+                            .unwrap_or("---".to_string());
+                        format!("{} {:02X} {:02X}", param, poin t.value, point.delay)
                     }
                     None => "--- -- --".to_string(),
                 };
