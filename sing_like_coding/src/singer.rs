@@ -313,7 +313,7 @@ impl Singer {
 
         // tracks pan pan volume
         for ((buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)), buffer) in
-            data[1..].iter_mut().zip(buffers.iter_mut())
+            data[1..].iter_mut().zip(buffers[1..].iter_mut())
         {
             if let (Some((_, constant_mask)), Some(buffer)) = (buffer_constant_mask, buffer) {
                 for channel in 0..nchannels {
