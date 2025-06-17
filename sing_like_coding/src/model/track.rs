@@ -62,35 +62,8 @@ impl Track {
         contexts: &Vec<Arc<Mutex<ProcessTrackContext>>>,
     ) -> Result<()> {
         self.prepare_module_event(context, module_index)?;
-
-        for autdio_input in self.modules[module_index].audio_inputs.iter() {
-            let src_ptr = if autdio_input.track_index == track_index {
-                context.plugins[autdio_input.module_index].ptr
-            } else {
-                let context = contexts[autdio_input.track_index].lock().unwrap();
-                context.plugins[module_index].ptr
-            };
-            let src_process_data = unsafe { &*src_ptr };
-            let src_constant_mask = src_process_data.constant_mask_out;
-            dbg!(src_process_data.constant_mask_out);
-            let src_buffer = &src_process_data.buffer_out;
-            let self_process_data = context.plugins[module_index].process_data_mut();
-            let self_buffer = &mut self_process_data.buffer_in;
-
-            for ch in 0..context.nchannels {
-                let constant_mask_bit = 1 << ch;
-                if (src_constant_mask & constant_mask_bit) == 0 {
-                    self_process_data.constant_mask_in &= !constant_mask_bit;
-                    self_buffer[ch].copy_from_slice(&src_buffer[ch]);
-                } else {
-                    self_process_data.constant_mask_in |= constant_mask_bit;
-                    self_buffer[ch][0] = src_buffer[ch][0];
-                }
-            }
-        }
-
+        self.prepare_module_audio(track_index, context, module_index, contexts)?;
         context.plugins[module_index].process()?;
-
         Ok(())
     }
 
@@ -152,6 +125,42 @@ impl Track {
                 }
             }
         }
+    }
+
+    fn prepare_module_audio(
+        &self,
+        track_index: usize,
+        context: &mut ProcessTrackContext,
+        module_index: usize,
+        contexts: &Vec<Arc<Mutex<ProcessTrackContext>>>,
+    ) -> Result<()> {
+        for autdio_input in self.modules[module_index].audio_inputs.iter() {
+            let src_ptr = if autdio_input.track_index == track_index {
+                context.plugins[autdio_input.module_index].ptr
+            } else {
+                let context = contexts[autdio_input.track_index].lock().unwrap();
+                context.plugins[module_index].ptr
+            };
+            let src_process_data = unsafe { &*src_ptr };
+            let src_constant_mask = src_process_data.constant_mask_out;
+            dbg!(src_process_data.constant_mask_out);
+            let src_buffer = &src_process_data.buffer_out;
+            let self_process_data = context.plugins[module_index].process_data_mut();
+            let self_buffer = &mut self_process_data.buffer_in;
+
+            for ch in 0..context.nchannels {
+                let constant_mask_bit = 1 << ch;
+                if (src_constant_mask & constant_mask_bit) == 0 {
+                    self_process_data.constant_mask_in &= !constant_mask_bit;
+                    self_buffer[ch].copy_from_slice(&src_buffer[ch]);
+                } else {
+                    self_process_data.constant_mask_in |= constant_mask_bit;
+                    self_buffer[ch][0] = src_buffer[ch][0];
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn prepare_module_event(
