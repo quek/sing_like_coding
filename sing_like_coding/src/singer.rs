@@ -23,7 +23,7 @@ use clap_sys::id::clap_id;
 use common::{
     clap_manager::ClapManager,
     event::Event,
-    module::Module,
+    module::{AudioInput, Module},
     plugin_ref::PluginRef,
     process_data::{EventKind, ProcessData},
     process_track_context::ProcessTrackContext,
@@ -341,6 +341,21 @@ impl Singer {
         let mut dummy = ProcessData::new();
         dummy.prepare();
         let dummy_p = self.song.tracks[0].modules.is_empty();
+
+        let main_process_data = if dummy_p {
+            &mut dummy
+        } else {
+            let ptr = self.process_track_contexts[0]
+                .lock()
+                .unwrap()
+                .plugins
+                .last()
+                .unwrap()
+                .ptr;
+            let process_data = unsafe { &mut *(ptr) };
+            process_data
+        };
+
         let solo_any = self.song.tracks.iter().any(|t| t.solo);
         for frame in 0..nframes {
             for channel in 0..nchannels {
@@ -366,11 +381,13 @@ impl Singer {
                         }
                     })
                     .sum();
+
                 if dummy_p {
-                    dummy.buffer_out[channel][frame] = value;
-                    dummy.constant_mask_out = 0;
+                    main_process_data.buffer_out[channel][frame] = value;
+                    main_process_data.constant_mask_out = 0;
                 } else {
-                    buffers[0].as_mut().unwrap()[channel][frame] = value;
+                    main_process_data.buffer_in[channel][frame] = value;
+                    main_process_data.constant_mask_in = 0;
                 }
             }
         }
@@ -379,20 +396,6 @@ impl Singer {
         if !dummy_p {
             self.song.tracks[0].process(0, &self.process_track_contexts)?;
         }
-
-        let main_process_data = if dummy_p {
-            &mut dummy
-        } else {
-            let ptr = self.process_track_contexts[0]
-                .lock()
-                .unwrap()
-                .plugins
-                .last()
-                .unwrap()
-                .ptr;
-            let process_data = unsafe { &mut *(ptr) };
-            process_data
-        };
 
         // main track pan volume -> audio device
         let main_track = &self.song.tracks[0];
@@ -723,9 +726,20 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
             SingerCommand::PluginLoad(track_index, clap_plugin_id, name) => {
                 let mut singer = singer.lock().unwrap();
                 singer.plugin_load(track_index, clap_plugin_id.clone(), true)?;
-                singer.song.tracks[track_index]
-                    .modules
-                    .push(Module::new(clap_plugin_id, name));
+                let track = &mut singer.song.tracks[track_index];
+                let audio_inputs = if track.modules.is_empty() {
+                    vec![]
+                } else {
+                    vec![AudioInput {
+                        track_index,
+                        module_index: track.modules.len() - 1,
+                    }]
+                };
+                singer.song.tracks[track_index].modules.push(Module::new(
+                    clap_plugin_id,
+                    name,
+                    audio_inputs,
+                ));
 
                 singer.send_song()?;
             }

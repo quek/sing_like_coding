@@ -48,14 +48,21 @@ impl Track {
         self.compute_midi(&mut context);
         let module_len = self.modules.len();
         for module_index in 0..module_len {
-            self.process_module(&mut context, module_index)?;
+            self.process_module(track_index, &mut context, module_index, contexts)?;
         }
 
         Ok(())
     }
 
-    fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
-        let data = context.plugins[module_index].process_data_mut();
+    fn process_module(
+        &self,
+        track_index: usize,
+        context: &mut ProcessTrackContext,
+        module_index: usize,
+        contexts: &Vec<Arc<Mutex<ProcessTrackContext>>>,
+    ) -> Result<()> {
+        let plugin_ref_self = &mut context.plugins[module_index];
+        let data = plugin_ref_self.process_data_mut();
         for event in context.event_list_input.iter() {
             match event {
                 Event::NoteOn(key, velocity, delay) => {
@@ -75,21 +82,26 @@ impl Track {
             }
         }
 
-        if module_index > 0 {
-            let (left, right) = context.plugins.split_at_mut(module_index);
-            let prev = &mut left[module_index - 1];
-            let curr = &mut right[0];
-
-            let constant_mask = prev.process_data_mut().constant_mask_out;
-            curr.process_data_mut().constant_mask_in = constant_mask;
-
-            let buffer_out = &prev.process_data_mut().buffer_out;
-            let buffer_in = &mut curr.process_data_mut().buffer_in;
+        for autdio_input in self.modules[module_index].audio_inputs.iter() {
+            let process_data_out_ptr = if autdio_input.track_index == track_index {
+                plugin_ref_self.ptr
+            } else {
+                let context = contexts[autdio_input.track_index].lock().unwrap();
+                context.plugins[module_index].ptr
+            };
+            let process_data_out = unsafe { &*process_data_out_ptr };
+            let constant_mask = process_data_out.constant_mask_out;
+            let buffer_out = &process_data_out.buffer_out;
+            let process_data_in = plugin_ref_self.process_data_mut();
+            let buffer_in = &mut process_data_in.buffer_in;
 
             for ch in 0..context.nchannels {
+                let constant_mask_bit = 1 << ch;
                 if (constant_mask & (1 << ch)) == 0 {
+                    process_data_in.constant_mask_in &= !constant_mask_bit;
                     buffer_in[ch].copy_from_slice(&buffer_out[ch]);
                 } else {
+                    process_data_in.constant_mask_in |= constant_mask_bit;
                     buffer_in[ch][0] = buffer_out[ch][0];
                 }
             }

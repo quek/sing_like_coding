@@ -99,8 +99,9 @@ impl ProcessData {
         for channel in 0..MAX_CHANNELS {
             self.buffer_in[channel][0] = 0.0;
             self.buffer_out[channel][0] = 0.0;
-            self.constant_mask_in |= 1 << channel;
-            self.constant_mask_out |= 1 << channel;
+            let bit = 1 << channel;
+            self.constant_mask_in |= bit;
+            self.constant_mask_out |= bit;
         }
     }
 
