@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
 use clap_sys::id::clap_id;
 use common::{
@@ -37,11 +39,16 @@ impl Track {
         }
     }
 
-    pub fn process(&self, context: &mut ProcessTrackContext) -> Result<()> {
-        self.compute_midi(context);
+    pub fn process(
+        &self,
+        track_index: usize,
+        contexts: Vec<Arc<Mutex<ProcessTrackContext>>>,
+    ) -> Result<()> {
+        let mut context = contexts[track_index].lock().unwrap();
+        self.compute_midi(&mut context);
         let module_len = self.modules.len();
         for module_index in 0..module_len {
-            self.process_module(context, module_index)?;
+            self.process_module(&mut context, module_index)?;
         }
 
         Ok(())

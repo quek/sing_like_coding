@@ -75,7 +75,7 @@ pub struct Singer {
     sender_to_ui: Sender<AppStateCommand>,
     pub sender_to_plugin: Sender<MainToPlugin>,
     pub line_play: usize,
-    process_track_contexts: Vec<ProcessTrackContext>,
+    process_track_contexts: Vec<Arc<Mutex<ProcessTrackContext>>>,
     shmems: Vec<Vec<Shmem>>,
     pub gui_context: Option<eframe::egui::Context>,
 
@@ -168,13 +168,17 @@ impl Singer {
     }
 
     pub fn plugin_latency_set(&mut self, id: usize, latency: u32) -> Result<()> {
-        if let Some(plugin_ref) = self
-            .process_track_contexts
-            .iter_mut()
-            .flat_map(|c| c.plugins.iter_mut())
-            .find(|plugin_ref| plugin_ref.id == id)
-        {
-            plugin_ref.latency = latency;
+        for context in self.process_track_contexts.iter_mut() {
+            if let Some(plugin_ref) = context
+                .lock()
+                .unwrap()
+                .plugins
+                .iter_mut()
+                .find(|plugin_ref| plugin_ref.id == id)
+            {
+                plugin_ref.latency = latency;
+                break;
+            }
         }
 
         Ok(())
@@ -192,8 +196,11 @@ impl Singer {
         let shmem = create_shared_memory::<ProcessData>(&shmem_name)?;
 
         self.process_track_contexts[track_index]
+            .lock()
+            .unwrap()
             .plugins
             .push(PluginRef::new(id, shmem.as_ptr() as *mut ProcessData)?);
+        dbg!("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ plugins.push");
         self.shmems[track_index].push(shmem);
 
         self.sender_to_plugin.send(MainToPlugin::Load(
@@ -215,9 +222,9 @@ impl Singer {
         self.compute_play_position(nframes);
 
         for track_index in 0..self.process_track_contexts.len() {
-            for module_index in 0..self.process_track_contexts[track_index].plugins.len() {
-                let process_data = self.process_track_contexts[track_index].plugins[module_index]
-                    .process_data_mut();
+            let mut context = self.process_track_contexts[track_index].lock().unwrap();
+            for module_index in 0..context.plugins.len() {
+                let process_data = context.plugins[module_index].process_data_mut();
                 process_data.nchannels = nchannels;
                 process_data.nframes = nframes;
                 process_data.play_p = if self.play_p { 1 } else { 0 };
@@ -227,9 +234,7 @@ impl Singer {
                 process_data.steady_time = self.steady_time;
                 process_data.prepare();
             }
-        }
 
-        for context in self.process_track_contexts.iter_mut() {
             context.nchannels = nchannels;
             context.nframes = nframes;
             context.play_p = self.play_p;
@@ -242,31 +247,30 @@ impl Singer {
                 context.event_list_input.push(Event::NoteAllOff);
             }
         }
+
         self.all_notef_off_p = false;
 
         // tracks process
-        self.song.tracks[1..]
-            .par_iter()
-            .zip(self.process_track_contexts[1..].par_iter_mut())
-            .try_for_each(|(track, process_track_context)| track.process(process_track_context))?;
+        (1..self.song.tracks.len())
+            .into_par_iter()
+            .try_for_each(|track_index| {
+                let track = &self.song.tracks[track_index];
+                track.process(track_index, self.process_track_contexts.clone())
+            })?;
 
         // prepare mixing paramss
-        let mut buffers = self
+        let mut data = self
             .process_track_contexts
             .iter_mut()
-            .enumerate()
-            .map(|(i, x)| {
-                x.plugins.last_mut().map(|plugin_ref: &mut PluginRef| {
-                    let constant_mask = plugin_ref.process_data_mut().constant_mask_out;
-                    (
-                        if i == 0 {
-                            &mut plugin_ref.process_data_mut().buffer_in
-                        } else {
-                            &mut plugin_ref.process_data_mut().buffer_out
-                        },
-                        constant_mask,
-                    )
-                })
+            .map(|x| {
+                x.lock()
+                    .unwrap()
+                    .plugins
+                    .last_mut()
+                    .map(|plugin_ref: &mut PluginRef| {
+                        let constant_mask = plugin_ref.process_data_mut().constant_mask_out;
+                        (plugin_ref.ptr, constant_mask)
+                    })
             })
             .zip(self.song.tracks.iter().map(|track| {
                 if (track.pan - 0.5).abs() < 0.001 {
@@ -291,13 +295,28 @@ impl Singer {
             }))
             .collect::<Vec<_>>();
 
-        let main_gains = [buffers[0].1 .2, buffers[0].1 .3, buffers[0].1 .4];
+        let mut buffers = data
+            .iter()
+            .enumerate()
+            .map(|(track_index, x)| {
+                x.0.map(|x| {
+                    let process_data = unsafe { &mut *(x.0) };
+                    if track_index == 0 {
+                        &mut process_data.buffer_in
+                    } else {
+                        &mut process_data.buffer_out
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let main_gains = [data[0].1 .2, data[0].1 .3, data[0].1 .4];
 
         // tracks pan pan volume
-        for (buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)) in
-            buffers[1..].iter_mut()
+        for ((buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)), buffer) in
+            data[1..].iter_mut().zip(buffers.iter_mut())
         {
-            if let Some((buffer, constant_mask)) = buffer_constant_mask {
+            if let (Some((_, constant_mask)), Some(buffer)) = (buffer_constant_mask, buffer) {
                 for channel in 0..nchannels {
                     let constp = (*constant_mask & (1 << channel)) != 0;
                     let gain = if channel == 0 {
@@ -326,10 +345,13 @@ impl Singer {
         let solo_any = self.song.tracks.iter().any(|t| t.solo);
         for frame in 0..nframes {
             for channel in 0..nchannels {
-                let value = buffers[1..]
+                let value = data[1..]
                     .iter()
-                    .map(|(buffer_constant_mask, (mute, solo, _, _, _))| {
-                        if let Some((buffer, constant_mask)) = &buffer_constant_mask {
+                    .zip(buffers[1..].iter())
+                    .map(|((buffer_constant_mask, (mute, solo, _, _, _)), buffer)| {
+                        if let (Some((_, constant_mask)), Some(buffer)) =
+                            (&buffer_constant_mask, buffer)
+                        {
                             if *mute || (solo_any && !*solo) {
                                 0.0
                             } else {
@@ -349,22 +371,28 @@ impl Singer {
                     dummy.buffer_out[channel][frame] = value;
                     dummy.constant_mask_out = 0;
                 } else {
-                    buffers[0].0.as_mut().unwrap().0[channel][frame] = value;
+                    buffers[0].as_mut().unwrap()[channel][frame] = value;
                 }
             }
         }
 
         // main track process
+        if dummy_p {
+            self.song.tracks[0].process(0, self.process_track_contexts.clone())?;
+        }
+
         let main_process_data = if dummy_p {
             &mut dummy
         } else {
-            // main track process
-            self.song.tracks[0].process(&mut self.process_track_contexts[0])?;
-            self.process_track_contexts[0]
-                .plugins
-                .last_mut()
+            let ptr = self.process_track_contexts[0]
+                .lock()
                 .unwrap()
-                .process_data_mut()
+                .plugins
+                .last()
+                .unwrap()
+                .ptr;
+            let process_data = unsafe { &mut *(ptr) };
+            process_data
         };
 
         // main track pan volume -> audio device
@@ -428,6 +456,8 @@ impl Singer {
     pub fn plugin_delete(&mut self, track_index: usize, module_index: usize) -> Result<()> {
         self.song.tracks[track_index].modules.remove(module_index);
         self.process_track_contexts[track_index]
+            .lock()
+            .unwrap()
             .plugins
             .remove(module_index);
         self.shmems[track_index].remove(module_index);
@@ -488,7 +518,7 @@ impl Singer {
         let mut xs = vec![];
         for track_index in 0..self.song.tracks.len() {
             self.process_track_contexts
-                .push(ProcessTrackContext::default());
+                .push(Arc::new(Mutex::new(ProcessTrackContext::default())));
             self.shmems.push(vec![]);
 
             for module_index in 0..self.song.tracks[track_index].modules.len() {
@@ -542,20 +572,15 @@ impl Singer {
 
     fn compute_song_state(&mut self, dummy: Option<&ProcessData>) {
         let song_state = self.song_state_mut();
-        let process_data_list = self
-            .process_track_contexts
-            .iter()
-            .enumerate()
-            .map(|(i, x)| {
-                if i == 0 && dummy.is_some() {
-                    dummy
+
+        for track_index in 0..self.process_track_contexts.len() {
+            let context = self.process_track_contexts[track_index].lock().unwrap();
+            if let Some(plugin_ref) = context.plugins.last() {
+                let process_data = if track_index == 0 && dummy.is_some() {
+                    dummy.unwrap()
                 } else {
-                    x.plugins.last().map(|x| x.process_data())
-                }
-            })
-            .collect::<Vec<_>>();
-        for track_index in 0..process_data_list.len() {
-            if let Some(process_data) = &process_data_list[track_index] {
+                    plugin_ref.process_data()
+                };
                 for channel in 0..process_data.nchannels {
                     song_state.tracks[track_index].peaks[channel] = process_data.peak(channel);
                 }
@@ -567,7 +592,7 @@ impl Singer {
         }
 
         'top: for (track_index, context) in self.process_track_contexts.iter().enumerate() {
-            for (module_index, plugin) in context.plugins.iter().enumerate() {
+            for (module_index, plugin) in context.lock().unwrap().plugins.iter().enumerate() {
                 let process_data = plugin.process_data();
                 for event_index in 0..process_data.nevents_output {
                     let event = &process_data.events_output[event_index];
@@ -610,7 +635,7 @@ impl Singer {
     fn track_add(&mut self) {
         self.song.track_add();
         self.process_track_contexts
-            .push(ProcessTrackContext::default());
+            .push(Arc::new(Mutex::new(ProcessTrackContext::default())));
         self.shmems.push(vec![]);
     }
 
@@ -626,8 +651,10 @@ impl Singer {
 
     fn track_insert(&mut self, track_index: usize, track: Track) -> Result<()> {
         self.song.track_insert(track_index, track);
-        self.process_track_contexts
-            .insert(track_index, ProcessTrackContext::default());
+        self.process_track_contexts.insert(
+            track_index,
+            Arc::new(Mutex::new(ProcessTrackContext::default())),
+        );
         self.shmems.insert(track_index, vec![]);
         for module_index in 0..self.song.tracks[track_index].modules.len() {
             let clap_plugin_id = self.song.tracks[track_index].modules[module_index]
@@ -715,14 +742,18 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                 singer.send_song()?;
             }
             SingerCommand::NoteOn(track_index, key, _channel, velocity, delay) => {
-                let mut singer = singer.lock().unwrap();
+                let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
+                    .lock()
+                    .unwrap()
                     .event_list_input
                     .push(Event::NoteOn(key, velocity, delay));
             }
             SingerCommand::NoteOff(track_index, key, _channel, _velocity, delay) => {
-                let mut singer = singer.lock().unwrap();
+                let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
+                    .lock()
+                    .unwrap()
                     .event_list_input
                     .push(Event::NoteOff(key, delay));
             }
