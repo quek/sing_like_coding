@@ -42,7 +42,7 @@ impl Track {
     pub fn process(
         &self,
         track_index: usize,
-        contexts: Vec<Arc<Mutex<ProcessTrackContext>>>,
+        contexts: &Vec<Arc<Mutex<ProcessTrackContext>>>,
     ) -> Result<()> {
         let mut context = contexts[track_index].lock().unwrap();
         self.compute_midi(&mut context);

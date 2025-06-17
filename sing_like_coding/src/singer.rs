@@ -254,7 +254,7 @@ impl Singer {
             .into_par_iter()
             .try_for_each(|track_index| {
                 let track = &self.song.tracks[track_index];
-                track.process(track_index, self.process_track_contexts.clone())
+                track.process(track_index, &self.process_track_contexts)
             })?;
 
         // prepare mixing paramss
@@ -377,7 +377,7 @@ impl Singer {
 
         // main track process
         if !dummy_p {
-            self.song.tracks[0].process(0, self.process_track_contexts.clone())?;
+            self.song.tracks[0].process(0, &self.process_track_contexts)?;
         }
 
         let main_process_data = if dummy_p {
