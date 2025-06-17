@@ -16,7 +16,10 @@ use clap_sys::{
         CLAP_TRANSPORT_HAS_TEMPO, CLAP_TRANSPORT_IS_PLAYING,
     },
     ext::{
-        audio_ports::{clap_host_audio_ports, CLAP_EXT_AUDIO_PORTS},
+        audio_ports::{
+            clap_audio_port_info, clap_host_audio_ports, clap_plugin_audio_ports,
+            CLAP_EXT_AUDIO_PORTS,
+        },
         gui::{
             clap_host_gui, clap_plugin_gui, clap_window, clap_window_handle, CLAP_EXT_GUI,
             CLAP_WINDOW_API_WIN32,
@@ -60,6 +63,7 @@ pub struct Plugin {
     clap_host: clap_host,
     lib: Option<Library>,
     pub plugin: *const clap_plugin,
+    ext_audio_ports: Option<*const clap_plugin_audio_ports>,
     ext_gui: Option<*const clap_plugin_gui>,
     ext_latency: Option<*const clap_plugin_latency>,
     ext_params: Option<*const clap_plugin_params>,
@@ -68,6 +72,8 @@ pub struct Plugin {
     window_handler: Option<*mut c_void>,
     process_start_p: bool,
     sender_to_view: Sender<PluginPtr>,
+    audio_port_info_inputs: Vec<clap_audio_port_info>,
+    audio_port_info_outputs: Vec<clap_audio_port_info>,
     event_list_input: Pin<Box<EventListInput>>,
     event_list_output: Pin<Box<EventListOutput>>,
     host_audio_ports: clap_host_audio_ports,
@@ -130,6 +136,7 @@ impl Plugin {
             clap_host,
             lib: None,
             plugin: null(),
+            ext_audio_ports: None,
             ext_gui: None,
             ext_latency: None,
             ext_params: None,
@@ -138,6 +145,8 @@ impl Plugin {
             window_handler: None,
             process_start_p: false,
             sender_to_view,
+            audio_port_info_inputs: vec![],
+            audio_port_info_outputs: vec![],
             event_list_input: EventListInput::new(),
             event_list_output: EventListOutput::new(),
             host_audio_ports,
@@ -214,8 +223,11 @@ impl Plugin {
         }
     }
 
-    unsafe extern "C" fn params_rescan(_host: *const clap_host, _flags: clap_param_rescan_flags) {
-        log::debug!("params_rescan");
+    unsafe extern "C" fn params_rescan(host: *const clap_host, _flags: clap_param_rescan_flags) {
+        log::debug!("params_rescan start");
+        let this = unsafe { &mut *((*host).host_data as *mut Self) };
+        let _ = this.params();
+        log::debug!("params_rescan end");
     }
 
     unsafe extern "C" fn params_clear(
@@ -334,6 +346,12 @@ impl Plugin {
                 panic!("Plugin init failed");
             }
 
+            let audio_ports = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_AUDIO_PORTS.as_ptr())
+                as *const clap_plugin_audio_ports;
+            if !audio_ports.is_null() {
+                self.ext_audio_ports = Some(audio_ports);
+            }
+
             let gui = (plugin.get_extension.unwrap())(plugin, CLAP_EXT_GUI.as_ptr())
                 as *const clap_plugin_gui;
             if !gui.is_null() {
@@ -360,8 +378,51 @@ impl Plugin {
 
             self.plugin = clap_plugin;
 
+            self.audio_ports().unwrap();
             self.params().unwrap();
         }
+    }
+
+    pub fn audio_ports(&mut self) -> Result<()> {
+        self.audio_port_info_inputs.clear();
+        self.audio_port_info_outputs.clear();
+        unsafe {
+            let Some(ext_audio_ports) = self.ext_audio_ports else {
+                return Ok(());
+            };
+            let ext_audio_ports = &*ext_audio_ports;
+            let Some(count) = ext_audio_ports.count else {
+                return Ok(());
+            };
+            let Some(get) = ext_audio_ports.get else {
+                return Ok(());
+            };
+
+            for (is_input, xs) in [
+                (true, &mut self.audio_port_info_inputs),
+                (false, &mut self.audio_port_info_outputs),
+            ] {
+                for i in 0..count(self.plugin, is_input) {
+                    let mut info = std::mem::zeroed::<clap_audio_port_info>();
+                    if get(self.plugin, i, is_input, &mut info) {
+                        log::debug!(
+                            "{} {} {}",
+                            if is_input { "入力" } else { "出力" },
+                            i,
+                            CStr::from_ptr(info.name.as_ptr()).to_string_lossy()
+                        );
+                        xs.push(info);
+                    } else {
+                        log::warn!(
+                            "Failed to get audio port info at index {} (is_input = {})",
+                            i,
+                            is_input
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn gui_available(&self) -> bool {
