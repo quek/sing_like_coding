@@ -87,13 +87,6 @@ impl Track {
                     self_buffer[ch][0] = src_buffer[ch][0];
                 }
             }
-            log::debug!(
-                "{} {} {} {}",
-                track_index,
-                module_index,
-                src_constant_mask,
-                self_process_data.constant_mask_in
-            );
         }
 
         context.plugins[module_index].process()?;
