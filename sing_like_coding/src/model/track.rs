@@ -128,7 +128,6 @@ impl Track {
             };
             let src_process_data = unsafe { &*src_ptr };
             let src_constant_mask = src_process_data.constant_mask_out;
-            dbg!(src_process_data.constant_mask_out);
             let src_buffer = &src_process_data.buffer_out;
             let self_process_data = context.plugins[module_index].process_data_mut();
             let self_buffer = &mut self_process_data.buffer_in;
