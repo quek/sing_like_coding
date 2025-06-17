@@ -97,7 +97,7 @@ impl Track {
 
             for ch in 0..context.nchannels {
                 let constant_mask_bit = 1 << ch;
-                if (constant_mask & (1 << ch)) == 0 {
+                if (constant_mask & constant_mask_bit) == 0 {
                     process_data_in.constant_mask_in &= !constant_mask_bit;
                     buffer_in[ch].copy_from_slice(&buffer_out[ch]);
                 } else {
