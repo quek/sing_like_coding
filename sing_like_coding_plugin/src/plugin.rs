@@ -424,14 +424,16 @@ impl Plugin {
         }
         if self.audio_port_info_inputs.len() > MAX_PORTS {
             log::warn!(
-                "self.audio_port_info_inputs.len() > MAX_PORTS {}",
-                self.audio_port_info_inputs.len()
+                "self.audio_port_info_inputs.len() {} > MAX_PORTS {}",
+                self.audio_port_info_inputs.len(),
+                MAX_PORTS
             );
         }
         if self.audio_port_info_outputs.len() > MAX_PORTS {
             log::warn!(
-                "self.audio_port_info_outputs.len() > MAX_PORTS {}",
-                self.audio_port_info_outputs.len()
+                "self.audio_port_info_outputs.len() {} > MAX_PORTS {}",
+                self.audio_port_info_outputs.len(),
+                MAX_PORTS
             );
         }
         Ok(())
@@ -598,6 +600,7 @@ impl Plugin {
         context.nports_out = self.audio_port_info_outputs.len().min(MAX_PORTS);
 
         let mut audio_inputs = Vec::with_capacity(context.nports_in);
+        let mut buffer_keeps = vec![];
         for port in 0..context.nports_in {
             let mut in_buffer = vec![];
             for channel in 0..context.nchannels {
@@ -611,6 +614,7 @@ impl Plugin {
                 constant_mask: context.constant_mask_in[port],
             };
             audio_inputs.push(audio_input);
+            buffer_keeps.push(in_buffer);
         }
 
         let mut audio_outputs = Vec::with_capacity(context.nports_out);
@@ -627,6 +631,7 @@ impl Plugin {
                 constant_mask: 0,
             };
             audio_outputs.push(audio_output);
+            buffer_keeps.push(out_buffer);
         }
 
         let transport = if context.play_p != 0 {
