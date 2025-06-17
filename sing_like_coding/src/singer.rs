@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet, VecDeque},
     f32::consts::PI,
     fs::File,
     io::BufReader,
@@ -250,12 +251,25 @@ impl Singer {
         self.all_notef_off_p = false;
 
         // tracks process
-        (1..self.song.tracks.len())
-            .into_par_iter()
-            .try_for_each(|track_index| {
-                let track = &self.song.tracks[track_index];
-                track.process(track_index, &self.process_track_contexts)
-            })?;
+        for track_index in 0..self.song.tracks.len() {
+            let mut context = self.process_track_contexts[track_index].lock().unwrap();
+            self.song.tracks[track_index].compute_midi(&mut context);
+        }
+        let levels = topological_levels(&self.song)?;
+        for level in levels {
+            level
+                .into_par_iter()
+                .try_for_each(|(track_index, module_index)| {
+                    let track = &self.song.tracks[track_index];
+                    let mut context = self.process_track_contexts[track_index].lock().unwrap();
+                    track.process_module(
+                        track_index,
+                        &mut context,
+                        module_index,
+                        &self.process_track_contexts,
+                    )
+                })?;
+        }
 
         // prepare mixing paramss
         let mut data = self
@@ -394,7 +408,14 @@ impl Singer {
 
         // main track process
         if !dummy_p {
-            self.song.tracks[0].process(0, &self.process_track_contexts)?;
+            for module_index in 0..self.song.tracks[0].modules.len() {
+                self.song.tracks[0].process_module(
+                    0,
+                    &mut self.process_track_contexts[0].lock().unwrap(),
+                    module_index,
+                    &self.process_track_contexts,
+                )?;
+            }
         }
 
         // main track pan volume -> audio device
@@ -835,4 +856,71 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
         }
     }
     Ok(())
+}
+
+type ModuleId = (usize, usize); // (track_index, module_index)
+
+/// トポロジカル順にモジュールを依存レベルごとに分けて返す。
+fn topological_levels(song: &Song) -> anyhow::Result<Vec<Vec<ModuleId>>> {
+    let mut graph: HashMap<ModuleId, HashSet<ModuleId>> = HashMap::new(); // node -> deps
+    let mut reverse_graph: HashMap<ModuleId, HashSet<ModuleId>> = HashMap::new(); // dep -> users
+    let mut in_degree: HashMap<ModuleId, usize> = HashMap::new();
+
+    // グラフ構築
+    for (track_index, track) in song.tracks.iter().enumerate() {
+        if track_index == 0 {
+            continue;
+        }
+        for (module_index, module) in track.modules.iter().enumerate() {
+            let id = (track_index, module_index);
+            let deps = module
+                .audio_inputs
+                .iter()
+                .map(|input| (input.track_index, input.module_index));
+
+            for dep in deps {
+                graph.entry(id).or_default().insert(dep);
+                reverse_graph.entry(dep).or_default().insert(id);
+            }
+
+            in_degree.insert(id, graph.get(&id).map_or(0, |s| s.len()));
+        }
+    }
+
+    // レベルごとに分割
+    let mut levels: Vec<Vec<ModuleId>> = Vec::new();
+    let mut queue: VecDeque<ModuleId> = in_degree
+        .iter()
+        .filter_map(|(id, &deg)| if deg == 0 { Some(*id) } else { None })
+        .collect();
+
+    while !queue.is_empty() {
+        let mut current_level = Vec::new();
+        let mut next_queue = VecDeque::new();
+
+        for id in queue {
+            current_level.push(id);
+            if let Some(children) = reverse_graph.get(&id) {
+                for &child in children {
+                    if let Some(deg) = in_degree.get_mut(&child) {
+                        *deg -= 1;
+                        if *deg == 0 {
+                            next_queue.push_back(child);
+                        }
+                    }
+                }
+            }
+        }
+
+        levels.push(current_level);
+        queue = next_queue;
+    }
+
+    // サイクル検出
+    let total_processed: usize = levels.iter().map(|level| level.len()).sum();
+    if total_processed != in_degree.len() {
+        anyhow::bail!("循環依存があります（例：サイドチェインの相互依存）");
+    }
+
+    Ok(levels)
 }

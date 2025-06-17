@@ -54,7 +54,7 @@ impl Track {
         Ok(())
     }
 
-    fn process_module(
+    pub fn process_module(
         &self,
         track_index: usize,
         context: &mut ProcessTrackContext,
@@ -67,7 +67,7 @@ impl Track {
         Ok(())
     }
 
-    fn compute_midi(&self, context: &mut ProcessTrackContext) {
+    pub fn compute_midi(&self, context: &mut ProcessTrackContext) {
         if !context.play_p {
             return;
         }
