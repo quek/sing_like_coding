@@ -200,7 +200,6 @@ impl Singer {
             .unwrap()
             .plugins
             .push(PluginRef::new(id, shmem.as_ptr() as *mut ProcessData)?);
-        dbg!("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ plugins.push");
         self.shmems[track_index].push(shmem);
 
         self.sender_to_plugin.send(MainToPlugin::Load(
@@ -377,7 +376,7 @@ impl Singer {
         }
 
         // main track process
-        if dummy_p {
+        if !dummy_p {
             self.song.tracks[0].process(0, self.process_track_contexts.clone())?;
         }
 
@@ -424,7 +423,7 @@ impl Singer {
         }
 
         self.song_state_mut().param_track_index = usize::MAX;
-        self.compute_song_state(if dummy_p { Some(&dummy) } else { None });
+        self.compute_song_state(main_process_data);
 
         self.steady_time += nframes as i64;
 
@@ -570,14 +569,14 @@ impl Singer {
         });
     }
 
-    fn compute_song_state(&mut self, dummy: Option<&ProcessData>) {
+    fn compute_song_state(&mut self, main_process_data: &ProcessData) {
         let song_state = self.song_state_mut();
 
         for track_index in 0..self.process_track_contexts.len() {
             let context = self.process_track_contexts[track_index].lock().unwrap();
             if let Some(plugin_ref) = context.plugins.last() {
-                let process_data = if track_index == 0 && dummy.is_some() {
-                    dummy.unwrap()
+                let process_data = if track_index == 0 {
+                    main_process_data
                 } else {
                     plugin_ref.process_data()
                 };
