@@ -39,21 +39,6 @@ impl Track {
         }
     }
 
-    pub fn process(
-        &self,
-        track_index: usize,
-        contexts: &Vec<Arc<Mutex<ProcessTrackContext>>>,
-    ) -> Result<()> {
-        let mut context = contexts[track_index].lock().unwrap();
-        self.compute_midi(&mut context);
-        let module_len = self.modules.len();
-        for module_index in 0..module_len {
-            self.process_module(track_index, &mut context, module_index, contexts)?;
-        }
-
-        Ok(())
-    }
-
     pub fn process_module(
         &self,
         track_index: usize,

@@ -796,6 +796,13 @@ impl MainView {
                     .unwrap();
                 ui.close_menu();
             }
+            if ui.button("Sidechain").clicked() {
+                state
+                    .sender_to_singer
+                    .send(SingerCommand::PluginSidechain(track_index, module_index))
+                    .unwrap();
+                ui.close_menu();
+            }
         });
         Ok(())
     }

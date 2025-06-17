@@ -49,6 +49,7 @@ pub enum SingerCommand {
     PluginLatency(usize, u32),
     PluginLoad(usize, String, String),
     PluginDelete(usize, usize),
+    PluginSidechain(usize, usize),
     PointNew(CursorTrack, usize, clap_id),
     TrackAdd,
     TrackDelete(usize),
@@ -255,6 +256,7 @@ impl Singer {
             let mut context = self.process_track_contexts[track_index].lock().unwrap();
             self.song.tracks[track_index].compute_midi(&mut context);
         }
+        // TODO topological_levels は必要な時だけ行う
         let levels = topological_levels(&self.song)?;
         for level in levels {
             level
@@ -486,6 +488,16 @@ impl Singer {
         self.shmems[track_index].remove(module_index);
         self.sender_to_plugin
             .send(MainToPlugin::Unload(track_index, module_index))?;
+        Ok(())
+    }
+
+    pub fn plugin_sidechain(&mut self, track_index: usize, module_index: usize) -> Result<()> {
+        let module = &mut self.song.tracks[track_index].modules[module_index];
+        module.audio_inputs.push(AudioInput {
+            // TEST ようです
+            track_index: track_index - 1,
+            module_index: 0,
+        });
         Ok(())
     }
 
@@ -770,6 +782,12 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
 
                 singer.send_song()?;
             }
+            SingerCommand::PluginSidechain(track_index, module_index) => {
+                let mut singer = singer.lock().unwrap();
+                singer.plugin_sidechain(track_index, module_index)?;
+
+                singer.send_song()?;
+            }
             SingerCommand::PointNew(cursor, module_index, param_id) => {
                 let mut singer = singer.lock().unwrap();
                 singer.point_new(cursor, module_index, param_id)?;
@@ -858,9 +876,18 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
     Ok(())
 }
 
+/// トポロジカル順にモジュールを依存レベルごとに分けて返す。
+/// Track 0:
+///     Module 0
+///     Module 1 ← depends on Track 1, Module 0
+///
+/// Track 1:
+///     Module 0 ← depends on Track 0, Module 0
+///     Module 1
+/// こういう依存関係でも処理できるように作ってもらった
+
 type ModuleId = (usize, usize); // (track_index, module_index)
 
-/// トポロジカル順にモジュールを依存レベルごとに分けて返す。
 fn topological_levels(song: &Song) -> anyhow::Result<Vec<Vec<ModuleId>>> {
     let mut graph: HashMap<ModuleId, HashSet<ModuleId>> = HashMap::new(); // node -> deps
     let mut reverse_graph: HashMap<ModuleId, HashSet<ModuleId>> = HashMap::new(); // dep -> users
