@@ -175,7 +175,6 @@ impl Singer {
             .find(|plugin_ref| plugin_ref.id == id)
         {
             plugin_ref.latency = latency;
-            dbg!(plugin_ref.latency);
         }
 
         Ok(())
