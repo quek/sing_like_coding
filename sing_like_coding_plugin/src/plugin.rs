@@ -45,7 +45,7 @@ use clap_sys::{
 use common::{
     cstr,
     plugin::param::Param,
-    process_data::{EventKind, ProcessData},
+    process_data::{EventKind, ProcessData, MAX_PORTS},
 };
 use libloading::{Library, Symbol};
 use stream::{IStream, OStream};
@@ -422,6 +422,18 @@ impl Plugin {
                 }
             }
         }
+        if self.audio_port_info_inputs.len() > MAX_PORTS {
+            log::warn!(
+                "self.audio_port_info_inputs.len() > MAX_PORTS {}",
+                self.audio_port_info_inputs.len()
+            );
+        }
+        if self.audio_port_info_outputs.len() > MAX_PORTS {
+            log::warn!(
+                "self.audio_port_info_outputs.len() > MAX_PORTS {}",
+                self.audio_port_info_outputs.len()
+            );
+        }
         Ok(())
     }
 
@@ -582,8 +594,8 @@ impl Plugin {
     }
 
     pub fn process(&mut self, context: &mut ProcessData) -> Result<()> {
-        context.nports_in = self.audio_port_info_inputs.len();
-        context.nports_out = self.audio_port_info_outputs.len();
+        context.nports_in = self.audio_port_info_inputs.len().min(MAX_PORTS);
+        context.nports_out = self.audio_port_info_outputs.len().min(MAX_PORTS);
 
         let mut audio_inputs = Vec::with_capacity(context.nports_in);
         for port in 0..context.nports_in {

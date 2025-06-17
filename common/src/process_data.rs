@@ -5,7 +5,7 @@ use crate::dsp::linear_to_db;
 pub const MAX_CHANNELS: usize = 2;
 pub const MAX_FRAMES: usize = 2048;
 pub const MAX_EVENTS: usize = 128;
-const MAX_PORTS: usize = 8;
+pub const MAX_PORTS: usize = 8;
 
 #[repr(C)]
 pub struct ProcessData {
