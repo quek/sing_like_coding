@@ -23,4 +23,6 @@ impl Module {
 pub struct AudioInput {
     pub track_index: usize,
     pub module_index: usize,
+    pub port_index_src: usize,
+    pub port_index_dst: usize,
 }

@@ -283,8 +283,9 @@ impl Singer {
                     .plugins
                     .last_mut()
                     .map(|plugin_ref: &mut PluginRef| {
-                        let constant_mask = plugin_ref.process_data_mut().constant_mask_out;
-                        (plugin_ref.ptr, constant_mask)
+                        let pd = plugin_ref.process_data();
+                        let constant_mask = pd.constant_mask_out;
+                        (plugin_ref.ptr, constant_mask, pd.nports_in, pd.nports_out)
                     })
             })
             .zip(self.song.tracks.iter().map(|track| {
@@ -331,22 +332,26 @@ impl Singer {
         for ((buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)), buffer) in
             data[1..].iter_mut().zip(buffers[1..].iter_mut())
         {
-            if let (Some((_, constant_mask)), Some(buffer)) = (buffer_constant_mask, buffer) {
-                for channel in 0..nchannels {
-                    let constp = (*constant_mask & (1 << channel)) != 0;
-                    let gain = if channel == 0 {
-                        *gain_ch0
-                    } else if channel == 1 {
-                        *gain_ch1
-                    } else {
-                        *gain_ch_restg
-                    };
+            if let (Some((_, constant_mask, _nports_in, nports_out)), Some(buffer)) =
+                (buffer_constant_mask, buffer)
+            {
+                for port in 0..*nports_out {
+                    for channel in 0..nchannels {
+                        let constp = (constant_mask[port] & (1 << channel)) != 0;
+                        let gain = if channel == 0 {
+                            *gain_ch0
+                        } else if channel == 1 {
+                            *gain_ch1
+                        } else {
+                            *gain_ch_restg
+                        };
 
-                    if constp {
-                        buffer[channel][0] *= gain;
-                    } else {
-                        for frame in 0..nframes {
-                            buffer[channel][frame] *= gain;
+                        if constp {
+                            buffer[port][channel][0] *= gain;
+                        } else {
+                            for frame in 0..nframes {
+                                buffer[port][channel][frame] *= gain;
+                            }
                         }
                     }
                 }
@@ -379,17 +384,17 @@ impl Singer {
                     .iter()
                     .zip(buffers[1..].iter())
                     .map(|((buffer_constant_mask, (mute, solo, _, _, _)), buffer)| {
-                        if let (Some((_, constant_mask)), Some(buffer)) =
+                        if let (Some((_, constant_mask, _, _)), Some(buffer)) =
                             (&buffer_constant_mask, buffer)
                         {
                             if *mute || (solo_any && !*solo) {
                                 0.0
                             } else {
-                                let constp = (*constant_mask & (1 << channel)) != 0;
+                                let constp = (constant_mask[0] & (1 << channel)) != 0;
                                 if constp {
-                                    buffer[channel][0]
+                                    buffer[0][channel][0]
                                 } else {
-                                    buffer[channel][frame]
+                                    buffer[0][channel][frame]
                                 }
                             }
                         } else {
@@ -399,11 +404,11 @@ impl Singer {
                     .sum();
 
                 if dummy_p {
-                    main_process_data.buffer_out[channel][frame] = value;
-                    main_process_data.constant_mask_out = 0;
+                    main_process_data.buffer_out[0][channel][frame] = value;
+                    main_process_data.constant_mask_out[0] = 0;
                 } else {
-                    main_process_data.buffer_in[channel][frame] = value;
-                    main_process_data.constant_mask_in = 0;
+                    main_process_data.buffer_in[0][channel][frame] = value;
+                    main_process_data.constant_mask_in[0] = 0;
                 }
             }
         }
@@ -435,13 +440,13 @@ impl Singer {
                     } else {
                         main_gains[2]
                     };
-                    let constp = (main_process_data.constant_mask_out & (1 << channel)) != 0;
+                    let constp = (main_process_data.constant_mask_out[0] & (1 << channel)) != 0;
                     if constp {
-                        main_process_data.buffer_out[channel][0] *= gain;
-                        main_process_data.buffer_out[channel][0]
+                        main_process_data.buffer_out[0][channel][0] *= gain;
+                        main_process_data.buffer_out[0][channel][0]
                     } else {
-                        main_process_data.buffer_out[channel][frame] *= gain;
-                        main_process_data.buffer_out[channel][frame]
+                        main_process_data.buffer_out[0][channel][frame] *= gain;
+                        main_process_data.buffer_out[0][channel][frame]
                     }
                 };
                 output[nchannels * frame + channel] = value;
@@ -497,6 +502,8 @@ impl Singer {
             // TEST ようです
             track_index: track_index - 1,
             module_index: 0,
+            port_index_src: 0,
+            port_index_dst: 1,
         });
         Ok(())
     }
@@ -617,7 +624,7 @@ impl Singer {
                     plugin_ref.process_data()
                 };
                 for channel in 0..process_data.nchannels {
-                    song_state.tracks[track_index].peaks[channel] = process_data.peak(channel);
+                    song_state.tracks[track_index].peaks[channel] = process_data.peak(0, channel);
                 }
             } else {
                 for channel in 0..2 {
@@ -766,6 +773,8 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                     vec![AudioInput {
                         track_index,
                         module_index: track.modules.len() - 1,
+                        port_index_src: 0,
+                        port_index_dst: 0,
                     }]
                 };
                 singer.song.tracks[track_index].modules.push(Module::new(

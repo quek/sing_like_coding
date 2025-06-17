@@ -135,12 +135,16 @@ impl Track {
 
             for ch in 0..context.nchannels {
                 let constant_mask_bit = 1 << ch;
-                if (src_constant_mask & constant_mask_bit) == 0 {
-                    self_process_data.constant_mask_in &= !constant_mask_bit;
-                    self_buffer[ch].copy_from_slice(&src_buffer[ch]);
+                if (src_constant_mask[autdio_input.port_index_src] & constant_mask_bit) == 0 {
+                    self_process_data.constant_mask_in[autdio_input.port_index_dst] &=
+                        !constant_mask_bit;
+                    self_buffer[autdio_input.port_index_dst][ch]
+                        .copy_from_slice(&src_buffer[autdio_input.port_index_src][ch]);
                 } else {
-                    self_process_data.constant_mask_in |= constant_mask_bit;
-                    self_buffer[ch][0] = src_buffer[ch][0];
+                    self_process_data.constant_mask_in[autdio_input.port_index_dst] |=
+                        constant_mask_bit;
+                    self_buffer[autdio_input.port_index_dst][ch][0] =
+                        src_buffer[autdio_input.port_index_src][ch][0];
                 }
             }
         }
