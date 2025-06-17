@@ -61,50 +61,39 @@ impl Track {
         module_index: usize,
         contexts: &Vec<Arc<Mutex<ProcessTrackContext>>>,
     ) -> Result<()> {
-        let plugin_ref_self = &mut context.plugins[module_index];
-        let data = plugin_ref_self.process_data_mut();
-        for event in context.event_list_input.iter() {
-            match event {
-                Event::NoteOn(key, velocity, delay) => {
-                    data.input_note_on(*key, *velocity, 0, *delay)
-                }
-                Event::NoteOff(key, delay) => data.input_note_off(*key, 0, *delay),
-                Event::NoteAllOff => {
-                    for key in context.on_keys.drain(..).filter_map(|x| x) {
-                        data.input_note_off(key, 0, 0);
-                    }
-                }
-                Event::ParamValue(mindex, param_id, value, delay) => {
-                    if *mindex == module_index {
-                        data.input_param_value(*param_id, *value, *delay)
-                    }
-                }
-            }
-        }
+        self.prepare_module_event(context, module_index)?;
 
         for autdio_input in self.modules[module_index].audio_inputs.iter() {
-            let process_data_out_ptr = if autdio_input.track_index == track_index {
-                plugin_ref_self.ptr
+            let src_ptr = if autdio_input.track_index == track_index {
+                context.plugins[autdio_input.module_index].ptr
             } else {
                 let context = contexts[autdio_input.track_index].lock().unwrap();
                 context.plugins[module_index].ptr
             };
-            let process_data_out = unsafe { &*process_data_out_ptr };
-            let constant_mask = process_data_out.constant_mask_out;
-            let buffer_out = &process_data_out.buffer_out;
-            let process_data_in = plugin_ref_self.process_data_mut();
-            let buffer_in = &mut process_data_in.buffer_in;
+            let src_process_data = unsafe { &*src_ptr };
+            let src_constant_mask = src_process_data.constant_mask_out;
+            dbg!(src_process_data.constant_mask_out);
+            let src_buffer = &src_process_data.buffer_out;
+            let self_process_data = context.plugins[module_index].process_data_mut();
+            let self_buffer = &mut self_process_data.buffer_in;
 
             for ch in 0..context.nchannels {
                 let constant_mask_bit = 1 << ch;
-                if (constant_mask & constant_mask_bit) == 0 {
-                    process_data_in.constant_mask_in &= !constant_mask_bit;
-                    buffer_in[ch].copy_from_slice(&buffer_out[ch]);
+                if (src_constant_mask & constant_mask_bit) == 0 {
+                    self_process_data.constant_mask_in &= !constant_mask_bit;
+                    self_buffer[ch].copy_from_slice(&src_buffer[ch]);
                 } else {
-                    process_data_in.constant_mask_in |= constant_mask_bit;
-                    buffer_in[ch][0] = buffer_out[ch][0];
+                    self_process_data.constant_mask_in |= constant_mask_bit;
+                    self_buffer[ch][0] = src_buffer[ch][0];
                 }
             }
+            log::debug!(
+                "{} {} {} {}",
+                track_index,
+                module_index,
+                src_constant_mask,
+                self_process_data.constant_mask_in
+            );
         }
 
         context.plugins[module_index].process()?;
@@ -170,5 +159,33 @@ impl Track {
                 }
             }
         }
+    }
+
+    fn prepare_module_event(
+        &self,
+        context: &mut ProcessTrackContext,
+        module_index: usize,
+    ) -> Result<()> {
+        let plugin_ref_self = &mut context.plugins[module_index];
+        let data = plugin_ref_self.process_data_mut();
+        for event in context.event_list_input.iter() {
+            match event {
+                Event::NoteOn(key, velocity, delay) => {
+                    data.input_note_on(*key, *velocity, 0, *delay)
+                }
+                Event::NoteOff(key, delay) => data.input_note_off(*key, 0, *delay),
+                Event::NoteAllOff => {
+                    for key in context.on_keys.drain(..).filter_map(|x| x) {
+                        data.input_note_off(key, 0, 0);
+                    }
+                }
+                Event::ParamValue(mindex, param_id, value, delay) => {
+                    if *mindex == module_index {
+                        data.input_param_value(*param_id, *value, *delay)
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
