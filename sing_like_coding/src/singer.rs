@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet, VecDeque},
     f32::consts::PI,
     fs::File,
     io::BufReader,
@@ -23,7 +24,7 @@ use clap_sys::id::clap_id;
 use common::{
     clap_manager::ClapManager,
     event::Event,
-    module::Module,
+    module::{AudioInput, Module},
     plugin_ref::PluginRef,
     process_data::{EventKind, ProcessData},
     process_track_context::ProcessTrackContext,
@@ -48,6 +49,7 @@ pub enum SingerCommand {
     PluginLatency(usize, u32),
     PluginLoad(usize, String, String),
     PluginDelete(usize, usize),
+    PluginSidechain(usize, usize),
     PointNew(CursorTrack, usize, clap_id),
     TrackAdd,
     TrackDelete(usize),
@@ -75,7 +77,7 @@ pub struct Singer {
     sender_to_ui: Sender<AppStateCommand>,
     pub sender_to_plugin: Sender<MainToPlugin>,
     pub line_play: usize,
-    process_track_contexts: Vec<ProcessTrackContext>,
+    process_track_contexts: Vec<Arc<Mutex<ProcessTrackContext>>>,
     shmems: Vec<Vec<Shmem>>,
     pub gui_context: Option<eframe::egui::Context>,
 
@@ -168,13 +170,17 @@ impl Singer {
     }
 
     pub fn plugin_latency_set(&mut self, id: usize, latency: u32) -> Result<()> {
-        if let Some(plugin_ref) = self
-            .process_track_contexts
-            .iter_mut()
-            .flat_map(|c| c.plugins.iter_mut())
-            .find(|plugin_ref| plugin_ref.id == id)
-        {
-            plugin_ref.latency = latency;
+        for context in self.process_track_contexts.iter_mut() {
+            if let Some(plugin_ref) = context
+                .lock()
+                .unwrap()
+                .plugins
+                .iter_mut()
+                .find(|plugin_ref| plugin_ref.id == id)
+            {
+                plugin_ref.latency = latency;
+                break;
+            }
         }
 
         Ok(())
@@ -192,6 +198,8 @@ impl Singer {
         let shmem = create_shared_memory::<ProcessData>(&shmem_name)?;
 
         self.process_track_contexts[track_index]
+            .lock()
+            .unwrap()
             .plugins
             .push(PluginRef::new(id, shmem.as_ptr() as *mut ProcessData)?);
         self.shmems[track_index].push(shmem);
@@ -215,9 +223,9 @@ impl Singer {
         self.compute_play_position(nframes);
 
         for track_index in 0..self.process_track_contexts.len() {
-            for module_index in 0..self.process_track_contexts[track_index].plugins.len() {
-                let process_data = self.process_track_contexts[track_index].plugins[module_index]
-                    .process_data_mut();
+            let mut context = self.process_track_contexts[track_index].lock().unwrap();
+            for module_index in 0..context.plugins.len() {
+                let process_data = context.plugins[module_index].process_data_mut();
                 process_data.nchannels = nchannels;
                 process_data.nframes = nframes;
                 process_data.play_p = if self.play_p { 1 } else { 0 };
@@ -227,9 +235,7 @@ impl Singer {
                 process_data.steady_time = self.steady_time;
                 process_data.prepare();
             }
-        }
 
-        for context in self.process_track_contexts.iter_mut() {
             context.nchannels = nchannels;
             context.nframes = nframes;
             context.play_p = self.play_p;
@@ -242,31 +248,45 @@ impl Singer {
                 context.event_list_input.push(Event::NoteAllOff);
             }
         }
+
         self.all_notef_off_p = false;
 
         // tracks process
-        self.song.tracks[1..]
-            .par_iter()
-            .zip(self.process_track_contexts[1..].par_iter_mut())
-            .try_for_each(|(track, process_track_context)| track.process(process_track_context))?;
+        for track_index in 0..self.song.tracks.len() {
+            let mut context = self.process_track_contexts[track_index].lock().unwrap();
+            self.song.tracks[track_index].compute_midi(&mut context);
+        }
+        // TODO topological_levels は必要な時だけ行う
+        let levels = topological_levels(&self.song)?;
+        for level in levels {
+            level
+                .into_par_iter()
+                .try_for_each(|(track_index, module_index)| {
+                    let track = &self.song.tracks[track_index];
+                    let mut context = self.process_track_contexts[track_index].lock().unwrap();
+                    track.process_module(
+                        track_index,
+                        &mut context,
+                        module_index,
+                        &self.process_track_contexts,
+                    )
+                })?;
+        }
 
         // prepare mixing paramss
-        let mut buffers = self
+        let mut data = self
             .process_track_contexts
             .iter_mut()
-            .enumerate()
-            .map(|(i, x)| {
-                x.plugins.last_mut().map(|plugin_ref: &mut PluginRef| {
-                    let constant_mask = plugin_ref.process_data_mut().constant_mask_out;
-                    (
-                        if i == 0 {
-                            &mut plugin_ref.process_data_mut().buffer_in
-                        } else {
-                            &mut plugin_ref.process_data_mut().buffer_out
-                        },
-                        constant_mask,
-                    )
-                })
+            .map(|x| {
+                x.lock()
+                    .unwrap()
+                    .plugins
+                    .last_mut()
+                    .map(|plugin_ref: &mut PluginRef| {
+                        let pd = plugin_ref.process_data();
+                        let constant_mask = pd.constant_mask_out;
+                        (plugin_ref.ptr, constant_mask, pd.nports_in, pd.nports_out)
+                    })
             })
             .zip(self.song.tracks.iter().map(|track| {
                 if (track.pan - 0.5).abs() < 0.001 {
@@ -291,28 +311,47 @@ impl Singer {
             }))
             .collect::<Vec<_>>();
 
-        let main_gains = [buffers[0].1 .2, buffers[0].1 .3, buffers[0].1 .4];
+        let mut buffers = data
+            .iter()
+            .enumerate()
+            .map(|(track_index, x)| {
+                x.0.map(|x| {
+                    let process_data = unsafe { &mut *(x.0) };
+                    if track_index == 0 {
+                        &mut process_data.buffer_in
+                    } else {
+                        &mut process_data.buffer_out
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let main_gains = [data[0].1 .2, data[0].1 .3, data[0].1 .4];
 
         // tracks pan pan volume
-        for (buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)) in
-            buffers[1..].iter_mut()
+        for ((buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)), buffer) in
+            data[1..].iter_mut().zip(buffers[1..].iter_mut())
         {
-            if let Some((buffer, constant_mask)) = buffer_constant_mask {
-                for channel in 0..nchannels {
-                    let constp = (*constant_mask & (1 << channel)) != 0;
-                    let gain = if channel == 0 {
-                        *gain_ch0
-                    } else if channel == 1 {
-                        *gain_ch1
-                    } else {
-                        *gain_ch_restg
-                    };
+            if let (Some((_, constant_mask, _nports_in, nports_out)), Some(buffer)) =
+                (buffer_constant_mask, buffer)
+            {
+                for port in 0..*nports_out {
+                    for channel in 0..nchannels {
+                        let constp = (constant_mask[port] & (1 << channel)) != 0;
+                        let gain = if channel == 0 {
+                            *gain_ch0
+                        } else if channel == 1 {
+                            *gain_ch1
+                        } else {
+                            *gain_ch_restg
+                        };
 
-                    if constp {
-                        buffer[channel][0] *= gain;
-                    } else {
-                        for frame in 0..nframes {
-                            buffer[channel][frame] *= gain;
+                        if constp {
+                            buffer[port][channel][0] *= gain;
+                        } else {
+                            for frame in 0..nframes {
+                                buffer[port][channel][frame] *= gain;
+                            }
                         }
                     }
                 }
@@ -323,21 +362,39 @@ impl Singer {
         let mut dummy = ProcessData::new();
         dummy.prepare();
         let dummy_p = self.song.tracks[0].modules.is_empty();
+
+        let main_process_data = if dummy_p {
+            &mut dummy
+        } else {
+            let ptr = self.process_track_contexts[0]
+                .lock()
+                .unwrap()
+                .plugins
+                .last()
+                .unwrap()
+                .ptr;
+            let process_data = unsafe { &mut *(ptr) };
+            process_data
+        };
+
         let solo_any = self.song.tracks.iter().any(|t| t.solo);
         for frame in 0..nframes {
             for channel in 0..nchannels {
-                let value = buffers[1..]
+                let value = data[1..]
                     .iter()
-                    .map(|(buffer_constant_mask, (mute, solo, _, _, _))| {
-                        if let Some((buffer, constant_mask)) = &buffer_constant_mask {
+                    .zip(buffers[1..].iter())
+                    .map(|((buffer_constant_mask, (mute, solo, _, _, _)), buffer)| {
+                        if let (Some((_, constant_mask, _, _)), Some(buffer)) =
+                            (&buffer_constant_mask, buffer)
+                        {
                             if *mute || (solo_any && !*solo) {
                                 0.0
                             } else {
-                                let constp = (*constant_mask & (1 << channel)) != 0;
+                                let constp = (constant_mask[0] & (1 << channel)) != 0;
                                 if constp {
-                                    buffer[channel][0]
+                                    buffer[0][channel][0]
                                 } else {
-                                    buffer[channel][frame]
+                                    buffer[0][channel][frame]
                                 }
                             }
                         } else {
@@ -345,27 +402,28 @@ impl Singer {
                         }
                     })
                     .sum();
+
                 if dummy_p {
-                    dummy.buffer_out[channel][frame] = value;
-                    dummy.constant_mask_out = 0;
+                    main_process_data.buffer_out[0][channel][frame] = value;
+                    main_process_data.constant_mask_out[0] = 0;
                 } else {
-                    buffers[0].0.as_mut().unwrap().0[channel][frame] = value;
+                    main_process_data.buffer_in[0][channel][frame] = value;
+                    main_process_data.constant_mask_in[0] = 0;
                 }
             }
         }
 
         // main track process
-        let main_process_data = if dummy_p {
-            &mut dummy
-        } else {
-            // main track process
-            self.song.tracks[0].process(&mut self.process_track_contexts[0])?;
-            self.process_track_contexts[0]
-                .plugins
-                .last_mut()
-                .unwrap()
-                .process_data_mut()
-        };
+        if !dummy_p {
+            for module_index in 0..self.song.tracks[0].modules.len() {
+                self.song.tracks[0].process_module(
+                    0,
+                    &mut self.process_track_contexts[0].lock().unwrap(),
+                    module_index,
+                    &self.process_track_contexts,
+                )?;
+            }
+        }
 
         // main track pan volume -> audio device
         let main_track = &self.song.tracks[0];
@@ -382,13 +440,13 @@ impl Singer {
                     } else {
                         main_gains[2]
                     };
-                    let constp = (main_process_data.constant_mask_out & (1 << channel)) != 0;
+                    let constp = (main_process_data.constant_mask_out[0] & (1 << channel)) != 0;
                     if constp {
-                        main_process_data.buffer_out[channel][0] *= gain;
-                        main_process_data.buffer_out[channel][0]
+                        main_process_data.buffer_out[0][channel][0] *= gain;
+                        main_process_data.buffer_out[0][channel][0]
                     } else {
-                        main_process_data.buffer_out[channel][frame] *= gain;
-                        main_process_data.buffer_out[channel][frame]
+                        main_process_data.buffer_out[0][channel][frame] *= gain;
+                        main_process_data.buffer_out[0][channel][frame]
                     }
                 };
                 output[nchannels * frame + channel] = value;
@@ -396,7 +454,7 @@ impl Singer {
         }
 
         self.song_state_mut().param_track_index = usize::MAX;
-        self.compute_song_state(if dummy_p { Some(&dummy) } else { None });
+        self.compute_song_state(main_process_data);
 
         self.steady_time += nframes as i64;
 
@@ -428,11 +486,25 @@ impl Singer {
     pub fn plugin_delete(&mut self, track_index: usize, module_index: usize) -> Result<()> {
         self.song.tracks[track_index].modules.remove(module_index);
         self.process_track_contexts[track_index]
+            .lock()
+            .unwrap()
             .plugins
             .remove(module_index);
         self.shmems[track_index].remove(module_index);
         self.sender_to_plugin
             .send(MainToPlugin::Unload(track_index, module_index))?;
+        Ok(())
+    }
+
+    pub fn plugin_sidechain(&mut self, track_index: usize, module_index: usize) -> Result<()> {
+        let module = &mut self.song.tracks[track_index].modules[module_index];
+        module.audio_inputs.push(AudioInput {
+            // TEST ようです
+            track_index: track_index - 1,
+            module_index: 0,
+            port_index_src: 0,
+            port_index_dst: 1,
+        });
         Ok(())
     }
 
@@ -488,7 +560,7 @@ impl Singer {
         let mut xs = vec![];
         for track_index in 0..self.song.tracks.len() {
             self.process_track_contexts
-                .push(ProcessTrackContext::default());
+                .push(Arc::new(Mutex::new(ProcessTrackContext::default())));
             self.shmems.push(vec![]);
 
             for module_index in 0..self.song.tracks[track_index].modules.len() {
@@ -540,24 +612,19 @@ impl Singer {
         });
     }
 
-    fn compute_song_state(&mut self, dummy: Option<&ProcessData>) {
+    fn compute_song_state(&mut self, main_process_data: &ProcessData) {
         let song_state = self.song_state_mut();
-        let process_data_list = self
-            .process_track_contexts
-            .iter()
-            .enumerate()
-            .map(|(i, x)| {
-                if i == 0 && dummy.is_some() {
-                    dummy
+
+        for track_index in 0..self.process_track_contexts.len() {
+            let context = self.process_track_contexts[track_index].lock().unwrap();
+            if let Some(plugin_ref) = context.plugins.last() {
+                let process_data = if track_index == 0 {
+                    main_process_data
                 } else {
-                    x.plugins.last().map(|x| x.process_data())
-                }
-            })
-            .collect::<Vec<_>>();
-        for track_index in 0..process_data_list.len() {
-            if let Some(process_data) = &process_data_list[track_index] {
+                    plugin_ref.process_data()
+                };
                 for channel in 0..process_data.nchannels {
-                    song_state.tracks[track_index].peaks[channel] = process_data.peak(channel);
+                    song_state.tracks[track_index].peaks[channel] = process_data.peak(0, channel);
                 }
             } else {
                 for channel in 0..2 {
@@ -567,7 +634,7 @@ impl Singer {
         }
 
         'top: for (track_index, context) in self.process_track_contexts.iter().enumerate() {
-            for (module_index, plugin) in context.plugins.iter().enumerate() {
+            for (module_index, plugin) in context.lock().unwrap().plugins.iter().enumerate() {
                 let process_data = plugin.process_data();
                 for event_index in 0..process_data.nevents_output {
                     let event = &process_data.events_output[event_index];
@@ -610,7 +677,7 @@ impl Singer {
     fn track_add(&mut self) {
         self.song.track_add();
         self.process_track_contexts
-            .push(ProcessTrackContext::default());
+            .push(Arc::new(Mutex::new(ProcessTrackContext::default())));
         self.shmems.push(vec![]);
     }
 
@@ -626,8 +693,10 @@ impl Singer {
 
     fn track_insert(&mut self, track_index: usize, track: Track) -> Result<()> {
         self.song.track_insert(track_index, track);
-        self.process_track_contexts
-            .insert(track_index, ProcessTrackContext::default());
+        self.process_track_contexts.insert(
+            track_index,
+            Arc::new(Mutex::new(ProcessTrackContext::default())),
+        );
         self.shmems.insert(track_index, vec![]);
         for module_index in 0..self.song.tracks[track_index].modules.len() {
             let clap_plugin_id = self.song.tracks[track_index].modules[module_index]
@@ -697,9 +766,22 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
             SingerCommand::PluginLoad(track_index, clap_plugin_id, name) => {
                 let mut singer = singer.lock().unwrap();
                 singer.plugin_load(track_index, clap_plugin_id.clone(), true)?;
-                singer.song.tracks[track_index]
-                    .modules
-                    .push(Module::new(clap_plugin_id, name));
+                let track = &mut singer.song.tracks[track_index];
+                let audio_inputs = if track.modules.is_empty() {
+                    vec![]
+                } else {
+                    vec![AudioInput {
+                        track_index,
+                        module_index: track.modules.len() - 1,
+                        port_index_src: 0,
+                        port_index_dst: 0,
+                    }]
+                };
+                singer.song.tracks[track_index].modules.push(Module::new(
+                    clap_plugin_id,
+                    name,
+                    audio_inputs,
+                ));
 
                 singer.send_song()?;
             }
@@ -709,20 +791,30 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
 
                 singer.send_song()?;
             }
+            SingerCommand::PluginSidechain(track_index, module_index) => {
+                let mut singer = singer.lock().unwrap();
+                singer.plugin_sidechain(track_index, module_index)?;
+
+                singer.send_song()?;
+            }
             SingerCommand::PointNew(cursor, module_index, param_id) => {
                 let mut singer = singer.lock().unwrap();
                 singer.point_new(cursor, module_index, param_id)?;
                 singer.send_song()?;
             }
             SingerCommand::NoteOn(track_index, key, _channel, velocity, delay) => {
-                let mut singer = singer.lock().unwrap();
+                let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
+                    .lock()
+                    .unwrap()
                     .event_list_input
                     .push(Event::NoteOn(key, velocity, delay));
             }
             SingerCommand::NoteOff(track_index, key, _channel, _velocity, delay) => {
-                let mut singer = singer.lock().unwrap();
+                let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
+                    .lock()
+                    .unwrap()
                     .event_list_input
                     .push(Event::NoteOff(key, delay));
             }
@@ -791,4 +883,80 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
         }
     }
     Ok(())
+}
+
+/// トポロジカル順にモジュールを依存レベルごとに分けて返す。
+/// Track 0:
+///     Module 0
+///     Module 1 ← depends on Track 1, Module 0
+///
+/// Track 1:
+///     Module 0 ← depends on Track 0, Module 0
+///     Module 1
+/// こういう依存関係でも処理できるように作ってもらった
+
+type ModuleId = (usize, usize); // (track_index, module_index)
+
+fn topological_levels(song: &Song) -> anyhow::Result<Vec<Vec<ModuleId>>> {
+    let mut graph: HashMap<ModuleId, HashSet<ModuleId>> = HashMap::new(); // node -> deps
+    let mut reverse_graph: HashMap<ModuleId, HashSet<ModuleId>> = HashMap::new(); // dep -> users
+    let mut in_degree: HashMap<ModuleId, usize> = HashMap::new();
+
+    // グラフ構築
+    for (track_index, track) in song.tracks.iter().enumerate() {
+        if track_index == 0 {
+            continue;
+        }
+        for (module_index, module) in track.modules.iter().enumerate() {
+            let id = (track_index, module_index);
+            let deps = module
+                .audio_inputs
+                .iter()
+                .map(|input| (input.track_index, input.module_index));
+
+            for dep in deps {
+                graph.entry(id).or_default().insert(dep);
+                reverse_graph.entry(dep).or_default().insert(id);
+            }
+
+            in_degree.insert(id, graph.get(&id).map_or(0, |s| s.len()));
+        }
+    }
+
+    // レベルごとに分割
+    let mut levels: Vec<Vec<ModuleId>> = Vec::new();
+    let mut queue: VecDeque<ModuleId> = in_degree
+        .iter()
+        .filter_map(|(id, &deg)| if deg == 0 { Some(*id) } else { None })
+        .collect();
+
+    while !queue.is_empty() {
+        let mut current_level = Vec::new();
+        let mut next_queue = VecDeque::new();
+
+        for id in queue {
+            current_level.push(id);
+            if let Some(children) = reverse_graph.get(&id) {
+                for &child in children {
+                    if let Some(deg) = in_degree.get_mut(&child) {
+                        *deg -= 1;
+                        if *deg == 0 {
+                            next_queue.push_back(child);
+                        }
+                    }
+                }
+            }
+        }
+
+        levels.push(current_level);
+        queue = next_queue;
+    }
+
+    // サイクル検出
+    let total_processed: usize = levels.iter().map(|level| level.len()).sum();
+    if total_processed != in_degree.len() {
+        anyhow::bail!("循環依存があります（例：サイドチェインの相互依存）");
+    }
+
+    Ok(levels)
 }

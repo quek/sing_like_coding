@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
 use clap_sys::id::clap_id;
 use common::{
@@ -37,63 +39,20 @@ impl Track {
         }
     }
 
-    pub fn process(&self, context: &mut ProcessTrackContext) -> Result<()> {
-        self.compute_midi(context);
-        let module_len = self.modules.len();
-        for module_index in 0..module_len {
-            self.process_module(context, module_index)?;
-        }
-
-        Ok(())
-    }
-
-    fn process_module(&self, context: &mut ProcessTrackContext, module_index: usize) -> Result<()> {
-        let data = context.plugins[module_index].process_data_mut();
-        for event in context.event_list_input.iter() {
-            match event {
-                Event::NoteOn(key, velocity, delay) => {
-                    data.input_note_on(*key, *velocity, 0, *delay)
-                }
-                Event::NoteOff(key, delay) => data.input_note_off(*key, 0, *delay),
-                Event::NoteAllOff => {
-                    for key in context.on_keys.drain(..).filter_map(|x| x) {
-                        data.input_note_off(key, 0, 0);
-                    }
-                }
-                Event::ParamValue(mindex, param_id, value, delay) => {
-                    if *mindex == module_index {
-                        data.input_param_value(*param_id, *value, *delay)
-                    }
-                }
-            }
-        }
-
-        if module_index > 0 {
-            let (left, right) = context.plugins.split_at_mut(module_index);
-            let prev = &mut left[module_index - 1];
-            let curr = &mut right[0];
-
-            let constant_mask = prev.process_data_mut().constant_mask_out;
-            curr.process_data_mut().constant_mask_in = constant_mask;
-
-            let buffer_out = &prev.process_data_mut().buffer_out;
-            let buffer_in = &mut curr.process_data_mut().buffer_in;
-
-            for ch in 0..context.nchannels {
-                if (constant_mask & (1 << ch)) == 0 {
-                    buffer_in[ch].copy_from_slice(&buffer_out[ch]);
-                } else {
-                    buffer_in[ch][0] = buffer_out[ch][0];
-                }
-            }
-        }
-
+    pub fn process_module(
+        &self,
+        track_index: usize,
+        context: &mut ProcessTrackContext,
+        module_index: usize,
+        contexts: &Vec<Arc<Mutex<ProcessTrackContext>>>,
+    ) -> Result<()> {
+        self.prepare_module_event(context, module_index)?;
+        self.prepare_module_audio(track_index, context, module_index, contexts)?;
         context.plugins[module_index].process()?;
-
         Ok(())
     }
 
-    fn compute_midi(&self, context: &mut ProcessTrackContext) {
+    pub fn compute_midi(&self, context: &mut ProcessTrackContext) {
         if !context.play_p {
             return;
         }
@@ -151,5 +110,73 @@ impl Track {
                 }
             }
         }
+    }
+
+    fn prepare_module_audio(
+        &self,
+        track_index: usize,
+        context: &mut ProcessTrackContext,
+        module_index: usize,
+        contexts: &Vec<Arc<Mutex<ProcessTrackContext>>>,
+    ) -> Result<()> {
+        for autdio_input in self.modules[module_index].audio_inputs.iter() {
+            let src_ptr = if autdio_input.track_index == track_index {
+                context.plugins[autdio_input.module_index].ptr
+            } else {
+                let context = contexts[autdio_input.track_index].lock().unwrap();
+                context.plugins[module_index].ptr
+            };
+            let src_process_data = unsafe { &*src_ptr };
+            let src_constant_mask = src_process_data.constant_mask_out;
+            dbg!(src_process_data.constant_mask_out);
+            let src_buffer = &src_process_data.buffer_out;
+            let self_process_data = context.plugins[module_index].process_data_mut();
+            let self_buffer = &mut self_process_data.buffer_in;
+
+            for ch in 0..context.nchannels {
+                let constant_mask_bit = 1 << ch;
+                if (src_constant_mask[autdio_input.port_index_src] & constant_mask_bit) == 0 {
+                    self_process_data.constant_mask_in[autdio_input.port_index_dst] &=
+                        !constant_mask_bit;
+                    self_buffer[autdio_input.port_index_dst][ch]
+                        .copy_from_slice(&src_buffer[autdio_input.port_index_src][ch]);
+                } else {
+                    self_process_data.constant_mask_in[autdio_input.port_index_dst] |=
+                        constant_mask_bit;
+                    self_buffer[autdio_input.port_index_dst][ch][0] =
+                        src_buffer[autdio_input.port_index_src][ch][0];
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn prepare_module_event(
+        &self,
+        context: &mut ProcessTrackContext,
+        module_index: usize,
+    ) -> Result<()> {
+        let plugin_ref_self = &mut context.plugins[module_index];
+        let data = plugin_ref_self.process_data_mut();
+        for event in context.event_list_input.iter() {
+            match event {
+                Event::NoteOn(key, velocity, delay) => {
+                    data.input_note_on(*key, *velocity, 0, *delay)
+                }
+                Event::NoteOff(key, delay) => data.input_note_off(*key, 0, *delay),
+                Event::NoteAllOff => {
+                    for key in context.on_keys.drain(..).filter_map(|x| x) {
+                        data.input_note_off(key, 0, 0);
+                    }
+                }
+                Event::ParamValue(mindex, param_id, value, delay) => {
+                    if *mindex == module_index {
+                        data.input_param_value(*param_id, *value, *delay)
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }

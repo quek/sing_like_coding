@@ -582,34 +582,40 @@ impl Plugin {
     }
 
     pub fn process(&mut self, context: &mut ProcessData) -> Result<()> {
-        //log::debug!("plugin.process frames_count {frames_count}");
+        context.nports_in = self.audio_port_info_inputs.len();
+        context.nports_out = self.audio_port_info_outputs.len();
 
-        let mut in_buffer = vec![];
-        for channel in 0..context.nchannels {
-            in_buffer.push(context.buffer_in[channel].as_mut_ptr());
+        let mut audio_inputs = Vec::with_capacity(context.nports_in);
+        for port in 0..context.nports_in {
+            let mut in_buffer = vec![];
+            for channel in 0..context.nchannels {
+                in_buffer.push(context.buffer_in[port][channel].as_mut_ptr());
+            }
+            let audio_input = clap_audio_buffer {
+                data32: in_buffer.as_mut_ptr(),
+                data64: null_mut::<*mut f64>(),
+                channel_count: context.nchannels as u32,
+                latency: 0,
+                constant_mask: context.constant_mask_in[port],
+            };
+            audio_inputs.push(audio_input);
         }
-        let audio_input = clap_audio_buffer {
-            data32: in_buffer.as_mut_ptr(),
-            data64: null_mut::<*mut f64>(),
-            channel_count: context.nchannels as u32,
-            latency: 0,
-            constant_mask: context.constant_mask_in,
-        };
-        let mut audio_inputs = [audio_input];
 
-        let mut out_buffer = vec![];
-        for channel in 0..context.nchannels {
-            out_buffer.push(context.buffer_out[channel].as_mut_ptr());
+        let mut audio_outputs = Vec::with_capacity(context.nports_out);
+        for port in 0..context.nports_out {
+            let mut out_buffer = vec![];
+            for channel in 0..context.nchannels {
+                out_buffer.push(context.buffer_out[port][channel].as_mut_ptr());
+            }
+            let audio_output = clap_audio_buffer {
+                data32: out_buffer.as_mut_ptr(),
+                data64: null_mut::<*mut f64>(),
+                channel_count: context.nchannels as u32,
+                latency: 0,
+                constant_mask: 0,
+            };
+            audio_outputs.push(audio_output);
         }
-
-        let audio_output = clap_audio_buffer {
-            data32: out_buffer.as_mut_ptr(),
-            data64: null_mut::<*mut f64>(),
-            channel_count: context.nchannels as u32,
-            latency: 0,
-            constant_mask: 0,
-        };
-        let mut audio_outputs = [audio_output];
 
         let transport = if context.play_p != 0 {
             Some(clap_event_transport {
@@ -641,58 +647,53 @@ impl Plugin {
         let samples_per_delay =
             (context.sample_rate * 60.0) / (context.bpm * context.lpb as f64 * 256.0);
         self.event_list_output.samples_per_delay = samples_per_delay;
+
         for i in 0..context.nevents_input {
             let event = &context.events_input[i];
+            let delay = (event.delay as f64 * samples_per_delay).round() as u32;
             match &event.kind {
                 EventKind::NoteOn => {
-                    self.event_list_input.note_on(
-                        event.key,
-                        event.channel,
-                        event.velocity,
-                        (event.delay as f64 * samples_per_delay).round() as u32,
-                    );
+                    self.event_list_input
+                        .note_on(event.key, event.channel, event.velocity, delay)
                 }
                 EventKind::NoteOff => {
-                    self.event_list_input.note_off(
-                        event.key,
-                        event.channel,
-                        event.velocity,
-                        (event.delay as f64 * samples_per_delay).round() as u32,
-                    );
+                    self.event_list_input
+                        .note_off(event.key, event.channel, event.velocity, delay)
                 }
                 EventKind::ParamValue => {
                     if self.params.contains_key(&event.param_id) {
-                        self.event_list_input.param_value(
-                            event.param_id,
-                            event.value,
-                            (event.delay as f64 * samples_per_delay).round() as u32,
-                        );
+                        self.event_list_input
+                            .param_value(event.param_id, event.value, delay);
                     }
                 }
             }
         }
+
         let in_events = self.event_list_input.as_clap_input_events();
         let out_events = self.event_list_output.as_clap_output_events();
+
         let prc = clap_process {
             steady_time: context.steady_time,
             frames_count: context.nframes as u32,
-            transport: transport.map(|x| &x as *const _).unwrap_or(null()),
+            transport: transport.as_ref().map(|x| x as *const _).unwrap_or(null()),
             audio_inputs: audio_inputs.as_mut_ptr(),
             audio_outputs: audio_outputs.as_mut_ptr(),
-            audio_inputs_count: 1,
-            audio_outputs_count: 1,
+            audio_inputs_count: audio_inputs.len() as u32,
+            audio_outputs_count: audio_outputs.len() as u32,
             in_events,
             out_events,
         };
+
         let plugin = unsafe { &*self.plugin };
-        // log::debug!("before process");
         let status = unsafe { plugin.process.unwrap()(plugin, &prc) };
-        // log::debug!("after process {status}");
         if status == CLAP_PROCESS_ERROR {
             panic!("process returns CLAP_PROCESS_ERROR");
         }
 
-        context.constant_mask_out = audio_output.constant_mask;
+        // 書き戻す
+        for (port, out_buf) in audio_outputs.iter().enumerate() {
+            context.constant_mask_out[port] = out_buf.constant_mask;
+        }
 
         self.event_list_input.clear();
 
@@ -704,16 +705,151 @@ impl Plugin {
                 common::event::Event::NoteOff(key, delay) => {
                     context.output_note_off(*key, 0, *delay);
                 }
-                common::event::Event::NoteAllOff => { /* nothing to do */ }
-                common::event::Event::ParamValue(_module_index, param_id, value, delay) => {
+                common::event::Event::NoteAllOff => { /* 無視 */ }
+                common::event::Event::ParamValue(_, param_id, value, delay) => {
                     context.output_param_value(*param_id, *value, *delay);
                 }
             }
         }
+
         self.event_list_output.clear();
 
         Ok(())
     }
+
+    // pub fn process(&mut self, context: &mut ProcessData) -> Result<()> {
+    //     //log::debug!("plugin.process frames_count {frames_count}");
+
+    //     let mut in_buffer = vec![];
+    //     for channel in 0..context.nchannels {
+    //         in_buffer.push(context.buffer_in[channel].as_mut_ptr());
+    //     }
+    //     let audio_input = clap_audio_buffer {
+    //         data32: in_buffer.as_mut_ptr(),
+    //         data64: null_mut::<*mut f64>(),
+    //         channel_count: context.nchannels as u32,
+    //         latency: 0,
+    //         constant_mask: context.constant_mask_in,
+    //     };
+    //     let mut audio_inputs = [audio_input];
+
+    //     let mut out_buffer = vec![];
+    //     for channel in 0..context.nchannels {
+    //         out_buffer.push(context.buffer_out[channel].as_mut_ptr());
+    //     }
+
+    //     let audio_output = clap_audio_buffer {
+    //         data32: out_buffer.as_mut_ptr(),
+    //         data64: null_mut::<*mut f64>(),
+    //         channel_count: context.nchannels as u32,
+    //         latency: 0,
+    //         constant_mask: 0,
+    //     };
+    //     let mut audio_outputs = [audio_output];
+
+    //     let transport = if context.play_p != 0 {
+    //         Some(clap_event_transport {
+    //             header: clap_event_header {
+    //                 size: size_of::<clap_event_transport>() as u32,
+    //                 time: 0,
+    //                 space_id: CLAP_CORE_EVENT_SPACE_ID,
+    //                 type_: CLAP_EVENT_TRANSPORT,
+    //                 flags: 0,
+    //             },
+    //             flags: CLAP_TRANSPORT_HAS_TEMPO | CLAP_TRANSPORT_IS_PLAYING,
+    //             song_pos_beats: 0,
+    //             song_pos_seconds: 0,
+    //             tempo: context.bpm,
+    //             tempo_inc: 0.0,
+    //             loop_start_beats: 0,
+    //             loop_end_beats: 0,
+    //             loop_start_seconds: 0,
+    //             loop_end_seconds: 0,
+    //             bar_start: 0,
+    //             bar_number: 0,
+    //             tsig_num: 4,
+    //             tsig_denom: 4,
+    //         })
+    //     } else {
+    //         None
+    //     };
+
+    //     let samples_per_delay =
+    //         (context.sample_rate * 60.0) / (context.bpm * context.lpb as f64 * 256.0);
+    //     self.event_list_output.samples_per_delay = samples_per_delay;
+    //     for i in 0..context.nevents_input {
+    //         let event = &context.events_input[i];
+    //         match &event.kind {
+    //             EventKind::NoteOn => {
+    //                 self.event_list_input.note_on(
+    //                     event.key,
+    //                     event.channel,
+    //                     event.velocity,
+    //                     (event.delay as f64 * samples_per_delay).round() as u32,
+    //                 );
+    //             }
+    //             EventKind::NoteOff => {
+    //                 self.event_list_input.note_off(
+    //                     event.key,
+    //                     event.channel,
+    //                     event.velocity,
+    //                     (event.delay as f64 * samples_per_delay).round() as u32,
+    //                 );
+    //             }
+    //             EventKind::ParamValue => {
+    //                 if self.params.contains_key(&event.param_id) {
+    //                     self.event_list_input.param_value(
+    //                         event.param_id,
+    //                         event.value,
+    //                         (event.delay as f64 * samples_per_delay).round() as u32,
+    //                     );
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     let in_events = self.event_list_input.as_clap_input_events();
+    //     let out_events = self.event_list_output.as_clap_output_events();
+    //     let prc = clap_process {
+    //         steady_time: context.steady_time,
+    //         frames_count: context.nframes as u32,
+    //         transport: transport.map(|x| &x as *const _).unwrap_or(null()),
+    //         audio_inputs: audio_inputs.as_mut_ptr(),
+    //         audio_outputs: audio_outputs.as_mut_ptr(),
+    //         audio_inputs_count: 1,
+    //         audio_outputs_count: 1,
+    //         in_events,
+    //         out_events,
+    //     };
+    //     let plugin = unsafe { &*self.plugin };
+    //     // log::debug!("before process");
+    //     let status = unsafe { plugin.process.unwrap()(plugin, &prc) };
+    //     // log::debug!("after process {status}");
+    //     if status == CLAP_PROCESS_ERROR {
+    //         panic!("process returns CLAP_PROCESS_ERROR");
+    //     }
+
+    //     context.constant_mask_out = audio_output.constant_mask;
+
+    //     self.event_list_input.clear();
+
+    //     for event in self.event_list_output.events.iter() {
+    //         match event {
+    //             common::event::Event::NoteOn(key, velocity, delay) => {
+    //                 context.output_note_on(*key, *velocity, 0, *delay);
+    //             }
+    //             common::event::Event::NoteOff(key, delay) => {
+    //                 context.output_note_off(*key, 0, *delay);
+    //             }
+    //             common::event::Event::NoteAllOff => { /* nothing to do */ }
+    //             common::event::Event::ParamValue(_module_index, param_id, value, delay) => {
+    //                 context.output_param_value(*param_id, *value, *delay);
+    //             }
+    //         }
+    //     }
+    //     self.event_list_output.clear();
+
+    //     Ok(())
+    // }
 
     pub fn start(&mut self) -> Result<()> {
         if self.process_start_p {
