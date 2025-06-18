@@ -290,6 +290,10 @@ impl MainView {
                 (Modifier::None, Key::L),
                 UiCommand::Module(ModuleCommand::CursorRight),
             ),
+            (
+                (Modifier::None, Key::Enter),
+                UiCommand::Module(ModuleCommand::Open),
+            ),
         ];
         let shortcut_map_mixer = [
             (

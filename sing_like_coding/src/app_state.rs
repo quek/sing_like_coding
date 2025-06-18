@@ -87,6 +87,7 @@ pub enum ModuleCommand {
     CursorDown,
     CursorLeft,
     CursorRight,
+    Open,
 }
 
 pub enum MixerCommand {
@@ -556,6 +557,16 @@ impl<'a> AppState<'a> {
                         self.song.tracks[self.cursor_track.track].modules.len();
                 }
             }
+            UiCommand::Module(ModuleCommand::Open) => {
+                if let Some(_module) = self.module_at_cursort() {
+                    self.send_to_plugin(
+                        MainToPlugin::GuiOpen(self.cursor_track.track, self.cursor_module.index),
+                        Box::new(|_, _| Ok(())),
+                    )?;
+                } else {
+                    self.route = Route::PluginSelect;
+                }
+            }
             UiCommand::Mixer(MixerCommand::CursorLeft) => self.track_prev(),
             UiCommand::Mixer(MixerCommand::CursorRight) => self.track_next(),
             UiCommand::Mixer(MixerCommand::Pan(delta)) => {
@@ -940,6 +951,11 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
+    fn module_at_cursort(&self) -> Option<&Module> {
+        self.track_at_cursor()
+            .and_then(|track| track.modules.get(self.cursor_module.index))
+    }
+
     pub fn run_track_command(&mut self, command: &TrackCommand) -> Result<()> {
         match command {
             TrackCommand::Copy => self.track_copy()?,
@@ -977,6 +993,10 @@ impl<'a> AppState<'a> {
         file.write_all(json.as_bytes()).unwrap();
         self.song_dirty_p = false;
         Ok(())
+    }
+
+    fn track_at_cursor(&self) -> Option<&Track> {
+        self.song.tracks.get(self.cursor_track.track)
     }
 
     fn track_copy(&mut self) -> Result<()> {

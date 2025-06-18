@@ -1,7 +1,9 @@
 # TODO
 
-- PDC
 - sidechain
+- singer, plugin の process での前処理は構造が変わったときにやっておく
+- PDC
+  確認できるプラグインがない・・・
 
 # DONE
 
