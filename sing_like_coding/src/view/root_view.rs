@@ -184,6 +184,8 @@ impl RootView {
         state: &mut AppState,
     ) -> Result<()> {
         let view = self.sidechain_select_view.get_or_insert_with(|| {
+            let cursor_track_index = state.cursor_track.track;
+            let cursor_module_index = state.cursor_module.index;
             let items = state
                 .song
                 .tracks
@@ -194,6 +196,9 @@ impl RootView {
                         .modules
                         .iter()
                         .enumerate()
+                        .filter(move |(module_index, _module)| {
+                            track_index != cursor_track_index || *module_index < cursor_module_index
+                        })
                         .map(move |(module_index, module)| sidechain_select_view::Item {
                             name: format!("{} {}", track.name, module.name),
                             module_index: (track_index, module_index),
