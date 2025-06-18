@@ -87,6 +87,7 @@ pub enum ModuleCommand {
     CursorDown,
     CursorLeft,
     CursorRight,
+    Delete,
     Open,
 }
 
@@ -565,6 +566,14 @@ impl<'a> AppState<'a> {
                     )?;
                 } else {
                     self.route = Route::PluginSelect;
+                }
+            }
+            UiCommand::Module(ModuleCommand::Delete) => {
+                if let Some(_module) = self.module_at_cursort() {
+                    self.sender_to_singer.send(SingerCommand::PluginDelete(
+                        self.cursor_track.track,
+                        self.cursor_module.index,
+                    ))?;
                 }
             }
             UiCommand::Mixer(MixerCommand::CursorLeft) => self.track_prev(),

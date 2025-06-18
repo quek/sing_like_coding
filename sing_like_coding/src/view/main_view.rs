@@ -291,6 +291,10 @@ impl MainView {
                 UiCommand::Module(ModuleCommand::CursorRight),
             ),
             (
+                (Modifier::None, Key::Delete),
+                UiCommand::Module(ModuleCommand::Delete),
+            ),
+            (
                 (Modifier::None, Key::Enter),
                 UiCommand::Module(ModuleCommand::Open),
             ),
