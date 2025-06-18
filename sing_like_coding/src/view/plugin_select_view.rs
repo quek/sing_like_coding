@@ -24,9 +24,9 @@ impl PluginSelectView {
         }
     }
 
-    pub fn view(&mut self, gui_context: &eframe::egui::Context) -> Result<Option<Description>> {
+    pub fn view(&mut self, gui_context: &eframe::egui::Context) -> Result<ReturnState> {
         CentralPanel::default()
-            .show(gui_context, |ui: &mut Ui| -> Result<Option<Description>> {
+            .show(gui_context, |ui: &mut Ui| -> Result<ReturnState> {
                 let edit = TextEdit::singleline(&mut self.buffer);
                 let response = ui.add(edit);
                 if response.changed() || self.focus_p {
@@ -38,38 +38,34 @@ impl PluginSelectView {
                         .collect::<Vec<_>>()
                 }
                 if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                    self.close();
-                    return Ok(Some(self.quried_items[0].clone()));
+                    return Ok(ReturnState::Selected(self.quried_items[0].clone()));
                 }
                 if self.focus_p {
                     self.focus_p = false;
                     gui_context.memory_mut(|x| x.request_focus(response.id));
                 }
 
-                let mut selected = None;
                 for item in self.quried_items.iter() {
                     let button = Button::new(&item.name).wrap_mode(egui::TextWrapMode::Extend);
                     if ui.add(button).clicked() {
-                        selected = Some(item.clone());
+                        return Ok(ReturnState::Selected(item.clone()));
                     }
-                }
-                if selected.is_some() {
-                    self.close();
-                    return Ok(selected);
                 }
 
                 ui.separator();
 
                 if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
-                    self.close();
+                    return Ok(ReturnState::Cancel);
                 }
 
-                Ok(None)
+                Ok(ReturnState::Continue)
             })
             .inner
     }
+}
 
-    fn close(&mut self) {
-        self.focus_p = true;
-    }
+pub enum ReturnState {
+    Selected(Description),
+    Continue,
+    Cancel,
 }

@@ -13,7 +13,7 @@ use super::{
     command_view::CommandView,
     main_view::MainView,
     param_select_view::ParamSelectView,
-    plugin_select_view::PluginSelectView,
+    plugin_select_view::{self, PluginSelectView},
     shortcut_key::{shortcut_key, Modifier},
 };
 
@@ -115,15 +115,22 @@ impl RootView {
                     .plugin_select_view
                     .get_or_insert_with(|| PluginSelectView::new());
 
-                if let Some(description) = plugin_select_view.view(gui_context)? {
-                    state.sender_to_singer.send(SingerCommand::PluginLoad(
-                        state.cursor_track.track,
-                        description.id,
-                        description.name,
-                    ))?;
+                match plugin_select_view.view(gui_context)? {
+                    plugin_select_view::ReturnState::Selected(description) => {
+                        state.sender_to_singer.send(SingerCommand::PluginLoad(
+                            state.cursor_track.track,
+                            description.id,
+                            description.name,
+                        ))?;
 
-                    self.plugin_select_view = None;
-                    state.route = Route::Track;
+                        self.plugin_select_view = None;
+                        state.route = Route::Track;
+                    }
+                    plugin_select_view::ReturnState::Continue => {}
+                    plugin_select_view::ReturnState::Cancel => {
+                        self.plugin_select_view = None;
+                        state.route = Route::Track;
+                    }
                 }
             }
         }
