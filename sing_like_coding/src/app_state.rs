@@ -983,8 +983,8 @@ impl<'a> AppState<'a> {
             TrackCommand::Cut => self.track_cut()?,
             TrackCommand::Delete => self.track_delete()?,
             TrackCommand::Dup => {}
-            TrackCommand::MoveLeft => {}
-            TrackCommand::MoveRight => {}
+            TrackCommand::MoveLeft => self.track_move(-1)?,
+            TrackCommand::MoveRight => self.track_move(1)?,
             TrackCommand::Paste => self.track_paste()?,
         }
         Ok(())
@@ -1054,8 +1054,25 @@ impl<'a> AppState<'a> {
     }
 
     fn track_delete(&mut self) -> Result<()> {
+        // main は消さない
+        if self.cursor_track.track != 0 {
+            self.sender_to_singer
+                .send(SingerCommand::TrackDelete(self.cursor_track.track))?;
+        }
+        Ok(())
+    }
+
+    fn track_move(&mut self, delta: isize) -> Result<()> {
+        if delta == 0 {
+            return Ok(());
+        }
         self.sender_to_singer
-            .send(SingerCommand::TrackDelete(self.cursor_track.track))?;
+            .send(SingerCommand::TrackMove(self.cursor_track.track, delta))?;
+        self.cursor_track.track = self
+            .cursor_track
+            .track
+            .saturating_add_signed(delta)
+            .min(self.song.tracks.len() - 1);
         Ok(())
     }
 

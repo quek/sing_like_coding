@@ -59,6 +59,7 @@ pub enum SingerCommand {
     TrackAdd,
     TrackDelete(usize),
     TrackInsert(usize, Track),
+    TrackMove(usize, isize),
     TrackMute(usize, bool),
     TrackSolo(usize, bool),
     TrackPan(usize, f32),
@@ -685,6 +686,11 @@ impl Singer {
         self.shmems.push(vec![]);
     }
 
+    #[allow(dead_code)]
+    fn track_at(&self, track_index: usize) -> Option<&Track> {
+        self.song.track_at(track_index)
+    }
+
     fn track_delete(&mut self, track_index: usize) -> Result<()> {
         for module_index in (0..self.song.tracks[track_index].modules.len()).rev() {
             self.plugin_delete(track_index, module_index)?;
@@ -717,6 +723,22 @@ impl Singer {
             ))?;
         }
         Ok(())
+    }
+
+    fn track_move(&mut self, track_index: usize, delta: isize) -> Result<bool> {
+        let track_index_new = track_index.saturating_add_signed(delta);
+        if track_index_new == 0 || track_index_new >= self.song.tracks.len() {
+            return Ok(false);
+        }
+
+        let context = self.process_track_contexts.remove(track_index);
+        self.process_track_contexts.insert(track_index_new, context);
+        let shmem = self.shmems.remove(track_index);
+        self.shmems.insert(track_index_new, shmem);
+
+        self.song.track_move(track_index, delta);
+
+        Ok(true)
     }
 }
 
@@ -835,6 +857,12 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                 let mut singer = singer.lock().unwrap();
                 singer.track_insert(track_index, track)?;
                 singer.send_song()?;
+            }
+            SingerCommand::TrackMove(track_index, delta) => {
+                let mut singer = singer.lock().unwrap();
+                if singer.track_move(track_index, delta)? {
+                    singer.send_song()?;
+                }
             }
             SingerCommand::TrackMute(track_index, mute) => {
                 let mut singer = singer.lock().unwrap();

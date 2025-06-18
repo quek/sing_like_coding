@@ -38,16 +38,68 @@ impl Song {
         self.tracks.push(track);
     }
 
+    #[allow(dead_code)]
+    pub fn track_at(&self, track_index: usize) -> Option<&Track> {
+        self.tracks.get(track_index)
+    }
+
     pub fn track_at_mut(&mut self, track_index: usize) -> Option<&mut Track> {
         self.tracks.get_mut(track_index)
     }
 
     pub fn track_delete(&mut self, track_index: usize) {
         self.tracks.remove(track_index);
+
+        for track in &mut self.tracks {
+            for module in &mut track.modules {
+                module
+                    .audio_inputs
+                    .retain(|input| input.src_module_index.0 != track_index);
+                for audio_input in &mut module.audio_inputs {
+                    let src_index = &mut audio_input.src_module_index.0;
+                    if *src_index > track_index {
+                        *src_index -= 1;
+                    }
+                }
+            }
+        }
     }
 
     pub fn track_insert(&mut self, track_index: usize, track: Track) {
         self.tracks.insert(track_index, track);
+
+        for track in &mut self.tracks {
+            for module in &mut track.modules {
+                for audio_input in &mut module.audio_inputs {
+                    let src_index = &mut audio_input.src_module_index.0;
+                    if *src_index >= track_index {
+                        *src_index += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn track_move(&mut self, track_index: usize, delta: isize) {
+        let track_index_new = track_index.saturating_add_signed(delta);
+        let track = self.tracks.remove(track_index);
+        self.tracks.insert(track_index_new, track);
+
+        let direction = delta.signum();
+        let range = track_index.min(track_index_new)..(track_index.max(track_index_new) + 1);
+
+        for track in self.tracks.iter_mut() {
+            for module in &mut track.modules {
+                for audio_input in &mut module.audio_inputs {
+                    let src_index = &mut audio_input.src_module_index.0;
+                    if *src_index == track_index {
+                        *src_index = track_index_new;
+                    } else if range.contains(src_index) {
+                        *src_index = src_index.saturating_add_signed(direction);
+                    }
+                }
+            }
+        }
     }
 
     pub fn lane_item(&self, cursor: &CursorTrack) -> Option<&LaneItem> {
