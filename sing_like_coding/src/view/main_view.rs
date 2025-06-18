@@ -291,6 +291,10 @@ impl MainView {
                 UiCommand::Module(ModuleCommand::CursorRight),
             ),
             (
+                (Modifier::None, Key::S),
+                UiCommand::Module(ModuleCommand::Sidechain),
+            ),
+            (
                 (Modifier::None, Key::Delete),
                 UiCommand::Module(ModuleCommand::Delete),
             ),
@@ -801,13 +805,6 @@ impl MainView {
                 state
                     .sender_to_singer
                     .send(SingerCommand::PluginDelete(track_index, module_index))
-                    .unwrap();
-                ui.close_menu();
-            }
-            if ui.button("Sidechain").clicked() {
-                state
-                    .sender_to_singer
-                    .send(SingerCommand::PluginSidechain(track_index, module_index))
                     .unwrap();
                 ui.close_menu();
             }

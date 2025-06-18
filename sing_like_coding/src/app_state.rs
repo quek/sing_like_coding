@@ -13,7 +13,7 @@ use arboard::Clipboard;
 use clap_sys::id::clap_id;
 use common::{
     dsp::{db_from_norm, db_to_norm},
-    module::Module,
+    module::{Module, ModuleIndex},
     plugin::param::Param,
     protocol::{MainToPlugin, PluginToMain},
     shmem::{open_shared_memory, SONG_STATE_NAME},
@@ -89,6 +89,7 @@ pub enum ModuleCommand {
     CursorRight,
     Delete,
     Open,
+    Sidechain,
 }
 
 pub enum MixerCommand {
@@ -558,6 +559,14 @@ impl<'a> AppState<'a> {
                         self.song.tracks[self.cursor_track.track].modules.len();
                 }
             }
+            UiCommand::Module(ModuleCommand::Delete) => {
+                if let Some(_module) = self.module_at_cursort() {
+                    self.sender_to_singer.send(SingerCommand::PluginDelete(
+                        self.cursor_track.track,
+                        self.cursor_module.index,
+                    ))?;
+                }
+            }
             UiCommand::Module(ModuleCommand::Open) => {
                 if let Some(_module) = self.module_at_cursort() {
                     self.send_to_plugin(
@@ -568,12 +577,9 @@ impl<'a> AppState<'a> {
                     self.route = Route::PluginSelect;
                 }
             }
-            UiCommand::Module(ModuleCommand::Delete) => {
+            UiCommand::Module(ModuleCommand::Sidechain) => {
                 if let Some(_module) = self.module_at_cursort() {
-                    self.sender_to_singer.send(SingerCommand::PluginDelete(
-                        self.cursor_track.track,
-                        self.cursor_module.index,
-                    ))?;
+                    self.route = Route::SidechainSelect;
                 }
             }
             UiCommand::Mixer(MixerCommand::CursorLeft) => self.track_prev(),
@@ -963,6 +969,10 @@ impl<'a> AppState<'a> {
     fn module_at_cursort(&self) -> Option<&Module> {
         self.track_at_cursor()
             .and_then(|track| track.modules.get(self.cursor_module.index))
+    }
+
+    pub fn module_index_at_cursor(&self) -> ModuleIndex {
+        (self.cursor_track.track, self.cursor_module.index)
     }
 
     pub fn run_track_command(&mut self, command: &TrackCommand) -> Result<()> {

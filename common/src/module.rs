@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub type ModuleIndex = (usize, usize); // (track_index, module_index)
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Module {
     pub id: String,
@@ -21,8 +23,7 @@ impl Module {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioInput {
-    pub track_index: usize,
-    pub module_index: usize,
-    pub port_index_src: usize,
-    pub port_index_dst: usize,
+    pub src_module_index: ModuleIndex,
+    pub src_port_index: usize,
+    pub dst_port_index: usize,
 }

@@ -1,5 +1,8 @@
 use anyhow::Result;
-use common::protocol::{MainToPlugin, PluginToMain};
+use common::{
+    module::AudioInput,
+    protocol::{MainToPlugin, PluginToMain},
+};
 use eframe::egui::{ahash::HashMap, Key};
 
 use crate::{
@@ -15,6 +18,7 @@ use super::{
     param_select_view::ParamSelectView,
     plugin_select_view::{self, PluginSelectView},
     shortcut_key::{shortcut_key, Modifier},
+    sidechain_select_view::{self, SidechainSelectView},
 };
 
 #[derive(Debug)]
@@ -23,6 +27,7 @@ pub enum Route {
     Command,
     PluginSelect,
     ParamSelect,
+    SidechainSelect,
 }
 
 pub struct RootView {
@@ -31,6 +36,7 @@ pub struct RootView {
     command_view: CommandView,
     param_select_view: Option<ParamSelectView>,
     plugin_select_view: Option<PluginSelectView>,
+    sidechain_select_view: Option<SidechainSelectView>,
 }
 
 impl RootView {
@@ -50,6 +56,7 @@ impl RootView {
             command_view: CommandView::new(),
             param_select_view: None,
             plugin_select_view: None,
+            sidechain_select_view: None,
         }
     }
 
@@ -67,71 +74,86 @@ impl RootView {
         match &state.route {
             Route::Track => self.main_view.view(gui_context, state, device)?,
             Route::Command => self.command_view.view(gui_context, state)?,
-            Route::ParamSelect => {
-                if state.song_state.param_track_index == state.cursor_track.track {
+            Route::ParamSelect => self.param_select_view(gui_context, state)?,
+            Route::PluginSelect => self.plugin_select_view(gui_context, state)?,
+            Route::SidechainSelect => self.sidechain_select_view(gui_context, state)?,
+        }
+        Ok(())
+    }
+
+    fn param_select_view(
+        &mut self,
+        gui_context: &eframe::egui::Context,
+        state: &mut AppState,
+    ) -> Result<()> {
+        if state.song_state.param_track_index == state.cursor_track.track {
+            self.param_select_view = None;
+            state.route = Route::Track;
+            state.param_set(
+                state.song_state.param_module_index,
+                state.song_state.param_id,
+            )?;
+        } else {
+            let param_select_view = self
+                .param_select_view
+                .get_or_insert_with(|| ParamSelectView::new());
+            match param_select_view.view(
+                gui_context,
+                &state.song.tracks[state.cursor_track.track].modules,
+                &state.param_select_view_params,
+            )? {
+                ReturnState::Selected(module_index, param) => {
                     self.param_select_view = None;
                     state.route = Route::Track;
-                    state.param_set(
-                        state.song_state.param_module_index,
-                        state.song_state.param_id,
+                    state.param_set(module_index, param.id)?;
+                }
+                ReturnState::Params(module_index) => {
+                    let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
+                        Box::new(|state, command| {
+                            if let PluginToMain::DidParams(params) = command {
+                                state.param_select_view_params = params;
+                            }
+                            Ok(())
+                        });
+                    state.send_to_plugin(
+                        MainToPlugin::Params(state.cursor_track.track, module_index),
+                        callback,
                     )?;
-                } else {
-                    let param_select_view = self
-                        .param_select_view
-                        .get_or_insert_with(|| ParamSelectView::new());
-                    match param_select_view.view(
-                        gui_context,
-                        &state.song.tracks[state.cursor_track.track].modules,
-                        &state.param_select_view_params,
-                    )? {
-                        ReturnState::Selected(module_index, param) => {
-                            self.param_select_view = None;
-                            state.route = Route::Track;
-                            state.param_set(module_index, param.id)?;
-                        }
-                        ReturnState::Params(module_index) => {
-                            let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
-                                Box::new(|state, command| {
-                                    if let PluginToMain::DidParams(params) = command {
-                                        state.param_select_view_params = params;
-                                    }
-                                    Ok(())
-                                });
-                            state.send_to_plugin(
-                                MainToPlugin::Params(state.cursor_track.track, module_index),
-                                callback,
-                            )?;
-                        }
-                        ReturnState::Continue => {}
-                        ReturnState::Cancel => {
-                            self.param_select_view = None;
-                            state.route = Route::Track;
-                        }
-                    }
+                }
+                ReturnState::Continue => {}
+                ReturnState::Cancel => {
+                    self.param_select_view = None;
+                    state.route = Route::Track;
                 }
             }
-            Route::PluginSelect => {
-                let plugin_select_view = self
-                    .plugin_select_view
-                    .get_or_insert_with(|| PluginSelectView::new());
+        }
+        Ok(())
+    }
 
-                match plugin_select_view.view(gui_context)? {
-                    plugin_select_view::ReturnState::Selected(description) => {
-                        state.sender_to_singer.send(SingerCommand::PluginLoad(
-                            state.cursor_track.track,
-                            description.id,
-                            description.name,
-                        ))?;
+    fn plugin_select_view(
+        &mut self,
+        gui_context: &eframe::egui::Context,
+        state: &mut AppState,
+    ) -> Result<()> {
+        let plugin_select_view = self
+            .plugin_select_view
+            .get_or_insert_with(|| PluginSelectView::new());
 
-                        self.plugin_select_view = None;
-                        state.route = Route::Track;
-                    }
-                    plugin_select_view::ReturnState::Continue => {}
-                    plugin_select_view::ReturnState::Cancel => {
-                        self.plugin_select_view = None;
-                        state.route = Route::Track;
-                    }
-                }
+        match plugin_select_view.view(gui_context)? {
+            plugin_select_view::ReturnState::Selected(description) => {
+                state.sender_to_singer.send(SingerCommand::PluginLoad(
+                    state.cursor_track.track,
+                    description.id,
+                    description.name,
+                ))?;
+
+                self.plugin_select_view = None;
+                state.route = Route::Track;
+            }
+            plugin_select_view::ReturnState::Continue => {}
+            plugin_select_view::ReturnState::Cancel => {
+                self.plugin_select_view = None;
+                state.route = Route::Track;
             }
         }
         Ok(())
@@ -153,6 +175,54 @@ impl RootView {
             }
         }
 
+        Ok(())
+    }
+
+    fn sidechain_select_view(
+        &mut self,
+        gui_context: &eframe::egui::Context,
+        state: &mut AppState,
+    ) -> Result<()> {
+        let view = self.sidechain_select_view.get_or_insert_with(|| {
+            let items = state
+                .song
+                .tracks
+                .iter()
+                .enumerate()
+                .flat_map(|(track_index, track)| {
+                    track
+                        .modules
+                        .iter()
+                        .enumerate()
+                        .map(move |(module_index, module)| sidechain_select_view::Item {
+                            name: format!("{} {}", track.name, module.name),
+                            module_index: (track_index, module_index),
+                        })
+                })
+                .collect();
+            SidechainSelectView::new(items)
+        });
+
+        match view.view(gui_context)? {
+            sidechain_select_view::ReturnState::Selected(item) => {
+                let audio_input = AudioInput {
+                    src_module_index: item.module_index,
+                    src_port_index: 0,
+                    dst_port_index: 1,
+                };
+                state.sender_to_singer.send(SingerCommand::PluginSidechain(
+                    state.module_index_at_cursor(),
+                    audio_input,
+                ))?;
+                self.sidechain_select_view = None;
+                state.route = Route::Track;
+            }
+            sidechain_select_view::ReturnState::Continue => {}
+            sidechain_select_view::ReturnState::Cancel => {
+                self.sidechain_select_view = None;
+                state.route = Route::Track;
+            }
+        }
         Ok(())
     }
 }

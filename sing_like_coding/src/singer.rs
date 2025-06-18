@@ -1,5 +1,4 @@
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
     f32::consts::PI,
     fs::File,
     io::BufReader,
@@ -13,7 +12,13 @@ use std::{
 
 use crate::{
     app_state::{AppStateCommand, CursorTrack},
-    model::{lane::Lane, lane_item::LaneItem, point::Point, song::Song, track::Track},
+    model::{
+        lane::Lane,
+        lane_item::LaneItem,
+        point::Point,
+        song::{topological_levels, Song},
+        track::Track,
+    },
     song_state::SongState,
     util::next_id,
     view::stereo_peak_meter::DB_MIN,
@@ -24,7 +29,7 @@ use clap_sys::id::clap_id;
 use common::{
     clap_manager::ClapManager,
     event::Event,
-    module::{AudioInput, Module},
+    module::{AudioInput, Module, ModuleIndex},
     plugin_ref::PluginRef,
     process_data::{EventKind, ProcessData},
     process_track_context::ProcessTrackContext,
@@ -49,7 +54,7 @@ pub enum SingerCommand {
     PluginLatency(usize, u32),
     PluginLoad(usize, String, String),
     PluginDelete(usize, usize),
-    PluginSidechain(usize, usize),
+    PluginSidechain(ModuleIndex, AudioInput),
     PointNew(CursorTrack, usize, clap_id),
     TrackAdd,
     TrackDelete(usize),
@@ -496,15 +501,14 @@ impl Singer {
         Ok(())
     }
 
-    pub fn plugin_sidechain(&mut self, track_index: usize, module_index: usize) -> Result<()> {
-        let module = &mut self.song.tracks[track_index].modules[module_index];
-        module.audio_inputs.push(AudioInput {
-            // TEST ようです
-            track_index: track_index - 1,
-            module_index: 0,
-            port_index_src: 0,
-            port_index_dst: 1,
-        });
+    pub fn plugin_sidechain(
+        &mut self,
+        module_index: ModuleIndex,
+        audio_input: AudioInput,
+    ) -> Result<()> {
+        if let Some(module) = self.song.module_at_mut(module_index) {
+            module.audio_inputs.push(audio_input);
+        }
         Ok(())
     }
 
@@ -771,10 +775,9 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                     vec![]
                 } else {
                     vec![AudioInput {
-                        track_index,
-                        module_index: track.modules.len() - 1,
-                        port_index_src: 0,
-                        port_index_dst: 0,
+                        src_module_index: (track_index, track.modules.len() - 1),
+                        src_port_index: 0,
+                        dst_port_index: 0,
                     }]
                 };
                 singer.song.tracks[track_index].modules.push(Module::new(
@@ -791,9 +794,9 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
 
                 singer.send_song()?;
             }
-            SingerCommand::PluginSidechain(track_index, module_index) => {
+            SingerCommand::PluginSidechain(module_index, audio_input) => {
                 let mut singer = singer.lock().unwrap();
-                singer.plugin_sidechain(track_index, module_index)?;
+                singer.plugin_sidechain(module_index, audio_input)?;
 
                 singer.send_song()?;
             }
@@ -883,80 +886,4 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
         }
     }
     Ok(())
-}
-
-/// トポロジカル順にモジュールを依存レベルごとに分けて返す。
-/// Track 0:
-///     Module 0
-///     Module 1 ← depends on Track 1, Module 0
-///
-/// Track 1:
-///     Module 0 ← depends on Track 0, Module 0
-///     Module 1
-/// こういう依存関係でも処理できるように作ってもらった
-
-type ModuleId = (usize, usize); // (track_index, module_index)
-
-fn topological_levels(song: &Song) -> anyhow::Result<Vec<Vec<ModuleId>>> {
-    let mut graph: HashMap<ModuleId, HashSet<ModuleId>> = HashMap::new(); // node -> deps
-    let mut reverse_graph: HashMap<ModuleId, HashSet<ModuleId>> = HashMap::new(); // dep -> users
-    let mut in_degree: HashMap<ModuleId, usize> = HashMap::new();
-
-    // グラフ構築
-    for (track_index, track) in song.tracks.iter().enumerate() {
-        if track_index == 0 {
-            continue;
-        }
-        for (module_index, module) in track.modules.iter().enumerate() {
-            let id = (track_index, module_index);
-            let deps = module
-                .audio_inputs
-                .iter()
-                .map(|input| (input.track_index, input.module_index));
-
-            for dep in deps {
-                graph.entry(id).or_default().insert(dep);
-                reverse_graph.entry(dep).or_default().insert(id);
-            }
-
-            in_degree.insert(id, graph.get(&id).map_or(0, |s| s.len()));
-        }
-    }
-
-    // レベルごとに分割
-    let mut levels: Vec<Vec<ModuleId>> = Vec::new();
-    let mut queue: VecDeque<ModuleId> = in_degree
-        .iter()
-        .filter_map(|(id, &deg)| if deg == 0 { Some(*id) } else { None })
-        .collect();
-
-    while !queue.is_empty() {
-        let mut current_level = Vec::new();
-        let mut next_queue = VecDeque::new();
-
-        for id in queue {
-            current_level.push(id);
-            if let Some(children) = reverse_graph.get(&id) {
-                for &child in children {
-                    if let Some(deg) = in_degree.get_mut(&child) {
-                        *deg -= 1;
-                        if *deg == 0 {
-                            next_queue.push_back(child);
-                        }
-                    }
-                }
-            }
-        }
-
-        levels.push(current_level);
-        queue = next_queue;
-    }
-
-    // サイクル検出
-    let total_processed: usize = levels.iter().map(|level| level.len()).sum();
-    if total_processed != in_degree.len() {
-        anyhow::bail!("循環依存があります（例：サイドチェインの相互依存）");
-    }
-
-    Ok(levels)
 }

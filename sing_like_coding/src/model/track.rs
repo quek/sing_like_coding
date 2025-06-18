@@ -120,30 +120,30 @@ impl Track {
         contexts: &Vec<Arc<Mutex<ProcessTrackContext>>>,
     ) -> Result<()> {
         for autdio_input in self.modules[module_index].audio_inputs.iter() {
-            let src_ptr = if autdio_input.track_index == track_index {
-                context.plugins[autdio_input.module_index].ptr
+            let src_ptr = if autdio_input.src_module_index.0 == track_index {
+                context.plugins[autdio_input.src_module_index.1].ptr
             } else {
-                let context = contexts[autdio_input.track_index].lock().unwrap();
-                context.plugins[module_index].ptr
+                let context = contexts[autdio_input.src_module_index.0].lock().unwrap();
+                context.plugins[autdio_input.src_module_index.1].ptr
             };
             let src_process_data = unsafe { &*src_ptr };
             let src_constant_mask = src_process_data.constant_mask_out;
             let src_buffer = &src_process_data.buffer_out;
-            let self_process_data = context.plugins[module_index].process_data_mut();
-            let self_buffer = &mut self_process_data.buffer_in;
+            let dst_process_data = context.plugins[module_index].process_data_mut();
+            let dst_buffer = &mut dst_process_data.buffer_in;
 
             for ch in 0..context.nchannels {
                 let constant_mask_bit = 1 << ch;
-                if (src_constant_mask[autdio_input.port_index_src] & constant_mask_bit) == 0 {
-                    self_process_data.constant_mask_in[autdio_input.port_index_dst] &=
+                if (src_constant_mask[autdio_input.src_port_index] & constant_mask_bit) == 0 {
+                    dst_process_data.constant_mask_in[autdio_input.dst_port_index] &=
                         !constant_mask_bit;
-                    self_buffer[autdio_input.port_index_dst][ch]
-                        .copy_from_slice(&src_buffer[autdio_input.port_index_src][ch]);
+                    dst_buffer[autdio_input.dst_port_index][ch]
+                        .copy_from_slice(&src_buffer[autdio_input.src_port_index][ch]);
                 } else {
-                    self_process_data.constant_mask_in[autdio_input.port_index_dst] |=
+                    dst_process_data.constant_mask_in[autdio_input.dst_port_index] |=
                         constant_mask_bit;
-                    self_buffer[autdio_input.port_index_dst][ch][0] =
-                        src_buffer[autdio_input.port_index_src][ch][0];
+                    dst_buffer[autdio_input.dst_port_index][ch][0] =
+                        src_buffer[autdio_input.src_port_index][ch][0];
                 }
             }
         }
