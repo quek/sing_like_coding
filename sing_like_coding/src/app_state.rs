@@ -1087,6 +1087,8 @@ impl<'a> AppState<'a> {
                 )?;
             }
         }
+        // TODO sender_to_singer.send で singer が処理してからじゃなないと
+        // 最後のトラックを複製したときにカーソルが先頭に移動してしまう。
         self.track_next();
         Ok(())
     }
