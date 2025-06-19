@@ -58,7 +58,6 @@ pub enum SingerCommand {
     PointNew(CursorTrack, usize, clap_id),
     TrackAdd,
     TrackDelete(usize),
-    TrackDup(usize),
     TrackInsert(usize, Track),
     TrackMove(usize, isize),
     TrackMute(usize, bool),
@@ -702,13 +701,6 @@ impl Singer {
         Ok(())
     }
 
-    fn track_dup(&mut self, track_index: usize) -> Result<()> {
-        if let Some(track) = self.track_at(track_index).cloned() {
-            self.track_insert(track_index + 1, track)?;
-        }
-        Ok(())
-    }
-
     fn track_insert(&mut self, track_index: usize, track: Track) -> Result<()> {
         self.song.track_insert(track_index, track);
         self.process_track_contexts.insert(
@@ -859,11 +851,6 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
             SingerCommand::TrackDelete(track_index) => {
                 let mut singer = singer.lock().unwrap();
                 singer.track_delete(track_index)?;
-                singer.send_song()?;
-            }
-            SingerCommand::TrackDup(track_index) => {
-                let mut singer = singer.lock().unwrap();
-                singer.track_dup(track_index)?;
                 singer.send_song()?;
             }
             SingerCommand::TrackInsert(track_index, track) => {

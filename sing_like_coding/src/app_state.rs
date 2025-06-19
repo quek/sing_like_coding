@@ -1066,8 +1066,33 @@ impl<'a> AppState<'a> {
     }
 
     fn track_dup(&mut self) -> Result<()> {
-        self.sender_to_singer
-            .send(SingerCommand::TrackDup(self.cursor_track.track))?;
+        let track_index = self.cursor_track.track;
+        if let Some(track) = self.track_at_cursor() {
+            let modules_len = track.modules.len();
+            if modules_len == 0 {
+                self.sender_to_singer
+                    .send(SingerCommand::TrackInsert(track_index, track.clone()))?;
+            } else {
+                for module_index in 0..modules_len {
+                    let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
+                        if module_index + 1 == modules_len {
+                            Box::new(move |state, _command| {
+                                state.sender_to_singer.send(SingerCommand::TrackInsert(
+                                    track_index,
+                                    state.song.tracks[track_index].clone(),
+                                ))?;
+                                Ok(())
+                            })
+                        } else {
+                            Box::new(|_state, _command| Ok(()))
+                        };
+                    self.send_to_plugin(
+                        MainToPlugin::StateSave(track_index, module_index),
+                        callback,
+                    )?;
+                }
+            }
+        }
         Ok(())
     }
 
