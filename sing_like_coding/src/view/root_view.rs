@@ -145,6 +145,7 @@ impl RootView {
                     state.cursor_track.track,
                     description.id,
                     description.name,
+                    !gui_context.input(|i| i.modifiers.shift),
                 ))?;
 
                 self.plugin_select_view = None;

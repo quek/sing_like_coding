@@ -52,7 +52,7 @@ pub enum SingerCommand {
     #[allow(dead_code)]
     NoteOff(usize, i16, i16, f64, usize),
     PluginLatency(usize, u32),
-    PluginLoad(usize, String, String),
+    PluginLoad(usize, String, String, bool),
     PluginDelete(usize, usize),
     PluginSidechain(ModuleIndex, AudioInput),
     PointNew(CursorTrack, usize, clap_id),
@@ -789,9 +789,9 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                 singer.plugin_latency_set(id, latency)?;
                 singer.send_song()?;
             }
-            SingerCommand::PluginLoad(track_index, clap_plugin_id, name) => {
+            SingerCommand::PluginLoad(track_index, clap_plugin_id, name, gui_open_p) => {
                 let mut singer = singer.lock().unwrap();
-                singer.plugin_load(track_index, clap_plugin_id.clone(), true)?;
+                singer.plugin_load(track_index, clap_plugin_id.clone(), gui_open_p)?;
                 let track = &mut singer.song.tracks[track_index];
                 let audio_inputs = if track.modules.is_empty() {
                     vec![]
