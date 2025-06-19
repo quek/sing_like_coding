@@ -795,10 +795,7 @@ impl MainView {
             .size([DEFAULT_TRACK_WIDTH, 0.0])
             .build();
         if label.clicked() {
-            state.send_to_plugin(
-                MainToPlugin::GuiOpen(track_index, module_index),
-                Box::new(|_, _| Ok(())),
-            )?;
+            state.send_to_plugin(MainToPlugin::GuiOpen(module.id), Box::new(|_, _| Ok(())))?;
         }
         label.context_menu(|ui: &mut Ui| {
             if ui.button("Delete").clicked() {

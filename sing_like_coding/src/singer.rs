@@ -210,12 +210,8 @@ impl Singer {
             .push(PluginRef::new(id, shmem.as_ptr() as *mut ProcessData)?);
         self.shmems[track_index].push(shmem);
 
-        self.sender_to_plugin.send(MainToPlugin::Load(
-            id,
-            clap_plugin_id,
-            track_index,
-            gui_open_p,
-        ))?;
+        self.sender_to_plugin
+            .send(MainToPlugin::Load(id, clap_plugin_id, gui_open_p))?;
 
         Ok(id)
     }
@@ -490,7 +486,7 @@ impl Singer {
     }
 
     pub fn plugin_delete(&mut self, track_index: usize, module_index: usize) -> Result<()> {
-        self.song.tracks[track_index].modules.remove(module_index);
+        let module = self.song.tracks[track_index].modules.remove(module_index);
         self.process_track_contexts[track_index]
             .lock()
             .unwrap()
@@ -498,7 +494,7 @@ impl Singer {
             .remove(module_index);
         self.shmems[track_index].remove(module_index);
         self.sender_to_plugin
-            .send(MainToPlugin::Unload(track_index, module_index))?;
+            .send(MainToPlugin::Unload(module.id))?;
         Ok(())
     }
 
@@ -570,7 +566,7 @@ impl Singer {
 
             for module_index in 0..self.song.tracks[track_index].modules.len() {
                 let module_id = self.song.tracks[track_index].modules[module_index]
-                    .id
+                    .plugin_id
                     .clone();
                 let description = clap_manager.description(&module_id);
                 xs.push((track_index, description, module_index));
@@ -578,14 +574,12 @@ impl Singer {
         }
 
         for (track_index, description, module_index) in xs {
-            self.plugin_load(track_index, description.unwrap().id.clone(), false)?;
+            let id = self.plugin_load(track_index, description.unwrap().id.clone(), false)?;
+            let module = &mut self.song.tracks[track_index].modules[module_index];
+            module.id = id;
             self.sender_to_plugin.send(MainToPlugin::StateLoad(
-                track_index,
-                module_index,
-                self.song.tracks[track_index].modules[module_index]
-                    .state
-                    .take()
-                    .unwrap(),
+                module.id,
+                module.state.take().unwrap(),
             ))?;
         }
 
@@ -710,18 +704,17 @@ impl Singer {
         self.shmems.insert(track_index, vec![]);
         for module_index in 0..self.song.tracks[track_index].modules.len() {
             let clap_plugin_id = self.song.tracks[track_index].modules[module_index]
-                .id
+                .plugin_id
                 .clone();
-            self.plugin_load(track_index, clap_plugin_id, false)?;
+            let id = self.plugin_load(track_index, clap_plugin_id, false)?;
+            let module = &mut self.song.tracks[track_index].modules[module_index];
+            module.id = id;
             self.sender_to_plugin.send(MainToPlugin::StateLoad(
-                track_index,
-                module_index,
-                self.song.tracks[track_index].modules[module_index]
-                    .state
-                    .take()
-                    .unwrap(),
+                module.id,
+                module.state.take().unwrap(),
             ))?;
         }
+        dbg!(&self.song);
         Ok(())
     }
 
@@ -791,7 +784,7 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
             }
             SingerCommand::PluginLoad(track_index, clap_plugin_id, name, gui_open_p) => {
                 let mut singer = singer.lock().unwrap();
-                singer.plugin_load(track_index, clap_plugin_id.clone(), gui_open_p)?;
+                let id = singer.plugin_load(track_index, clap_plugin_id.clone(), gui_open_p)?;
                 let track = &mut singer.song.tracks[track_index];
                 let audio_inputs = if track.modules.is_empty() {
                     vec![]
@@ -803,6 +796,7 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                     }]
                 };
                 singer.song.tracks[track_index].modules.push(Module::new(
+                    id,
                     clap_plugin_id,
                     name,
                     audio_inputs,

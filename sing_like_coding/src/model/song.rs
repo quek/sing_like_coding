@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::Local;
-use common::module::{Module, ModuleIndex};
+use common::module::{Module, ModuleId, ModuleIndex};
 use serde::{Deserialize, Serialize};
 
 use crate::app_state::CursorTrack;
@@ -26,6 +26,12 @@ impl Song {
             lpb: 4,
             tracks: vec![],
         }
+    }
+
+    pub fn module_by_id_mut(&mut self, id: ModuleId) -> Option<&mut Module> {
+        self.tracks
+            .iter_mut()
+            .find_map(|track| track.modules.iter_mut().find(|module| module.id == id))
     }
 
     pub fn track_add(&mut self) {
@@ -115,6 +121,11 @@ impl Song {
     //         .and_then(|x| x.lanes.get_mut(cursor.lane))
     //         .and_then(|x| x.item_mut(cursor.line))
     // }
+
+    pub fn module_at(&self, module_index: ModuleIndex) -> Option<&Module> {
+        self.track_at(module_index.0)
+            .and_then(|track| track.modules.get(module_index.1))
+    }
 
     pub fn module_at_mut(&mut self, module_index: ModuleIndex) -> Option<&mut Module> {
         self.track_at_mut(module_index.0)

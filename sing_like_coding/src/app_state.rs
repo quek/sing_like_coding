@@ -348,13 +348,6 @@ impl<'a> AppState<'a> {
         self.cursor_track = self.cursor_track.right(&self.song);
     }
 
-    pub fn module_mut(&mut self, track_index: usize, module_index: usize) -> Option<&mut Module> {
-        self.song
-            .tracks
-            .get_mut(track_index)
-            .and_then(|x| x.modules.get_mut(module_index))
-    }
-
     pub fn param_set(&mut self, module_index: usize, param_id: clap_id) -> Result<()> {
         self.sender_to_singer.send(SingerCommand::PointNew(
             self.cursor_track,
@@ -393,12 +386,12 @@ impl<'a> AppState<'a> {
                 PluginToMain::DidLoad(id, latency) => self
                     .sender_to_singer
                     .send(SingerCommand::PluginLatency(*id, *latency))?,
-                PluginToMain::DidUnload(_, _) => {}
+                PluginToMain::DidUnload(_) => {}
                 PluginToMain::DidGuiOpen => {}
                 PluginToMain::DidParams(_params) => {}
                 PluginToMain::DidStateLoad => {}
-                PluginToMain::DidStateSave(track_index, module_index, state) => {
-                    if let Some(module) = self.module_mut(*track_index, *module_index) {
+                PluginToMain::DidStateSave(id, state) => {
+                    if let Some(module) = self.song.module_by_id_mut(*id) {
                         module.state = Some(std::mem::take(state));
                     }
                 }
@@ -568,11 +561,8 @@ impl<'a> AppState<'a> {
                 }
             }
             UiCommand::Module(ModuleCommand::Open) => {
-                if let Some(_module) = self.module_at_cursort() {
-                    self.send_to_plugin(
-                        MainToPlugin::GuiOpen(self.cursor_track.track, self.cursor_module.index),
-                        Box::new(|_, _| Ok(())),
-                    )?;
+                if let Some(module) = self.module_at_cursort() {
+                    self.send_to_plugin(MainToPlugin::GuiOpen(module.id), Box::new(|_, _| Ok(())))?;
                 } else {
                     self.route = Route::PluginSelect;
                 }
@@ -646,7 +636,8 @@ impl<'a> AppState<'a> {
                     } else {
                         Box::new(|_, _| Ok(()))
                     };
-                self.send_to_plugin(MainToPlugin::StateSave(track_index, module_index), callback)?;
+                let module = &self.song.tracks[track_index].modules[module_index];
+                self.send_to_plugin(MainToPlugin::StateSave(module.id), callback)?;
             }
         }
         if !callback_p {
@@ -1040,7 +1031,8 @@ impl<'a> AppState<'a> {
                     } else {
                         Box::new(|_state, _command| Ok(()))
                     };
-                self.send_to_plugin(MainToPlugin::StateSave(track_index, module_index), callback)?;
+                let module = &self.song.tracks[track_index].modules[module_index];
+                self.send_to_plugin(MainToPlugin::StateSave(module.id), callback)?;
             }
         }
 
@@ -1067,32 +1059,35 @@ impl<'a> AppState<'a> {
 
     fn track_dup(&mut self) -> Result<()> {
         let track_index = self.cursor_track.track;
-        if let Some(track) = self.track_at_cursor() {
-            let modules_len = track.modules.len();
-            if modules_len == 0 {
-                self.sender_to_singer
-                    .send(SingerCommand::TrackInsert(track_index, track.clone()))?;
-            } else {
-                for module_index in 0..modules_len {
-                    let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
-                        if module_index + 1 == modules_len {
-                            Box::new(move |state, _command| {
-                                state.sender_to_singer.send(SingerCommand::TrackInsert(
-                                    track_index,
-                                    state.song.tracks[track_index].clone(),
-                                ))?;
-                                Ok(())
-                            })
-                        } else {
-                            Box::new(|_state, _command| Ok(()))
-                        };
-                    self.send_to_plugin(
-                        MainToPlugin::StateSave(track_index, module_index),
-                        callback,
-                    )?;
-                }
+        let modules_len = self.track_at_cursor().unwrap().modules.len();
+        if modules_len == 0 {
+            self.sender_to_singer.send(SingerCommand::TrackInsert(
+                track_index + 1,
+                self.track_at_cursor().unwrap().clone(),
+            ))?;
+        } else {
+            for module_index in 0..modules_len {
+                let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
+                    if module_index + 1 == modules_len {
+                        Box::new(move |state, _command| {
+                            state.sender_to_singer.send(SingerCommand::TrackInsert(
+                                track_index + 1,
+                                state.song.tracks[track_index].clone(),
+                            ))?;
+                            Ok(())
+                        })
+                    } else {
+                        Box::new(|_state, _command| Ok(()))
+                    };
+                self.send_to_plugin(
+                    MainToPlugin::StateSave(
+                        self.track_at_cursor().unwrap().modules[module_index].id,
+                    ),
+                    callback,
+                )?;
             }
         }
+        self.track_next();
         Ok(())
     }
 

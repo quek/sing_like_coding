@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     sync::mpsc::{channel, Receiver, Sender},
     thread::{self, sleep},
     time::Duration,
@@ -27,7 +28,7 @@ pub struct Manager {
     sender_from_plugin: Sender<PluginPtr>,
     receiver_from_plugin: Receiver<PluginPtr>,
     event_quit_all: HANDLE,
-    hosts: Vec<Vec<Host>>,
+    hosts: HashMap<usize, Host>,
     clap_manager: ClapManager,
     hwnd: isize,
 }
@@ -56,7 +57,7 @@ impl Manager {
             sender_from_plugin,
             receiver_from_plugin,
             event_quit_all,
-            hosts: vec![],
+            hosts: Default::default(),
             clap_manager: ClapManager::new(),
             hwnd: 0,
         })
@@ -73,7 +74,7 @@ impl Manager {
                         self.hwnd = hwnd;
                         self.sender_to_loop.send(PluginToMain::DidHwnd)?;
                     }
-                    MainToPlugin::Load(id, clap_id, track_index, gui_open_p) => {
+                    MainToPlugin::Load(id, clap_id, gui_open_p) => {
                         log::debug!("will load {id}");
                         let description = self.clap_manager.description(&clap_id).unwrap();
                         let host = Host::new(
@@ -84,22 +85,20 @@ impl Manager {
                             self.hwnd,
                         )?;
                         let latency = host.latency();
-                        self.hosts.resize_with(track_index + 1, || vec![]);
-                        self.hosts[track_index].push(host);
+                        self.hosts.insert(id, host);
 
                         self.sender_to_loop
                             .send(PluginToMain::DidLoad(id, latency))?;
                     }
-                    MainToPlugin::Unload(track_index, module_index) => {
-                        if let Some(host) = self.host(track_index, module_index) {
+                    MainToPlugin::Unload(id) => {
+                        if let Some(host) = self.host(id) {
                             host.unload()?;
-                            self.hosts[track_index].remove(module_index);
+                            self.hosts.remove(&id);
                         }
-                        self.sender_to_loop
-                            .send(PluginToMain::DidUnload(track_index, module_index))?;
+                        self.sender_to_loop.send(PluginToMain::DidUnload(id))?;
                     }
-                    MainToPlugin::GuiOpen(track_index, module_index) => {
-                        if let Some(host) = self.host(track_index, module_index) {
+                    MainToPlugin::GuiOpen(id) => {
+                        if let Some(host) = self.host(id) {
                             if host.plugin.gui_open_p {
                                 host.plugin.gui_close()?;
                             } else {
@@ -108,30 +107,27 @@ impl Manager {
                         }
                         self.sender_to_loop.send(PluginToMain::DidGuiOpen)?;
                     }
-                    MainToPlugin::Params(track_index, module_index) => {
+                    MainToPlugin::Params(id) => {
                         let mut params = vec![];
-                        if let Some(host) = self.host(track_index, module_index) {
+                        if let Some(host) = self.host(id) {
                             params = host.params()?;
                         }
                         self.sender_to_loop.send(PluginToMain::DidParams(params))?;
                     }
-                    MainToPlugin::StateLoad(track_index, module_index, state) => {
-                        if let Some(host) = self.host(track_index, module_index) {
+                    MainToPlugin::StateLoad(id, state) => {
+                        if let Some(host) = self.host(id) {
                             host.load(state)?;
                         }
                         self.sender_to_loop.send(PluginToMain::DidStateLoad)?;
                     }
-                    MainToPlugin::StateSave(track_index, module_index) => {
-                        let state = if let Some(host) = self.host(track_index, module_index) {
+                    MainToPlugin::StateSave(id) => {
+                        let state = if let Some(host) = self.host(id) {
                             host.save()?
                         } else {
                             vec![]
                         };
-                        self.sender_to_loop.send(PluginToMain::DidStateSave(
-                            track_index,
-                            module_index,
-                            state,
-                        ))?;
+                        self.sender_to_loop
+                            .send(PluginToMain::DidStateSave(id, state))?;
                     }
                     MainToPlugin::Scan => {
                         log::debug!("clap_manager.scan() start...");
@@ -170,9 +166,7 @@ impl Manager {
         }
     }
 
-    fn host(&mut self, track_index: usize, module_index: usize) -> Option<&mut Host> {
-        self.hosts
-            .get_mut(track_index)
-            .and_then(|x| x.get_mut(module_index))
+    fn host(&mut self, id: usize) -> Option<&mut Host> {
+        self.hosts.get_mut(&id)
     }
 }

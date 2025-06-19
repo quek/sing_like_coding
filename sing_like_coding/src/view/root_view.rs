@@ -116,7 +116,13 @@ impl RootView {
                             Ok(())
                         });
                     state.send_to_plugin(
-                        MainToPlugin::Params(state.cursor_track.track, module_index),
+                        MainToPlugin::Params(
+                            state
+                                .song
+                                .module_at((state.cursor_track.track, module_index))
+                                .unwrap()
+                                .id,
+                        ),
                         callback,
                     )?;
                 }

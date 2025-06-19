@@ -1,17 +1,17 @@
 use bincode::{config, Decode, Encode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::{audio_buffer::AudioBuffer, plugin::param::Param};
+use crate::{audio_buffer::AudioBuffer, module::ModuleId, plugin::param::Param};
 
 #[derive(Encode, Decode, PartialEq, Debug)]
 pub enum MainToPlugin {
     Hwnd(isize),
-    Load(usize, String, usize, bool),
-    Unload(usize, usize),
-    GuiOpen(usize, usize),
-    Params(usize, usize),
-    StateLoad(usize, usize, Vec<u8>),
-    StateSave(usize, usize),
+    Load(ModuleId, String, bool),
+    Unload(usize),
+    GuiOpen(ModuleId),
+    Params(ModuleId),
+    StateLoad(ModuleId, Vec<u8>),
+    StateSave(ModuleId),
     Scan,
     Quit,
 }
@@ -20,11 +20,11 @@ pub enum MainToPlugin {
 pub enum PluginToMain {
     DidHwnd,
     DidLoad(usize, u32), // id, latency
-    DidUnload(usize, usize),
+    DidUnload(ModuleId),
     DidGuiOpen,
     DidParams(Vec<Param>),
     DidStateLoad,
-    DidStateSave(usize, usize, Vec<u8>),
+    DidStateSave(ModuleId, Vec<u8>),
     DidScan,
     Quit,
 }
