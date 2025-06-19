@@ -982,7 +982,7 @@ impl<'a> AppState<'a> {
             TrackCommand::CursorRight => self.track_next(),
             TrackCommand::Cut => self.track_cut()?,
             TrackCommand::Delete => self.track_delete()?,
-            TrackCommand::Dup => {}
+            TrackCommand::Dup => self.track_dup()?,
             TrackCommand::MoveLeft => self.track_move(-1)?,
             TrackCommand::MoveRight => self.track_move(1)?,
             TrackCommand::Paste => self.track_paste()?,
@@ -1049,7 +1049,10 @@ impl<'a> AppState<'a> {
 
     fn track_cut(&mut self) -> Result<()> {
         self.track_copy()?;
-        self.track_delete()?;
+        // main は消さない
+        if self.cursor_track.track != 0 {
+            self.track_delete()?;
+        }
         Ok(())
     }
 
@@ -1059,6 +1062,12 @@ impl<'a> AppState<'a> {
             self.sender_to_singer
                 .send(SingerCommand::TrackDelete(self.cursor_track.track))?;
         }
+        Ok(())
+    }
+
+    fn track_dup(&mut self) -> Result<()> {
+        self.sender_to_singer
+            .send(SingerCommand::TrackDup(self.cursor_track.track))?;
         Ok(())
     }
 
