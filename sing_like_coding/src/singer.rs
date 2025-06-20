@@ -42,8 +42,7 @@ pub enum MainToAudio {
     Play,
     Stop,
     Loop,
-    #[allow(dead_code)]
-    Song,
+    LaneAdd(usize),
     LaneItem(CursorTrack, LaneItem),
     LaneItemDelete(CursorTrack),
     #[allow(dead_code)]
@@ -55,6 +54,7 @@ pub enum MainToAudio {
     PluginDelete(ModuleIndex),
     PluginSidechain(ModuleIndex, AudioInput),
     PointNew(CursorTrack, usize, clap_id),
+    Quit,
     TrackAdd,
     TrackDelete(usize),
     TrackInsert(usize, Track),
@@ -63,7 +63,8 @@ pub enum MainToAudio {
     TrackSolo(usize, bool),
     TrackPan(usize, f32),
     TrackVolume(usize, f32),
-    LaneAdd(usize),
+    #[allow(dead_code)]
+    Song,
     SongFile(String),
     SongOpen(String),
 }
@@ -883,6 +884,12 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
+            }
+            MainToAudio::Quit => {
+                let singer = singer.lock().unwrap();
+                singer.sender_to_main.send(AudioToMain::Ok)?;
+                log::debug!("singer loop quit.");
+                break;
             }
         }
     }

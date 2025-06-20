@@ -80,6 +80,10 @@ impl<'a> Default for AppMain<'a> {
 
 impl<'a> eframe::App for AppMain<'a> {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.device.as_mut().map(|x| {
+            let _ = x.stop();
+        });
+        self.state.quit();
         self.state
             .send_to_plugin(MainToPlugin::Quit, Box::new(|_, _| Ok(())))
             .unwrap();
@@ -107,7 +111,8 @@ impl<'a> eframe::App for AppMain<'a> {
         let _ = self.view.view(ctx, &mut self.device, &mut self.state);
 
         // 節電
-        let repaint_after = std::time::Duration::from_secs_f64(1.0 / 4.0);
+        // let repaint_after = std::time::Duration::from_secs_f64(1.0 / 4.0);
+        let repaint_after = std::time::Duration::from_secs_f64(1.0 / 30.0);
         ctx.request_repaint_after(repaint_after);
     }
 }
@@ -118,5 +123,5 @@ fn get_hwnd(frame: &eframe::Frame) -> isize {
             return isize::from(h.hwnd);
         }
     }
-    0
+    unreachable!("get_hwd failed!");
 }

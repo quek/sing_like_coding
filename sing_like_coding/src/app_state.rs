@@ -435,6 +435,10 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
+    pub fn quit(&self) {
+        let _ = self.send_to_audio(MainToAudio::Quit);
+    }
+
     pub fn receive_from_communicator(&mut self) -> Result<()> {
         while let Ok(mut message) = self.receiver_communicator_to_main_thread.try_recv() {
             match &mut message {
