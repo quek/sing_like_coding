@@ -13,8 +13,8 @@ use arboard::Clipboard;
 use clap_sys::id::clap_id;
 use common::{
     dsp::{db_from_norm, db_to_norm},
-    module::{Module, ModuleIndex},
-    plugin::param::Param,
+    module::{AudioInput, Module, ModuleIndex},
+    plugin::{description::Description, param::Param},
     protocol::{MainToPlugin, PluginToMain},
     shmem::{open_shared_memory, SONG_STATE_NAME},
 };
@@ -25,7 +25,7 @@ use shared_memory::Shmem;
 use crate::{
     command::{track_add::TrackAdd, Command},
     model::{lane_item::LaneItem, note::Note, song::Song, track::Track},
-    singer::SingerCommand,
+    singer::{AudioToMain, MainToAudio},
     song_state::SongState,
     view::{
         root_view::Route,
@@ -245,7 +245,8 @@ pub struct AppState<'a> {
     pub selection_track_max: Option<CursorTrack>,
     pub song: Song,
     pub song_dirty_p: bool,
-    pub sender_to_singer: Sender<SingerCommand>,
+    sender_to_singer: Sender<MainToAudio>,
+    receiver_from_audio: Receiver<AudioToMain>,
     sender_to_loop: Sender<MainToPlugin>,
     receiver_communicator_to_main_thread: Receiver<PluginToMain>,
     receiver_from_singer: Receiver<AppStateCommand>,
@@ -269,7 +270,8 @@ pub struct AppState<'a> {
 
 impl<'a> AppState<'a> {
     pub fn new(
-        sender_to_singer: Sender<SingerCommand>,
+        sender_to_singer: Sender<MainToAudio>,
+        receiver_from_audio: Receiver<AudioToMain>,
         sender_to_loop: Sender<MainToPlugin>,
         receiver_communicator_to_main_thread: Receiver<PluginToMain>,
         receiver_from_singer: Receiver<AppStateCommand>,
@@ -294,6 +296,7 @@ impl<'a> AppState<'a> {
             song: Song::new(),
             song_dirty_p: false,
             sender_to_singer,
+            receiver_from_audio,
             sender_to_loop,
             receiver_communicator_to_main_thread,
             receiver_from_singer,
@@ -348,13 +351,64 @@ impl<'a> AppState<'a> {
         self.cursor_track = self.cursor_track.right(&self.song);
     }
 
+    fn module_load(&mut self, module: &mut Module) -> Result<()> {
+        self.send_to_plugin(
+            MainToPlugin::Load(
+                module.id,
+                module.plugin_id.clone(),
+                true,
+                module.state.take(),
+            ),
+            // TODO singer にプラグインがアクティブになったことを通知？
+            Box::new(|_, _| Ok(())),
+        )?;
+
+        Ok(())
+    }
+
     pub fn param_set(&mut self, module_index: usize, param_id: clap_id) -> Result<()> {
-        self.sender_to_singer.send(SingerCommand::PointNew(
+        match self.send_to_audio(MainToAudio::PointNew(
             self.cursor_track,
             module_index,
             param_id,
-        ))?;
+        ))? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => {}
+        }
 
+        Ok(())
+    }
+
+    pub fn plugin_load(&mut self, description: &Description, gui_open_p: bool) -> Result<()> {
+        match self.send_to_audio(MainToAudio::PluginLoad(
+            self.cursor_track.track,
+            description.id.clone(),
+            description.name.clone(),
+            gui_open_p,
+        ))? {
+            AudioToMain::PluginLoad(id, song) => {
+                self.song = song;
+                let module = self.song.tracks[self.cursor_track.track]
+                    .modules
+                    .last_mut()
+                    .unwrap();
+                self.module_load(module);
+            }
+            _ => unreachable!(),
+        }
+
+        Ok(())
+    }
+
+    pub fn plugin_sidechain(
+        &mut self,
+        module_index: ModuleIndex,
+        audio_input: AudioInput,
+    ) -> Result<()> {
+        match self.send_to_audio(MainToAudio::PluginSidechain(module_index, audio_input))? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => {}
+        }
         Ok(())
     }
 
@@ -385,7 +439,7 @@ impl<'a> AppState<'a> {
                 PluginToMain::DidHwnd => {}
                 PluginToMain::DidLoad(id, latency) => self
                     .sender_to_singer
-                    .send(SingerCommand::PluginLatency(*id, *latency))?,
+                    .send(MainToAudio::PluginLatency(*id, *latency))?,
                 PluginToMain::DidUnload(_) => {}
                 PluginToMain::DidGuiOpen => {}
                 PluginToMain::DidParams(_params) => {}
@@ -414,7 +468,7 @@ impl<'a> AppState<'a> {
                 self.follow_p = !self.follow_p;
             }
             UiCommand::Loop => {
-                self.sender_to_singer.send(SingerCommand::Loop)?;
+                self.sender_to_singer.send(MainToAudio::Loop)?;
             }
             UiCommand::FocusedPartNext => {
                 self.focused_part = match self.focused_part {
@@ -434,9 +488,9 @@ impl<'a> AppState<'a> {
             }
             UiCommand::PlayToggle => {
                 if self.song_state.play_p {
-                    self.sender_to_singer.send(SingerCommand::Stop)?;
+                    self.sender_to_singer.send(MainToAudio::Stop)?;
                 } else {
-                    self.sender_to_singer.send(SingerCommand::Play)?;
+                    self.sender_to_singer.send(MainToAudio::Play)?;
                 }
             }
             UiCommand::SongSave => {
@@ -452,23 +506,23 @@ impl<'a> AppState<'a> {
                 let track_index = track_index.unwrap_or(self.cursor_track.track);
                 let mute = mute.unwrap_or(!self.song.tracks[track_index].mute);
                 self.sender_to_singer
-                    .send(SingerCommand::TrackMute(track_index, mute))?;
+                    .send(MainToAudio::TrackMute(track_index, mute))?;
             }
             UiCommand::TrackSolo(track_index, solo) => {
                 let track_index = track_index.unwrap_or(self.cursor_track.track);
                 let solo = solo.unwrap_or(!self.song.tracks[track_index].solo);
                 self.sender_to_singer
-                    .send(SingerCommand::TrackSolo(track_index, solo))?;
+                    .send(MainToAudio::TrackSolo(track_index, solo))?;
             }
             UiCommand::TrackPan(track_index, pan) => self
                 .sender_to_singer
-                .send(SingerCommand::TrackPan(*track_index, *pan))?,
+                .send(MainToAudio::TrackPan(*track_index, *pan))?,
             UiCommand::TrackVolume(track_index, volume) => self
                 .sender_to_singer
-                .send(SingerCommand::TrackVolume(*track_index, *volume))?,
+                .send(MainToAudio::TrackVolume(*track_index, *volume))?,
             UiCommand::LaneAdd => self
                 .sender_to_singer
-                .send(SingerCommand::LaneAdd(self.cursor_track.track))?,
+                .send(MainToAudio::LaneAdd(self.cursor_track.track))?,
             UiCommand::Lane(LaneCommand::AutomationParamSelect) => {
                 self.automation_param_select()?
             }
@@ -482,7 +536,7 @@ impl<'a> AppState<'a> {
             UiCommand::Lane(LaneCommand::Dup) => self.lane_items_dup()?,
             UiCommand::Lane(LaneCommand::LaneItemDelete) => self
                 .sender_to_singer
-                .send(SingerCommand::LaneItemDelete(self.cursor_track.clone()))?,
+                .send(MainToAudio::LaneItemDelete(self.cursor_track.clone()))?,
             UiCommand::Lane(LaneCommand::LaneItemMove(lane_delta, line_delta)) => {
                 self.lane_items_move(*lane_delta, *line_delta)?;
             }
@@ -553,11 +607,21 @@ impl<'a> AppState<'a> {
                 }
             }
             UiCommand::Module(ModuleCommand::Delete) => {
-                if let Some(_module) = self.module_at_cursort() {
-                    self.sender_to_singer.send(SingerCommand::PluginDelete(
+                if let Some(module) = self.module_at_cursort() {
+                    self.sender_to_singer.send(MainToAudio::PluginDelete(
                         self.cursor_track.track,
                         self.cursor_module.index,
                     ))?;
+                    match self.receiver_from_audio.recv()? {
+                        AudioToMain::Song(song) => {
+                            self.send_to_plugin(
+                                MainToPlugin::Unload(module.id),
+                                Box::new(|_, _| Ok(())),
+                            )?;
+                            self.song = song;
+                        }
+                        _ => unreachable!(),
+                    }
                 }
             }
             UiCommand::Module(ModuleCommand::Open) => {
@@ -576,7 +640,7 @@ impl<'a> AppState<'a> {
             UiCommand::Mixer(MixerCommand::CursorRight) => self.track_next(),
             UiCommand::Mixer(MixerCommand::Pan(delta)) => {
                 if let Some(track) = self.track_current() {
-                    self.sender_to_singer.send(SingerCommand::TrackPan(
+                    self.sender_to_singer.send(MainToAudio::TrackPan(
                         self.cursor_track.track,
                         (track.pan + (delta / 20.0)).clamp(0.0, 1.0),
                     ))?;
@@ -585,7 +649,7 @@ impl<'a> AppState<'a> {
             UiCommand::Mixer(MixerCommand::Volume(delta)) => {
                 if let Some(track) = self.track_current() {
                     let db = db_from_norm(track.volume, DB_MIN, DB_MAX) + delta;
-                    self.sender_to_singer.send(SingerCommand::TrackVolume(
+                    self.sender_to_singer.send(MainToAudio::TrackVolume(
                         self.cursor_track.track,
                         db_to_norm(db, DB_MIN, DB_MAX).clamp(0.0, 1.0),
                     ))?;
@@ -593,6 +657,12 @@ impl<'a> AppState<'a> {
             }
         }
         Ok(())
+    }
+
+    fn send_to_audio(&self, command: MainToAudio) -> Result<AudioToMain> {
+        self.sender_to_singer.send(command)?;
+        let res = self.receiver_from_audio.recv()?;
+        Ok(res)
     }
 
     pub fn send_to_plugin(
@@ -611,7 +681,7 @@ impl<'a> AppState<'a> {
             .pick_file()
         {
             self.song_open_p = true;
-            self.sender_to_singer.send(SingerCommand::SongOpen(
+            self.sender_to_singer.send(MainToAudio::SongOpen(
                 path.to_str().map(|s| s.to_string()).unwrap(),
             ))?;
         }
@@ -707,7 +777,7 @@ impl<'a> AppState<'a> {
                             for line in min.line..=max.line {
                                 items.push(lane.item(line).clone());
                                 if !copy_p {
-                                    self.sender_to_singer.send(SingerCommand::LaneItemDelete(
+                                    self.sender_to_singer.send(MainToAudio::LaneItemDelete(
                                         CursorTrack {
                                             track: track_index,
                                             lane: lane_index,
@@ -730,7 +800,7 @@ impl<'a> AppState<'a> {
             clipboard.set_text(&json)?;
             if !copy_p {
                 self.sender_to_singer
-                    .send(SingerCommand::LaneItemDelete(self.cursor_track.clone()))?;
+                    .send(MainToAudio::LaneItemDelete(self.cursor_track.clone()))?;
             }
         }
 
@@ -755,10 +825,10 @@ impl<'a> AppState<'a> {
                 for item in items.into_iter() {
                     if let Some((_, item)) = item {
                         self.sender_to_singer
-                            .send(SingerCommand::LaneItem(cursor, item))?;
+                            .send(MainToAudio::LaneItem(cursor, item))?;
                     } else {
                         self.sender_to_singer
-                            .send(SingerCommand::LaneItemDelete(cursor))?;
+                            .send(MainToAudio::LaneItemDelete(cursor))?;
                     }
                     cursor = cursor.down(&self.song);
                 }
@@ -771,7 +841,7 @@ impl<'a> AppState<'a> {
             max.line += line_delta;
         } else if let Some(item) = self.song.lane_item(&self.cursor_track) {
             self.cursor_track.line += 1;
-            self.sender_to_singer.send(SingerCommand::LaneItem(
+            self.sender_to_singer.send(MainToAudio::LaneItem(
                 self.cursor_track.clone(),
                 item.clone(),
             ))?;
@@ -785,12 +855,12 @@ impl<'a> AppState<'a> {
             let itemss = self.lane_items_selected_cloned();
             for (cursor, _) in itemss.clone().into_iter().flatten().filter_map(|x| x) {
                 self.sender_to_singer
-                    .send(SingerCommand::LaneItemDelete(cursor))?;
+                    .send(MainToAudio::LaneItemDelete(cursor))?;
             }
             for (cursor, item) in itemss.into_iter().flatten().filter_map(|x| x) {
                 let cursor = cursor.move_by(lane_delta, line_delta, &self.song);
                 self.sender_to_singer
-                    .send(SingerCommand::LaneItem(cursor, item))?;
+                    .send(MainToAudio::LaneItem(cursor, item))?;
             }
 
             self.selection_track_min = self
@@ -803,12 +873,12 @@ impl<'a> AppState<'a> {
                 .map(|x| x.move_by(lane_delta, line_delta, &self.song));
         } else if let Some(item) = self.song.lane_item(&self.cursor_track) {
             self.sender_to_singer
-                .send(SingerCommand::LaneItemDelete(self.cursor_track.clone()))?;
+                .send(MainToAudio::LaneItemDelete(self.cursor_track.clone()))?;
             let cursor = self
                 .cursor_track
                 .move_by(lane_delta, line_delta, &self.song);
             self.sender_to_singer
-                .send(SingerCommand::LaneItem(cursor, item.clone()))?;
+                .send(MainToAudio::LaneItem(cursor, item.clone()))?;
         }
 
         self.cursor_track = self
@@ -827,10 +897,10 @@ impl<'a> AppState<'a> {
                     for item in items.into_iter() {
                         if let Some(item) = item {
                             self.sender_to_singer
-                                .send(SingerCommand::LaneItem(cursor, item))?;
+                                .send(MainToAudio::LaneItem(cursor, item))?;
                         } else {
                             self.sender_to_singer
-                                .send(SingerCommand::LaneItemDelete(cursor))?;
+                                .send(MainToAudio::LaneItemDelete(cursor))?;
                         }
                         cursor = cursor.down(&self.song);
                     }
@@ -919,7 +989,7 @@ impl<'a> AppState<'a> {
                     }
                 }
                 self.sender_to_singer
-                    .send(SingerCommand::LaneItem(cursor, lane_item))
+                    .send(MainToAudio::LaneItem(cursor, lane_item))
                     .unwrap();
             }
         } else {
@@ -943,7 +1013,7 @@ impl<'a> AppState<'a> {
             };
 
             self.sender_to_singer
-                .send(SingerCommand::LaneItem(
+                .send(MainToAudio::LaneItem(
                     self.cursor_track.clone(),
                     lane_item.clone(),
                 ))
@@ -990,7 +1060,7 @@ impl<'a> AppState<'a> {
                 .set_file_name(&self.song.name)
                 .save_file()
             {
-                self.sender_to_singer.send(SingerCommand::SongFile(
+                self.sender_to_singer.send(MainToAudio::SongFile(
                     path.to_str().map(|s| s.to_string()).unwrap(),
                 ))?;
                 path
@@ -1002,6 +1072,14 @@ impl<'a> AppState<'a> {
         let json = serde_json::to_string_pretty(&self.song).unwrap();
         file.write_all(json.as_bytes()).unwrap();
         self.song_dirty_p = false;
+        Ok(())
+    }
+
+    pub fn track_add(&mut self) -> Result<()> {
+        match self.send_to_audio(MainToAudio::TrackAdd)? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => {}
+        }
         Ok(())
     }
 
@@ -1052,7 +1130,7 @@ impl<'a> AppState<'a> {
         // main は消さない
         if self.cursor_track.track != 0 {
             self.sender_to_singer
-                .send(SingerCommand::TrackDelete(self.cursor_track.track))?;
+                .send(MainToAudio::TrackDelete(self.cursor_track.track))?;
         }
         Ok(())
     }
@@ -1061,19 +1139,42 @@ impl<'a> AppState<'a> {
         let track_index = self.cursor_track.track;
         let modules_len = self.track_at_cursor().unwrap().modules.len();
         if modules_len == 0 {
-            self.sender_to_singer.send(SingerCommand::TrackInsert(
+            self.sender_to_singer.send(MainToAudio::TrackInsert(
                 track_index + 1,
                 self.track_at_cursor().unwrap().clone(),
             ))?;
+            match self.receiver_from_audio.recv()? {
+                AudioToMain::Song(song) => {
+                    self.song = song;
+                    self.track_next();
+                }
+                _ => unreachable!(),
+            }
         } else {
             for module_index in 0..modules_len {
                 let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
                     if module_index + 1 == modules_len {
                         Box::new(move |state, _command| {
-                            state.sender_to_singer.send(SingerCommand::TrackInsert(
+                            state.sender_to_singer.send(MainToAudio::TrackInsert(
                                 track_index + 1,
                                 state.song.tracks[track_index].clone(),
                             ))?;
+                            match state.receiver_from_audio.recv()? {
+                                AudioToMain::Song(song) => {
+                                    state.song = song;
+
+                                    for module_index in
+                                        0..state.song.tracks[track_index + 1].modules.len()
+                                    {
+                                        let module = &mut state.song.tracks[track_index + 1]
+                                            .modules[module_index];
+                                        state.module_load(module)?;
+                                    }
+
+                                    state.track_next();
+                                }
+                                _ => unreachable!(),
+                            }
                             Ok(())
                         })
                     } else {
@@ -1087,9 +1188,7 @@ impl<'a> AppState<'a> {
                 )?;
             }
         }
-        // TODO sender_to_singer.send で singer が処理してからじゃなないと
-        // 最後のトラックを複製したときにカーソルが先頭に移動してしまう。
-        self.track_next();
+
         Ok(())
     }
 
@@ -1098,7 +1197,7 @@ impl<'a> AppState<'a> {
             return Ok(());
         }
         self.sender_to_singer
-            .send(SingerCommand::TrackMove(self.cursor_track.track, delta))?;
+            .send(MainToAudio::TrackMove(self.cursor_track.track, delta))?;
         self.cursor_track.track = self
             .cursor_track
             .track
@@ -1110,8 +1209,26 @@ impl<'a> AppState<'a> {
     fn track_paste(&mut self) -> Result<()> {
         if let Ok(text) = Clipboard::new()?.get_text() {
             if let Ok(track) = serde_json::from_str::<Track>(&text) {
-                self.sender_to_singer
-                    .send(SingerCommand::TrackInsert(self.cursor_track.track, track))?;
+                match self
+                    .send_to_audio(MainToAudio::TrackInsert(self.cursor_track.track, track))?
+                {
+                    AudioToMain::Song(song) => {
+                        self.song = song;
+                        let track = &self.song.tracks[self.cursor_track.track];
+                        for module in track.modules.iter() {
+                            self.send_to_plugin(
+                                MainToPlugin::Load(
+                                    module.id,
+                                    module.plugin_id.clone(),
+                                    false,
+                                    module.state.take(),
+                                ),
+                                // TODO singer にプラグインがアクティブになったことを通知？
+                                Box::new(|_, _| Ok(())),
+                            )?;
+                        }
+                    }
+                }
             }
         }
         Ok(())

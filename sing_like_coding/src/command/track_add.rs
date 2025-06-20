@@ -1,4 +1,4 @@
-use crate::{app_state::AppState, singer::SingerCommand};
+use crate::app_state::AppState;
 
 use super::Command;
 
@@ -6,7 +6,7 @@ pub struct TrackAdd {}
 
 impl Command for TrackAdd {
     fn call(&mut self, state: &mut AppState) -> anyhow::Result<()> {
-        state.sender_to_singer.send(SingerCommand::TrackAdd)?;
+        state.track_add()?;
         Ok(())
     }
 

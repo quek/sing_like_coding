@@ -29,7 +29,7 @@ use clap_sys::id::clap_id;
 use common::{
     clap_manager::ClapManager,
     event::Event,
-    module::{AudioInput, Module, ModuleIndex},
+    module::{AudioInput, Module, ModuleId, ModuleIndex},
     plugin_ref::PluginRef,
     process_data::{EventKind, ProcessData},
     process_track_context::ProcessTrackContext,
@@ -40,7 +40,7 @@ use rayon::prelude::*;
 use shared_memory::Shmem;
 
 #[derive(Debug)]
-pub enum SingerCommand {
+pub enum MainToAudio {
     Play,
     Stop,
     Loop,
@@ -69,17 +69,25 @@ pub enum SingerCommand {
     SongOpen(String),
 }
 
+pub enum AudioToMain {
+    PluginLoad(ModuleId, Song),
+    Song(Song),
+    Ok,
+    Nop,
+}
+
 pub struct Singer {
     pub song_file: Option<String>,
     pub steady_time: i64,
-    pub play_p: bool,
+    // pub play_p: bool,
     pub play_position: Range<usize>,
-    pub loop_p: bool,
+    // pub loop_p: bool,
     pub loop_range: Range<usize>,
     all_notef_off_p: bool,
     pub song: Song,
     _song_state_shmem: Shmem,
     song_state_ptr: *mut SongState,
+    sender_to_main: Sender<AudioToMain>,
     sender_to_ui: Sender<AppStateCommand>,
     pub sender_to_plugin: Sender<MainToPlugin>,
     pub line_play: usize,
@@ -99,6 +107,7 @@ unsafe impl Sync for Singer {}
 
 impl Singer {
     pub fn new(
+        sender_to_main: Sender<AudioToMain>,
         sender_to_ui: Sender<AppStateCommand>,
         sender_to_plugin: Sender<MainToPlugin>,
     ) -> Self {
@@ -108,14 +117,15 @@ impl Singer {
         let mut this = Self {
             song_file: None,
             steady_time: 0,
-            play_p: false,
+            // play_p: false,
             play_position: 0..0,
-            loop_p: true,
+            // loop_p: true,
             loop_range: 0..(0x100 * 0x20),
             all_notef_off_p: false,
             song,
             _song_state_shmem: song_state_shmem,
             song_state_ptr,
+            sender_to_main,
             sender_to_ui,
             sender_to_plugin,
             line_play: 0,
@@ -146,7 +156,7 @@ impl Singer {
             self.line_play = line;
         }
 
-        if !self.play_p {
+        if !self.song_state().play_p {
             return;
         }
 
@@ -155,7 +165,7 @@ impl Singer {
         self.play_position.end =
             self.play_position.start + (sec_per_frame / sec_per_delay).round() as usize;
 
-        if self.loop_p {
+        if self.song_state().loop_p {
             if self.play_position.end > self.loop_range.end {
                 let overflow = self.play_position.end - self.loop_range.end;
                 self.play_position.end = self.loop_range.start + overflow;
@@ -192,7 +202,7 @@ impl Singer {
         Ok(())
     }
 
-    pub fn plugin_load(
+    fn plugin_load(
         &mut self,
         track_index: usize,
         clap_plugin_id: String,
@@ -210,8 +220,8 @@ impl Singer {
             .push(PluginRef::new(id, shmem.as_ptr() as *mut ProcessData)?);
         self.shmems[track_index].push(shmem);
 
-        self.sender_to_plugin
-            .send(MainToPlugin::Load(id, clap_plugin_id, gui_open_p))?;
+        // self.sender_to_plugin
+        //     .send(MainToPlugin::Load(id, clap_plugin_id, gui_open_p))?;
 
         Ok(id)
     }
@@ -230,7 +240,7 @@ impl Singer {
                 let process_data = context.plugins[module_index].process_data_mut();
                 process_data.nchannels = nchannels;
                 process_data.nframes = nframes;
-                process_data.play_p = if self.play_p { 1 } else { 0 };
+                process_data.play_p = if self.song_state().play_p { 1 } else { 0 };
                 process_data.bpm = self.song.bpm;
                 process_data.lpb = self.song.lpb;
                 process_data.sample_rate = self.song.sample_rate;
@@ -240,7 +250,7 @@ impl Singer {
 
             context.nchannels = nchannels;
             context.nframes = nframes;
-            context.play_p = self.play_p;
+            context.play_p = self.song_state().play_p;
             context.bpm = self.song.bpm;
             context.steady_time = self.steady_time;
             context.play_position = self.play_position.clone();
@@ -479,10 +489,11 @@ impl Singer {
     }
 
     pub fn play(&mut self) {
-        if self.play_p {
+        if self.song_state().play_p {
             return;
         }
-        self.play_p = true;
+        // self.play_p = true;
+        self.song_state_mut().play_p = true;
     }
 
     pub fn plugin_delete(&mut self, track_index: usize, module_index: usize) -> Result<()> {
@@ -493,8 +504,8 @@ impl Singer {
             .plugins
             .remove(module_index);
         self.shmems[track_index].remove(module_index);
-        self.sender_to_plugin
-            .send(MainToPlugin::Unload(module.id))?;
+        // self.sender_to_plugin
+        //     .send(MainToPlugin::Unload(module.id))?;
         Ok(())
     }
 
@@ -597,14 +608,14 @@ impl Singer {
     }
 
     pub fn stop(&mut self) {
-        if !self.play_p {
+        if !self.song_state().play_p {
             return;
         }
-        self.play_p = false;
+        self.song_state_mut().play_p = false;
         self.all_notef_off_p = true;
     }
 
-    pub fn start_listener(singer: Arc<Mutex<Self>>, receiver: Receiver<SingerCommand>) {
+    pub fn start_listener(singer: Arc<Mutex<Self>>, receiver: Receiver<MainToAudio>) {
         log::debug!("Song::start_listener");
         tokio::spawn(async move {
             singer_loop(singer, receiver).await.unwrap();
@@ -663,9 +674,9 @@ impl Singer {
     fn send_state(&self) {
         let state = self.song_state_mut();
         state.song_file_set(&self.song_file.clone().unwrap_or_default());
-        state.play_p = self.play_p;
+        // state.play_p = self.play_p;
         state.line_play = self.line_play;
-        state.loop_p = self.loop_p;
+        state.loop_p = self.song_state().loop_p;
         state.loop_start = self.loop_range.start;
         state.loop_end = self.loop_range.end;
         state.process_elasped_avg = self.process_elasped_avg;
@@ -709,10 +720,10 @@ impl Singer {
             let id = self.plugin_load(track_index, clap_plugin_id, false)?;
             let module = &mut self.song.tracks[track_index].modules[module_index];
             module.id = id;
-            self.sender_to_plugin.send(MainToPlugin::StateLoad(
-                module.id,
-                module.state.take().unwrap(),
-            ))?;
+            // self.sender_to_plugin.send(MainToPlugin::StateLoad(
+            //     module.id,
+            //     module.state.take().unwrap(),
+            // ))?;
         }
         dbg!(&self.song);
         Ok(())
@@ -735,7 +746,7 @@ impl Singer {
     }
 }
 
-async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerCommand>) -> Result<()> {
+async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>) -> Result<()> {
     {
         let singer = singer.lock().unwrap();
         singer.send_song()?;
@@ -744,28 +755,35 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
 
     while let Ok(msg) = receiver.recv() {
         match msg {
-            SingerCommand::Play => {
+            MainToAudio::Play => {
                 let mut singer = singer.lock().unwrap();
                 singer.play();
-                singer.send_state();
+                singer.sender_to_main.send(AudioToMain::Ok)?;
             }
-            SingerCommand::Stop => {
+            MainToAudio::Stop => {
                 let mut singer = singer.lock().unwrap();
                 singer.stop();
-                singer.send_state();
+                singer.sender_to_main.send(AudioToMain::Ok)?;
             }
-            SingerCommand::Loop => {
-                let mut singer = singer.lock().unwrap();
-                singer.loop_p = !singer.loop_p;
-                singer.send_state();
+            MainToAudio::Loop => {
+                let singer = singer.lock().unwrap();
+                singer.song_state_mut().loop_p = !singer.song_state().loop_p;
+                singer.sender_to_main.send(AudioToMain::Ok)?;
             }
-            SingerCommand::Song => singer.lock().unwrap().send_song()?,
-            SingerCommand::LaneItem(cursor, lane_item) => {
+            MainToAudio::Song => {
+                let singer = singer.lock().unwrap();
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
+            }
+            MainToAudio::LaneItem(cursor, lane_item) => {
                 let mut singer = singer.lock().unwrap();
                 singer.lane_item_set(cursor, lane_item)?;
-                singer.send_song()?;
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
-            SingerCommand::LaneItemDelete(cursor) => {
+            MainToAudio::LaneItemDelete(cursor) => {
                 let mut singer = singer.lock().unwrap();
                 let song = &mut singer.song;
                 if let Some(Some(lane)) = song
@@ -774,15 +792,19 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                     .map(|x| x.lanes.get_mut(cursor.lane))
                 {
                     lane.items.remove(&cursor.line);
-                    singer.send_song()?;
+                    singer
+                        .sender_to_main
+                        .send(AudioToMain::Song(singer.song.clone()))?;
+                } else {
+                    singer.sender_to_main.send(AudioToMain::Nop)?;
                 }
             }
-            SingerCommand::PluginLatency(id, latency) => {
+            MainToAudio::PluginLatency(id, latency) => {
                 let mut singer = singer.lock().unwrap();
                 singer.plugin_latency_set(id, latency)?;
-                singer.send_song()?;
+                singer.sender_to_main.send(AudioToMain::Ok)?;
             }
-            SingerCommand::PluginLoad(track_index, clap_plugin_id, name, gui_open_p) => {
+            MainToAudio::PluginLoad(track_index, clap_plugin_id, name, gui_open_p) => {
                 let mut singer = singer.lock().unwrap();
                 let id = singer.plugin_load(track_index, clap_plugin_id.clone(), gui_open_p)?;
                 let track = &mut singer.song.tracks[track_index];
@@ -802,103 +824,117 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<SingerComman
                     audio_inputs,
                 ));
 
-                singer.send_song()?;
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::PluginLoad(id, singer.song.clone()))?;
             }
-            SingerCommand::PluginDelete(track_index, module_index) => {
+            MainToAudio::PluginDelete(track_index, module_index) => {
                 let mut singer = singer.lock().unwrap();
                 singer.plugin_delete(track_index, module_index)?;
-
-                singer.send_song()?;
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
-            SingerCommand::PluginSidechain(module_index, audio_input) => {
+            MainToAudio::PluginSidechain(module_index, audio_input) => {
                 let mut singer = singer.lock().unwrap();
                 singer.plugin_sidechain(module_index, audio_input)?;
-
-                singer.send_song()?;
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
-            SingerCommand::PointNew(cursor, module_index, param_id) => {
+            MainToAudio::PointNew(cursor, module_index, param_id) => {
                 let mut singer = singer.lock().unwrap();
                 singer.point_new(cursor, module_index, param_id)?;
-                singer.send_song()?;
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
-            SingerCommand::NoteOn(track_index, key, _channel, velocity, delay) => {
+            MainToAudio::NoteOn(track_index, key, _channel, velocity, delay) => {
                 let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
                     .lock()
                     .unwrap()
                     .event_list_input
                     .push(Event::NoteOn(key, velocity, delay));
+                singer.sender_to_main.send(AudioToMain::Ok)?;
             }
-            SingerCommand::NoteOff(track_index, key, _channel, _velocity, delay) => {
+            MainToAudio::NoteOff(track_index, key, _channel, _velocity, delay) => {
                 let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
                     .lock()
                     .unwrap()
                     .event_list_input
                     .push(Event::NoteOff(key, delay));
+                singer.sender_to_main.send(AudioToMain::Ok)?;
             }
-            SingerCommand::TrackAdd => {
+            MainToAudio::TrackAdd => {
                 let mut singer = singer.lock().unwrap();
                 singer.track_add();
-                singer.send_song()?;
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
-            SingerCommand::TrackDelete(track_index) => {
+            MainToAudio::TrackDelete(track_index) => {
                 let mut singer = singer.lock().unwrap();
                 singer.track_delete(track_index)?;
-                singer.send_song()?;
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
-            SingerCommand::TrackInsert(track_index, track) => {
+            MainToAudio::TrackInsert(track_index, track) => {
                 let mut singer = singer.lock().unwrap();
                 singer.track_insert(track_index, track)?;
-                singer.send_song()?;
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
-            SingerCommand::TrackMove(track_index, delta) => {
+            MainToAudio::TrackMove(track_index, delta) => {
                 let mut singer = singer.lock().unwrap();
                 if singer.track_move(track_index, delta)? {
                     singer.send_song()?;
                 }
             }
-            SingerCommand::TrackMute(track_index, mute) => {
+            MainToAudio::TrackMute(track_index, mute) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.mute = mute;
                     singer.send_song()?;
                 }
             }
-            SingerCommand::TrackSolo(track_index, solo) => {
+            MainToAudio::TrackSolo(track_index, solo) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.solo = solo;
                     singer.send_song()?;
                 }
             }
-            SingerCommand::TrackPan(track_index, pan) => {
+            MainToAudio::TrackPan(track_index, pan) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.pan = pan;
                     singer.send_song()?;
                 }
             }
-            SingerCommand::TrackVolume(track_index, volume) => {
+            MainToAudio::TrackVolume(track_index, volume) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.volume = volume;
                     singer.send_song()?;
                 }
             }
-            SingerCommand::LaneAdd(track_index) => {
+            MainToAudio::LaneAdd(track_index) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.lanes.push(Lane::new());
                     singer.send_song()?;
                 }
             }
-            SingerCommand::SongFile(song_file) => {
+            MainToAudio::SongFile(song_file) => {
                 let mut singer = singer.lock().unwrap();
                 singer.song_file = Some(song_file);
                 singer.send_state();
             }
-            SingerCommand::SongOpen(song_file) => {
+            MainToAudio::SongOpen(song_file) => {
                 let mut singer = singer.lock().unwrap();
                 singer.song_close()?;
                 singer.song_open(song_file)?;

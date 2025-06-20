@@ -74,10 +74,10 @@ impl Manager {
                         self.hwnd = hwnd;
                         self.sender_to_loop.send(PluginToMain::DidHwnd)?;
                     }
-                    MainToPlugin::Load(id, clap_id, gui_open_p) => {
+                    MainToPlugin::Load(id, clap_id, gui_open_p, state) => {
                         log::debug!("will load {id}");
                         let description = self.clap_manager.description(&clap_id).unwrap();
-                        let host = Host::new(
+                        let mut host = Host::new(
                             id,
                             description,
                             self.sender_from_plugin.clone(),
@@ -85,6 +85,9 @@ impl Manager {
                             self.hwnd,
                         )?;
                         let latency = host.latency();
+                        if let Some(state) = state {
+                            host.load(state)?;
+                        }
                         self.hosts.insert(id, host);
 
                         self.sender_to_loop

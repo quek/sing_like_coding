@@ -18,7 +18,7 @@ use crate::{
     },
     device::Device,
     model::lane_item::LaneItem,
-    singer::SingerCommand,
+    singer::MainToAudio,
     util::with_font_mono,
 };
 
@@ -394,10 +394,10 @@ impl MainView {
                 ui.heading(song_name);
 
                 if ui.button("Play").clicked() {
-                    state.sender_to_singer.send(SingerCommand::Play)?;
+                    state.sender_to_singer.send(MainToAudio::Play)?;
                 }
                 if ui.button("Stop").clicked() {
-                    state.sender_to_singer.send(SingerCommand::Stop)?;
+                    state.sender_to_singer.send(MainToAudio::Stop)?;
                 }
                 ui.label(format!(
                     "{}",
@@ -406,7 +406,7 @@ impl MainView {
 
                 let mut loop_p = state.song_state.loop_p;
                 if ui.toggle_value(&mut loop_p, "Loop").clicked() {
-                    state.sender_to_singer.send(SingerCommand::Loop)?;
+                    state.sender_to_singer.send(MainToAudio::Loop)?;
                 }
 
                 ui.toggle_value(&mut state.follow_p, "Follow");
@@ -801,7 +801,7 @@ impl MainView {
             if ui.button("Delete").clicked() {
                 state
                     .sender_to_singer
-                    .send(SingerCommand::PluginDelete(track_index, module_index))
+                    .send(MainToAudio::PluginDelete(track_index, module_index))
                     .unwrap();
                 ui.close_menu();
             }

@@ -27,9 +27,9 @@ pub struct SongState {
 impl SongState {
     pub fn init(&mut self, singer: &Singer) {
         self.song_file_set(&singer.song_file.clone().unwrap_or_default());
-        self.play_p = singer.play_p;
+        self.play_p = false;
         self.line_play = singer.line_play;
-        self.loop_p = singer.loop_p;
+        self.loop_p = true;
         self.loop_start = singer.loop_range.start;
         self.loop_end = singer.loop_range.end;
         self.process_elasped_avg = singer.process_elasped_avg;

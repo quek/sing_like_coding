@@ -8,7 +8,6 @@ use eframe::egui::{ahash::HashMap, Key};
 use crate::{
     app_state::{AppState, UiCommand},
     device::Device,
-    singer::SingerCommand,
     view::param_select_view::ReturnState,
 };
 
@@ -147,13 +146,7 @@ impl RootView {
 
         match plugin_select_view.view(gui_context)? {
             plugin_select_view::ReturnState::Selected(description) => {
-                state.sender_to_singer.send(SingerCommand::PluginLoad(
-                    state.cursor_track.track,
-                    description.id,
-                    description.name,
-                    !gui_context.input(|i| i.modifiers.shift),
-                ))?;
-
+                state.plugin_load(&description, !gui_context.input(|i| i.modifiers.shift))?;
                 self.plugin_select_view = None;
                 state.route = Route::Track;
             }
@@ -222,10 +215,7 @@ impl RootView {
                     src_port_index: 0,
                     dst_port_index: 1,
                 };
-                state.sender_to_singer.send(SingerCommand::PluginSidechain(
-                    state.module_index_at_cursor(),
-                    audio_input,
-                ))?;
+                state.plugin_sidechain(state.module_index_at_cursor(), audio_input)?;
                 self.sidechain_select_view = None;
                 state.route = Route::Track;
             }

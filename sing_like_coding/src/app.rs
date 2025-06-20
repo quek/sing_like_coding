@@ -10,7 +10,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use crate::app_state::{AppState, AppStateCommand};
 use crate::communicator::Communicator;
 use crate::device::Device;
-use crate::singer::{Singer, SingerCommand};
+use crate::singer::{MainToAudio, Singer};
 use crate::view::root_view::RootView;
 
 pub fn main() -> eframe::Result {
@@ -49,10 +49,12 @@ pub enum Msg {
 impl<'a> Default for AppMain<'a> {
     fn default() -> Self {
         let (sender_to_ui, receiver_from_singer) = channel();
+        let (sender_to_main, receiver_from_audio) = channel();
         let (sender_to_singer, recevier_from_ui) = channel();
         let (sender_to_plugin, recevier_from_main_thread) = channel();
         let (sender_communicator_to_main_thread, receiver_communicator_to_main_thread) = channel();
         let singer = Arc::new(Mutex::new(Singer::new(
+            sender_to_main,
             sender_to_ui.clone(),
             sender_to_plugin.clone(),
         )));
@@ -61,10 +63,11 @@ impl<'a> Default for AppMain<'a> {
         let mut device = Device::open_default(singer.clone()).unwrap();
         device.start().unwrap();
         let device = Some(device);
-        sender_to_singer.send(SingerCommand::Song).unwrap();
+        sender_to_singer.send(MainToAudio::Song).unwrap();
 
         let app_state = AppState::new(
             sender_to_singer,
+            receiver_from_audio,
             sender_to_plugin,
             receiver_communicator_to_main_thread,
             receiver_from_singer,
