@@ -548,9 +548,12 @@ impl<'a> AppState<'a> {
             UiCommand::Lane(LaneCommand::CursorLeft) => self.cursor_left(),
             UiCommand::Lane(LaneCommand::CursorRight) => self.cursor_right(),
             UiCommand::Lane(LaneCommand::Dup) => self.lane_items_dup()?,
-            UiCommand::Lane(LaneCommand::LaneItemDelete) => self
-                .sender_to_singer
-                .send(MainToAudio::LaneItemDelete(self.cursor_track.clone()))?,
+            UiCommand::Lane(LaneCommand::LaneItemDelete) => {
+                match self.send_to_audio(MainToAudio::LaneItemDelete(self.cursor_track.clone()))? {
+                    AudioToMain::Song(song) => self.song = song,
+                    _ => unreachable!(),
+                }
+            }
             UiCommand::Lane(LaneCommand::LaneItemMove(lane_delta, line_delta)) => {
                 self.lane_items_move(*lane_delta, *line_delta)?;
             }
@@ -653,19 +656,25 @@ impl<'a> AppState<'a> {
             UiCommand::Mixer(MixerCommand::CursorRight) => self.track_next(),
             UiCommand::Mixer(MixerCommand::Pan(delta)) => {
                 if let Some(track) = self.track_current() {
-                    self.sender_to_singer.send(MainToAudio::TrackPan(
+                    match self.send_to_audio(MainToAudio::TrackPan(
                         self.cursor_track.track,
                         (track.pan + (delta / 20.0)).clamp(0.0, 1.0),
-                    ))?;
+                    ))? {
+                        AudioToMain::Song(song) => self.song = song,
+                        _ => unreachable!(),
+                    }
                 }
             }
             UiCommand::Mixer(MixerCommand::Volume(delta)) => {
                 if let Some(track) = self.track_current() {
                     let db = db_from_norm(track.volume, DB_MIN, DB_MAX) + delta;
-                    self.sender_to_singer.send(MainToAudio::TrackVolume(
+                    match self.send_to_audio(MainToAudio::TrackVolume(
                         self.cursor_track.track,
                         db_to_norm(db, DB_MIN, DB_MAX).clamp(0.0, 1.0),
-                    ))?;
+                    ))? {
+                        AudioToMain::Song(song) => self.song = song,
+                        _ => unreachable!(),
+                    }
                 }
             }
         }
@@ -774,6 +783,7 @@ impl<'a> AppState<'a> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
         }
+        let mut song_new = None;
         if let (Some(min), Some(max)) = (&self.selection_track_min, &self.selection_track_max) {
             let mut itemss = vec![];
             for track_index in min.track..=max.track {
@@ -794,13 +804,16 @@ impl<'a> AppState<'a> {
                             for line in min.line..=max.line {
                                 items.push(lane.item(line).clone());
                                 if !copy_p {
-                                    self.sender_to_singer.send(MainToAudio::LaneItemDelete(
+                                    match self.send_to_audio(MainToAudio::LaneItemDelete(
                                         CursorTrack {
                                             track: track_index,
                                             lane: lane_index,
                                             line,
                                         },
-                                    ))?;
+                                    ))? {
+                                        AudioToMain::Song(song) => song_new = Some(song),
+                                        _ => unreachable!(),
+                                    }
                                 }
                             }
                             itemss.push(items);
@@ -816,11 +829,16 @@ impl<'a> AppState<'a> {
             let mut clipboard = Clipboard::new().unwrap();
             clipboard.set_text(&json)?;
             if !copy_p {
-                self.sender_to_singer
-                    .send(MainToAudio::LaneItemDelete(self.cursor_track.clone()))?;
+                match self.send_to_audio(MainToAudio::LaneItemDelete(self.cursor_track.clone()))? {
+                    AudioToMain::Song(song) => song_new = Some(song),
+                    _ => unreachable!(),
+                }
             }
         }
 
+        if let Some(song) = song_new {
+            self.song = song;
+        }
         Ok(())
     }
 
@@ -832,6 +850,7 @@ impl<'a> AppState<'a> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
         }
+        let mut commands = vec![];
         let itemss = self.lane_items_selected_cloned();
         if let (Some(min), Some(max)) =
             (&mut self.selection_track_min, &mut self.selection_track_max)
@@ -841,11 +860,9 @@ impl<'a> AppState<'a> {
             for items in itemss.into_iter() {
                 for item in items.into_iter() {
                     if let Some((_, item)) = item {
-                        self.sender_to_singer
-                            .send(MainToAudio::LaneItem(cursor, item))?;
+                        commands.push(MainToAudio::LaneItem(cursor, item));
                     } else {
-                        self.sender_to_singer
-                            .send(MainToAudio::LaneItemDelete(cursor))?;
+                        commands.push(MainToAudio::LaneItemDelete(cursor));
                     }
                     cursor = cursor.down(&self.song);
                 }
@@ -858,10 +875,17 @@ impl<'a> AppState<'a> {
             max.line += line_delta;
         } else if let Some(item) = self.song.lane_item(&self.cursor_track) {
             self.cursor_track.line += 1;
-            self.sender_to_singer.send(MainToAudio::LaneItem(
+            commands.push(MainToAudio::LaneItem(
                 self.cursor_track.clone(),
                 item.clone(),
-            ))?;
+            ));
+        }
+
+        for command in commands {
+            match self.send_to_audio(command)? {
+                AudioToMain::Song(song) => self.song = song,
+                _ => unreachable!(),
+            }
         }
 
         Ok(())
