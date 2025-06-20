@@ -249,8 +249,6 @@ pub struct AppState<'a> {
     receiver_from_audio: Receiver<AudioToMain>,
     sender_to_loop: Sender<MainToPlugin>,
     receiver_communicator_to_main_thread: Receiver<PluginToMain>,
-    receiver_from_singer: Receiver<AppStateCommand>,
-    song_open_p: bool,
     _song_state_shmem: Shmem,
     pub song_state: &'a SongState,
     callbacks_plugin_to_main: VecDeque<Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>>>,
@@ -275,7 +273,6 @@ impl<'a> AppState<'a> {
         receiver_from_audio: Receiver<AudioToMain>,
         sender_to_loop: Sender<MainToPlugin>,
         receiver_communicator_to_main_thread: Receiver<PluginToMain>,
-        receiver_from_singer: Receiver<AppStateCommand>,
     ) -> Self {
         let song_state_shmem = open_shared_memory::<SongState>(SONG_STATE_NAME).unwrap();
         let song_state = unsafe { &*(song_state_shmem.as_ptr() as *const SongState) };
@@ -300,8 +297,6 @@ impl<'a> AppState<'a> {
             receiver_from_audio,
             sender_to_loop,
             receiver_communicator_to_main_thread,
-            receiver_from_singer,
-            song_open_p: false,
             _song_state_shmem: song_state_shmem,
             song_state,
             callbacks_plugin_to_main: Default::default(),
@@ -362,7 +357,7 @@ impl<'a> AppState<'a> {
         self.song.module_at_mut(module_index)
     }
 
-    fn module_load(&mut self, module_index: ModuleIndex) -> Result<()> {
+    fn module_load(&mut self, module_index: ModuleIndex, gui_open_p: bool) -> Result<()> {
         let module = self.module_at_mut(module_index);
         if module.is_none() {
             return Ok(());
@@ -372,7 +367,7 @@ impl<'a> AppState<'a> {
         let plugin_id = module.plugin_id.clone();
         let state = module.state.take();
         self.send_to_plugin(
-            MainToPlugin::Load(module_id, plugin_id, true, state),
+            MainToPlugin::Load(module_id, plugin_id, gui_open_p, state),
             // TODO singer にプラグインがアクティブになったことを通知？
             Box::new(|_, _| Ok(())),
         )?;
@@ -415,12 +410,11 @@ impl<'a> AppState<'a> {
             self.cursor_track.track,
             description.id.clone(),
             description.name.clone(),
-            gui_open_p,
         ))? {
             AudioToMain::PluginLoad(_id, song) => {
                 self.song = song;
                 let module_index = self.song.tracks[self.cursor_track.track].modules.len() - 1;
-                self.module_load((self.cursor_track.track, module_index))?;
+                self.module_load((self.cursor_track.track, module_index), gui_open_p)?;
             }
             x => unreachable!("{:?}", x),
         }
@@ -437,27 +431,6 @@ impl<'a> AppState<'a> {
             AudioToMain::Song(song) => self.song = song,
             _ => {}
         }
-        Ok(())
-    }
-
-    pub fn receive_from_singer(&mut self) -> Result<()> {
-        while let Ok(command) = self.receiver_from_singer.try_recv() {
-            match command {
-                AppStateCommand::Song(song) => {
-                    if self.song_open_p {
-                        self.song_open_did(song).unwrap();
-                        self.song_open_p = false;
-                        self.song_dirty_p = false;
-                    } else {
-                        self.song = song;
-                        self.song_dirty_p = true;
-                    }
-                    self.compute_track_offsets();
-                }
-                AppStateCommand::Quit => (),
-            }
-        }
-
         Ok(())
     }
 
@@ -720,16 +693,20 @@ impl<'a> AppState<'a> {
             .set_directory(song_directory())
             .pick_file()
         {
-            self.song_open_p = true;
-            self.sender_to_singer.send(MainToAudio::SongOpen(
+            match self.send_to_audio(MainToAudio::SongOpen(
                 path.to_str().map(|s| s.to_string()).unwrap(),
-            ))?;
+            ))? {
+                AudioToMain::Song(song) => {
+                    self.song = song;
+                    for track_index in 0..self.song.tracks.len() {
+                        for module_index in 0..self.song.tracks[track_index].modules.len() {
+                            self.module_load((track_index, module_index), false)?;
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
-        Ok(())
-    }
-
-    pub fn song_open_did(&mut self, song: Song) -> Result<()> {
-        self.song = song;
         Ok(())
     }
 
@@ -1179,8 +1156,10 @@ impl<'a> AppState<'a> {
     fn track_delete(&mut self) -> Result<()> {
         // main は消さない
         if self.cursor_track.track != 0 {
-            self.sender_to_singer
-                .send(MainToAudio::TrackDelete(self.cursor_track.track))?;
+            match self.send_to_audio(MainToAudio::TrackDelete(self.cursor_track.track))? {
+                AudioToMain::Song(song) => self.song = song,
+                _ => unreachable!(),
+            }
         }
         Ok(())
     }
@@ -1189,11 +1168,10 @@ impl<'a> AppState<'a> {
         let track_index = self.cursor_track.track;
         let modules_len = self.track_at_cursor().unwrap().modules.len();
         if modules_len == 0 {
-            self.sender_to_singer.send(MainToAudio::TrackInsert(
+            match self.send_to_audio(MainToAudio::TrackInsert(
                 track_index + 1,
                 self.track_at_cursor().unwrap().clone(),
-            ))?;
-            match self.receiver_from_audio.recv()? {
+            ))? {
                 AudioToMain::Song(song) => {
                     self.song = song;
                     self.track_next();
@@ -1205,18 +1183,18 @@ impl<'a> AppState<'a> {
                 let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
                     if module_index + 1 == modules_len {
                         Box::new(move |state, _command| {
-                            state.sender_to_singer.send(MainToAudio::TrackInsert(
+                            match state.send_to_audio(MainToAudio::TrackInsert(
                                 track_index + 1,
                                 state.song.tracks[track_index].clone(),
-                            ))?;
-                            match state.receiver_from_audio.recv()? {
+                            ))? {
                                 AudioToMain::Song(song) => {
                                     state.song = song;
 
                                     for module_index in
                                         0..state.song.tracks[track_index + 1].modules.len()
                                     {
-                                        state.module_load((track_index + 1, module_index))?;
+                                        state
+                                            .module_load((track_index + 1, module_index), false)?;
                                     }
 
                                     state.track_next();
@@ -1312,12 +1290,6 @@ impl<'a> AppState<'a> {
         }
         self.cursor_track.lane = 0;
     }
-}
-
-#[derive(Debug)]
-pub enum AppStateCommand {
-    Song(Song),
-    Quit,
 }
 
 fn song_directory() -> PathBuf {

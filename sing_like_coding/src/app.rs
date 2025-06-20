@@ -7,7 +7,7 @@ use common::protocol::{MainToPlugin, PluginToMain};
 use eframe::egui;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-use crate::app_state::{AppState, AppStateCommand};
+use crate::app_state::AppState;
 use crate::communicator::Communicator;
 use crate::device::Device;
 use crate::singer::{MainToAudio, Singer};
@@ -36,7 +36,6 @@ struct AppMain<'a> {
     device: Option<Device>,
     singer: Arc<Mutex<Singer>>,
     view: RootView,
-    song_sender: Sender<AppStateCommand>,
     recevier_from_main_thread: Option<Receiver<MainToPlugin>>,
     sender_communicator_to_main_thread: Option<Sender<PluginToMain>>,
 }
@@ -48,16 +47,11 @@ pub enum Msg {
 
 impl<'a> Default for AppMain<'a> {
     fn default() -> Self {
-        let (sender_to_ui, receiver_from_singer) = channel();
         let (sender_to_main, receiver_from_audio) = channel();
         let (sender_to_singer, recevier_from_ui) = channel();
         let (sender_to_plugin, recevier_from_main_thread) = channel();
         let (sender_communicator_to_main_thread, receiver_communicator_to_main_thread) = channel();
-        let singer = Arc::new(Mutex::new(Singer::new(
-            sender_to_main,
-            sender_to_ui.clone(),
-            sender_to_plugin.clone(),
-        )));
+        let singer = Arc::new(Mutex::new(Singer::new(sender_to_main)));
         Singer::start_listener(singer.clone(), recevier_from_ui);
 
         let mut device = Device::open_default(singer.clone()).unwrap();
@@ -71,7 +65,6 @@ impl<'a> Default for AppMain<'a> {
             receiver_from_audio,
             sender_to_plugin,
             receiver_communicator_to_main_thread,
-            receiver_from_singer,
         );
         let view = RootView::new();
 
@@ -80,7 +73,6 @@ impl<'a> Default for AppMain<'a> {
             device,
             singer,
             view,
-            song_sender: sender_to_ui,
             recevier_from_main_thread: Some(recevier_from_main_thread),
             sender_communicator_to_main_thread: Some(sender_communicator_to_main_thread),
         }
@@ -89,7 +81,6 @@ impl<'a> Default for AppMain<'a> {
 
 impl<'a> eframe::App for AppMain<'a> {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        self.song_sender.send(AppStateCommand::Quit).unwrap();
         self.state
             .send_to_plugin(MainToPlugin::Quit, Box::new(|_, _| Ok(())))
             .unwrap();

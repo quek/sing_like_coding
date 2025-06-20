@@ -67,7 +67,6 @@ impl RootView {
     ) -> Result<()> {
         self.process_shortcut(state, gui_context)?;
 
-        state.receive_from_singer()?;
         state.receive_from_communicator()?;
 
         match &state.route {

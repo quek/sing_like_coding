@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    app_state::{AppStateCommand, CursorTrack},
+    app_state::CursorTrack,
     model::{
         lane::Lane,
         lane_item::LaneItem,
@@ -27,13 +27,11 @@ use crate::{
 use anyhow::Result;
 use clap_sys::id::clap_id;
 use common::{
-    clap_manager::ClapManager,
     event::Event,
     module::{AudioInput, Module, ModuleId, ModuleIndex},
     plugin_ref::PluginRef,
     process_data::{EventKind, ProcessData},
     process_track_context::ProcessTrackContext,
-    protocol::MainToPlugin,
     shmem::{create_shared_memory, process_data_name, SONG_STATE_NAME},
 };
 use rayon::prelude::*;
@@ -52,7 +50,7 @@ pub enum MainToAudio {
     #[allow(dead_code)]
     NoteOff(usize, i16, i16, f64, usize),
     PluginLatency(usize, u32),
-    PluginLoad(usize, String, String, bool),
+    PluginLoad(usize, String, String),
     PluginDelete(ModuleIndex),
     PluginSidechain(ModuleIndex, AudioInput),
     PointNew(CursorTrack, usize, clap_id),
@@ -89,8 +87,6 @@ pub struct Singer {
     _song_state_shmem: Shmem,
     song_state_ptr: *mut SongState,
     sender_to_main: Sender<AudioToMain>,
-    sender_to_ui: Sender<AppStateCommand>,
-    pub sender_to_plugin: Sender<MainToPlugin>,
     // pub line_play: usize,
     process_track_contexts: Vec<Arc<Mutex<ProcessTrackContext>>>,
     shmems: Vec<Vec<Shmem>>,
@@ -107,11 +103,7 @@ unsafe impl Send for Singer {}
 unsafe impl Sync for Singer {}
 
 impl Singer {
-    pub fn new(
-        sender_to_main: Sender<AudioToMain>,
-        sender_to_ui: Sender<AppStateCommand>,
-        sender_to_plugin: Sender<MainToPlugin>,
-    ) -> Self {
+    pub fn new(sender_to_main: Sender<AudioToMain>) -> Self {
         let song_state_shmem = create_shared_memory::<SongState>(SONG_STATE_NAME).unwrap();
         let song_state_ptr = song_state_shmem.as_ptr() as *mut SongState;
         let song = Song::new();
@@ -127,8 +119,6 @@ impl Singer {
             _song_state_shmem: song_state_shmem,
             song_state_ptr,
             sender_to_main,
-            sender_to_ui,
-            sender_to_plugin,
             // line_play: 0,
             process_track_contexts: vec![],
             shmems: vec![],
@@ -198,12 +188,7 @@ impl Singer {
         Ok(())
     }
 
-    fn plugin_load(
-        &mut self,
-        track_index: usize,
-        clap_plugin_id: String,
-        gui_open_p: bool,
-    ) -> Result<usize> {
+    fn plugin_load(&mut self, track_index: usize) -> Result<usize> {
         let id = next_id();
 
         let shmem_name = process_data_name(id);
@@ -564,30 +549,16 @@ impl Singer {
 
         self.song = song;
 
-        let clap_manager = ClapManager::new();
-        let mut xs = vec![];
         for track_index in 0..self.song.tracks.len() {
             self.process_track_contexts
                 .push(Arc::new(Mutex::new(ProcessTrackContext::default())));
             self.shmems.push(vec![]);
 
             for module_index in 0..self.song.tracks[track_index].modules.len() {
-                let module_id = self.song.tracks[track_index].modules[module_index]
-                    .plugin_id
-                    .clone();
-                let description = clap_manager.description(&module_id);
-                xs.push((track_index, description, module_index));
+                let id = self.plugin_load(track_index)?;
+                let module = &mut self.song.tracks[track_index].modules[module_index];
+                module.id = id;
             }
-        }
-
-        for (track_index, description, module_index) in xs {
-            let id = self.plugin_load(track_index, description.unwrap().id.clone(), false)?;
-            let module = &mut self.song.tracks[track_index].modules[module_index];
-            module.id = id;
-            self.sender_to_plugin.send(MainToPlugin::StateLoad(
-                module.id,
-                module.state.take().unwrap(),
-            ))?;
         }
 
         self.song_file = Some(song_file);
@@ -660,19 +631,6 @@ impl Singer {
         }
     }
 
-    fn send_state(&self) {
-        let state = self.song_state_mut();
-        state.song_file_set(&self.song_file.clone().unwrap_or_default());
-        // state.play_p = self.play_p;
-        state.line_play = 0;
-        state.loop_p = self.song_state().loop_p;
-        state.loop_start = self.loop_range.start;
-        state.loop_end = self.loop_range.end;
-        state.process_elasped_avg = self.process_elasped_avg;
-        state.cpu_usage = self.cpu_usage;
-        self.gui_context.as_ref().map(|x| x.request_repaint());
-    }
-
     fn track_add(&mut self) {
         self.song.track_add();
         self.process_track_contexts
@@ -703,16 +661,9 @@ impl Singer {
         );
         self.shmems.insert(track_index, vec![]);
         for module_index in 0..self.song.tracks[track_index].modules.len() {
-            let clap_plugin_id = self.song.tracks[track_index].modules[module_index]
-                .plugin_id
-                .clone();
-            let id = self.plugin_load(track_index, clap_plugin_id, false)?;
+            let id = self.plugin_load(track_index)?;
             let module = &mut self.song.tracks[track_index].modules[module_index];
             module.id = id;
-            // self.sender_to_plugin.send(MainToPlugin::StateLoad(
-            //     module.id,
-            //     module.state.take().unwrap(),
-            // ))?;
         }
         dbg!(&self.song);
         Ok(())
@@ -787,9 +738,9 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                 singer.plugin_latency_set(id, latency)?;
                 singer.sender_to_main.send(AudioToMain::Ok)?;
             }
-            MainToAudio::PluginLoad(track_index, clap_plugin_id, name, gui_open_p) => {
+            MainToAudio::PluginLoad(track_index, clap_plugin_id, name) => {
                 let mut singer = singer.lock().unwrap();
-                let id = singer.plugin_load(track_index, clap_plugin_id.clone(), gui_open_p)?;
+                let id = singer.plugin_load(track_index)?;
                 let track = &mut singer.song.tracks[track_index];
                 let audio_inputs = if track.modules.is_empty() {
                     vec![]
