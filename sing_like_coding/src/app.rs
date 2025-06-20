@@ -10,7 +10,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use crate::app_state::AppState;
 use crate::communicator::Communicator;
 use crate::device::Device;
-use crate::singer::{MainToAudio, Singer};
+use crate::singer::Singer;
 use crate::view::root_view::RootView;
 
 pub fn main() -> eframe::Result {
@@ -57,7 +57,6 @@ impl<'a> Default for AppMain<'a> {
         let mut device = Device::open_default(singer.clone()).unwrap();
         device.start().unwrap();
         let device = Some(device);
-        sender_to_singer.send(MainToAudio::Song).unwrap();
 
         let app_state = AppState::new(
             singer.lock().unwrap().song.clone(),

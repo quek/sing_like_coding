@@ -221,6 +221,7 @@ impl PartialOrd for CursorTrack {
     }
 }
 
+#[derive(Default)]
 pub struct CursorModule {
     pub index: usize,
 }
@@ -707,6 +708,11 @@ impl<'a> AppState<'a> {
             ))? {
                 AudioToMain::Song(song) => {
                     self.song = song;
+                    self.cursor_track = Default::default();
+                    self.cursor_module = Default::default();
+                    self.select_p = false;
+                    self.selection_track_min = Default::default();
+                    self.selection_track_max = Default::default();
                     for track_index in 0..self.song.tracks.len() {
                         for module_index in 0..self.song.tracks[track_index].modules.len() {
                             self.module_load((track_index, module_index), false)?;
@@ -892,16 +898,15 @@ impl<'a> AppState<'a> {
     }
 
     fn lane_items_move(&mut self, lane_delta: i64, line_delta: i64) -> Result<()> {
+        let mut commands = vec![];
         if self.selection_track_min.is_some() {
             let itemss = self.lane_items_selected_cloned();
             for (cursor, _) in itemss.clone().into_iter().flatten().filter_map(|x| x) {
-                self.sender_to_singer
-                    .send(MainToAudio::LaneItemDelete(cursor))?;
+                commands.push(MainToAudio::LaneItemDelete(cursor));
             }
             for (cursor, item) in itemss.into_iter().flatten().filter_map(|x| x) {
                 let cursor = cursor.move_by(lane_delta, line_delta, &self.song);
-                self.sender_to_singer
-                    .send(MainToAudio::LaneItem(cursor, item))?;
+                commands.push(MainToAudio::LaneItem(cursor, item));
             }
 
             self.selection_track_min = self
@@ -913,23 +918,28 @@ impl<'a> AppState<'a> {
                 .as_ref()
                 .map(|x| x.move_by(lane_delta, line_delta, &self.song));
         } else if let Some(item) = self.song.lane_item(&self.cursor_track) {
-            self.sender_to_singer
-                .send(MainToAudio::LaneItemDelete(self.cursor_track.clone()))?;
+            commands.push(MainToAudio::LaneItemDelete(self.cursor_track.clone()));
             let cursor = self
                 .cursor_track
                 .move_by(lane_delta, line_delta, &self.song);
-            self.sender_to_singer
-                .send(MainToAudio::LaneItem(cursor, item.clone()))?;
+            commands.push(MainToAudio::LaneItem(cursor, item.clone()));
         }
 
         self.cursor_track = self
             .cursor_track
             .move_by(lane_delta, line_delta, &self.song);
 
+        for command in commands {
+            match self.send_to_audio(command)? {
+                AudioToMain::Song(song) => self.song = song,
+                _ => {}
+            }
+        }
         Ok(())
     }
 
     fn lane_items_paste(&mut self) -> Result<()> {
+        let mut commands = vec![];
         let mut clipboard = Clipboard::new().unwrap();
         if let Ok(text) = clipboard.get_text() {
             let mut cursor = self.cursor_track.clone();
@@ -937,11 +947,9 @@ impl<'a> AppState<'a> {
                 for items in itemss.into_iter() {
                     for item in items.into_iter() {
                         if let Some(item) = item {
-                            self.sender_to_singer
-                                .send(MainToAudio::LaneItem(cursor, item))?;
+                            commands.push(MainToAudio::LaneItem(cursor, item));
                         } else {
-                            self.sender_to_singer
-                                .send(MainToAudio::LaneItemDelete(cursor))?;
+                            commands.push(MainToAudio::LaneItemDelete(cursor));
                         }
                         cursor = cursor.down(&self.song);
                     }
@@ -951,6 +959,12 @@ impl<'a> AppState<'a> {
             }
         }
 
+        for command in commands {
+            match self.send_to_audio(command)? {
+                AudioToMain::Song(song) => self.song = song,
+                _ => {}
+            }
+        }
         Ok(())
     }
 
@@ -1013,6 +1027,7 @@ impl<'a> AppState<'a> {
         off: bool,
         value_delta: i16,
     ) -> Result<()> {
+        let mut commands = vec![];
         if self.selection_track_min.is_some() {
             let itemss = self.lane_items_selected_cloned();
             for (cursor, mut lane_item) in itemss.into_iter().flatten().filter_map(|x| x) {
@@ -1029,9 +1044,7 @@ impl<'a> AppState<'a> {
                         point.value = (point.value as i16 + value_delta).clamp(0, 0xff) as u8;
                     }
                 }
-                self.sender_to_singer
-                    .send(MainToAudio::LaneItem(cursor, lane_item))
-                    .unwrap();
+                commands.push(MainToAudio::LaneItem(cursor, lane_item));
             }
         } else {
             let lane_item = if let Some(mut lane_item) =
@@ -1053,23 +1066,27 @@ impl<'a> AppState<'a> {
                 self.lane_item_last.clone()
             };
 
-            self.sender_to_singer
-                .send(MainToAudio::LaneItem(
-                    self.cursor_track.clone(),
-                    lane_item.clone(),
-                ))
-                .unwrap();
+            commands.push(MainToAudio::LaneItem(
+                self.cursor_track.clone(),
+                lane_item.clone(),
+            ));
 
             if let LaneItem::Note(Note { off: false, .. }) = lane_item {
                 self.lane_item_last = lane_item;
             }
         }
 
+        for command in commands {
+            match self.send_to_audio(command)? {
+                AudioToMain::Song(song) => self.song = song,
+                _ => {}
+            }
+        }
         Ok(())
     }
 
     pub fn loop_toggle(&mut self) -> Result<()> {
-        self.sender_to_singer.send(MainToAudio::Loop)?;
+        self.send_to_audio(MainToAudio::Loop)?;
         Ok(())
     }
 
@@ -1106,7 +1123,7 @@ impl<'a> AppState<'a> {
                 .set_file_name(&self.song.name)
                 .save_file()
             {
-                self.sender_to_singer.send(MainToAudio::SongFile(
+                self.send_to_audio(MainToAudio::SongFile(
                     path.to_str().map(|s| s.to_string()).unwrap(),
                 ))?;
                 path
@@ -1246,8 +1263,10 @@ impl<'a> AppState<'a> {
         if delta == 0 {
             return Ok(());
         }
-        self.sender_to_singer
-            .send(MainToAudio::TrackMove(self.cursor_track.track, delta))?;
+        match self.send_to_audio(MainToAudio::TrackMove(self.cursor_track.track, delta))? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => {}
+        }
         self.cursor_track.track = self
             .cursor_track
             .track

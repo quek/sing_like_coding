@@ -42,6 +42,7 @@ pub enum MainToAudio {
     Play,
     Stop,
     Loop,
+    #[allow(dead_code)]
     Song,
     LaneItem(CursorTrack, LaneItem),
     LaneItemDelete(CursorTrack),
@@ -665,7 +666,6 @@ impl Singer {
             let module = &mut self.song.tracks[track_index].modules[module_index];
             module.id = id;
         }
-        dbg!(&self.song);
         Ok(())
     }
 
