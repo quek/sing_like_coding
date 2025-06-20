@@ -270,6 +270,7 @@ pub struct AppState<'a> {
 
 impl<'a> AppState<'a> {
     pub fn new(
+        song: Song,
         sender_to_singer: Sender<MainToAudio>,
         receiver_from_audio: Receiver<AudioToMain>,
         sender_to_loop: Sender<MainToPlugin>,
@@ -279,7 +280,7 @@ impl<'a> AppState<'a> {
         let song_state_shmem = open_shared_memory::<SongState>(SONG_STATE_NAME).unwrap();
         let song_state = unsafe { &*(song_state_shmem.as_ptr() as *const SongState) };
 
-        Self {
+        let mut this = Self {
             focused_part: FocusedPart::Lane,
             follow_p: true,
             cursor_track: CursorTrack {
@@ -293,7 +294,7 @@ impl<'a> AppState<'a> {
             select_p: false,
             selection_track_min: Default::default(),
             selection_track_max: Default::default(),
-            song: Song::new(),
+            song,
             song_dirty_p: false,
             sender_to_singer,
             receiver_from_audio,
@@ -315,7 +316,9 @@ impl<'a> AppState<'a> {
             flatten_lane_index_to_track_index_vec: Default::default(),
             track_lane_to_flatten_lane_index_map: Default::default(),
             flatten_lane_index_to_track_lane_vec: vec![],
-        }
+        };
+        this.compute_track_offsets();
+        this
     }
 
     pub fn color_cursor(&self, part: FocusedPart) -> Color32 {
@@ -351,18 +354,28 @@ impl<'a> AppState<'a> {
         self.cursor_track = self.cursor_track.right(&self.song);
     }
 
-    fn module_load(&mut self, module: &mut Module) -> Result<()> {
+    fn module_at(&self, module_index: ModuleIndex) -> Option<&Module> {
+        self.song.module_at(module_index)
+    }
+
+    fn module_at_mut(&mut self, module_index: ModuleIndex) -> Option<&mut Module> {
+        self.song.module_at_mut(module_index)
+    }
+
+    fn module_load(&mut self, module_index: ModuleIndex) -> Result<()> {
+        let module = self.module_at_mut(module_index);
+        if module.is_none() {
+            return Ok(());
+        }
+        let module = module.unwrap();
+        let module_id = module.id;
+        let plugin_id = module.plugin_id.clone();
+        let state = module.state.take();
         self.send_to_plugin(
-            MainToPlugin::Load(
-                module.id,
-                module.plugin_id.clone(),
-                true,
-                module.state.take(),
-            ),
+            MainToPlugin::Load(module_id, plugin_id, true, state),
             // TODO singer にプラグインがアクティブになったことを通知？
             Box::new(|_, _| Ok(())),
         )?;
-
         Ok(())
     }
 
@@ -379,6 +392,24 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
+    pub fn play(&mut self) -> Result<()> {
+        self.send_to_audio(MainToAudio::Play)?;
+        Ok(())
+    }
+
+    pub fn plugin_delete(&mut self, module_index: ModuleIndex) -> Result<()> {
+        if let Some(module_id) = self.module_at(module_index).map(|x| x.id) {
+            match self.send_to_audio(MainToAudio::PluginDelete(module_index))? {
+                AudioToMain::Song(song) => {
+                    self.song = song;
+                    self.send_to_plugin(MainToPlugin::Unload(module_id), Box::new(|_, _| Ok(())))?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     pub fn plugin_load(&mut self, description: &Description, gui_open_p: bool) -> Result<()> {
         match self.send_to_audio(MainToAudio::PluginLoad(
             self.cursor_track.track,
@@ -386,15 +417,12 @@ impl<'a> AppState<'a> {
             description.name.clone(),
             gui_open_p,
         ))? {
-            AudioToMain::PluginLoad(id, song) => {
+            AudioToMain::PluginLoad(_id, song) => {
                 self.song = song;
-                let module = self.song.tracks[self.cursor_track.track]
-                    .modules
-                    .last_mut()
-                    .unwrap();
-                self.module_load(module);
+                let module_index = self.song.tracks[self.cursor_track.track].modules.len() - 1;
+                self.module_load((self.cursor_track.track, module_index))?;
             }
-            _ => unreachable!(),
+            x => unreachable!("{:?}", x),
         }
 
         Ok(())
@@ -437,9 +465,9 @@ impl<'a> AppState<'a> {
         while let Ok(mut message) = self.receiver_communicator_to_main_thread.try_recv() {
             match &mut message {
                 PluginToMain::DidHwnd => {}
-                PluginToMain::DidLoad(id, latency) => self
-                    .sender_to_singer
-                    .send(MainToAudio::PluginLatency(*id, *latency))?,
+                PluginToMain::DidLoad(id, latency) => {
+                    self.send_to_audio(MainToAudio::PluginLatency(*id, *latency))?;
+                }
                 PluginToMain::DidUnload(_) => {}
                 PluginToMain::DidGuiOpen => {}
                 PluginToMain::DidParams(_params) => {}
@@ -468,7 +496,7 @@ impl<'a> AppState<'a> {
                 self.follow_p = !self.follow_p;
             }
             UiCommand::Loop => {
-                self.sender_to_singer.send(MainToAudio::Loop)?;
+                self.send_to_audio(MainToAudio::Loop)?;
             }
             UiCommand::FocusedPartNext => {
                 self.focused_part = match self.focused_part {
@@ -488,9 +516,9 @@ impl<'a> AppState<'a> {
             }
             UiCommand::PlayToggle => {
                 if self.song_state.play_p {
-                    self.sender_to_singer.send(MainToAudio::Stop)?;
+                    self.send_to_audio(MainToAudio::Stop)?;
                 } else {
-                    self.sender_to_singer.send(MainToAudio::Play)?;
+                    self.send_to_audio(MainToAudio::Play)?;
                 }
             }
             UiCommand::SongSave => {
@@ -505,24 +533,37 @@ impl<'a> AppState<'a> {
             UiCommand::TrackMute(track_index, mute) => {
                 let track_index = track_index.unwrap_or(self.cursor_track.track);
                 let mute = mute.unwrap_or(!self.song.tracks[track_index].mute);
-                self.sender_to_singer
-                    .send(MainToAudio::TrackMute(track_index, mute))?;
+                match self.send_to_audio(MainToAudio::TrackMute(track_index, mute))? {
+                    AudioToMain::Song(song) => self.song = song,
+                    _ => unreachable!(),
+                }
             }
             UiCommand::TrackSolo(track_index, solo) => {
                 let track_index = track_index.unwrap_or(self.cursor_track.track);
                 let solo = solo.unwrap_or(!self.song.tracks[track_index].solo);
-                self.sender_to_singer
-                    .send(MainToAudio::TrackSolo(track_index, solo))?;
+                match self.send_to_audio(MainToAudio::TrackSolo(track_index, solo))? {
+                    AudioToMain::Song(song) => self.song = song,
+                    _ => unreachable!(),
+                }
             }
-            UiCommand::TrackPan(track_index, pan) => self
-                .sender_to_singer
-                .send(MainToAudio::TrackPan(*track_index, *pan))?,
-            UiCommand::TrackVolume(track_index, volume) => self
-                .sender_to_singer
-                .send(MainToAudio::TrackVolume(*track_index, *volume))?,
-            UiCommand::LaneAdd => self
-                .sender_to_singer
-                .send(MainToAudio::LaneAdd(self.cursor_track.track))?,
+            UiCommand::TrackPan(track_index, pan) => {
+                match self.send_to_audio(MainToAudio::TrackPan(*track_index, *pan))? {
+                    AudioToMain::Song(song) => self.song = song,
+                    _ => unreachable!(),
+                }
+            }
+            UiCommand::TrackVolume(track_index, volume) => {
+                match self.send_to_audio(MainToAudio::TrackVolume(*track_index, *volume))? {
+                    AudioToMain::Song(song) => self.song = song,
+                    _ => unreachable!(),
+                }
+            }
+            UiCommand::LaneAdd => {
+                match self.send_to_audio(MainToAudio::LaneAdd(self.cursor_track.track))? {
+                    AudioToMain::Song(song) => self.song = song,
+                    _ => unreachable!(),
+                }
+            }
             UiCommand::Lane(LaneCommand::AutomationParamSelect) => {
                 self.automation_param_select()?
             }
@@ -608,11 +649,10 @@ impl<'a> AppState<'a> {
             }
             UiCommand::Module(ModuleCommand::Delete) => {
                 if let Some(module) = self.module_at_cursort() {
-                    self.sender_to_singer.send(MainToAudio::PluginDelete(
+                    match self.send_to_audio(MainToAudio::PluginDelete((
                         self.cursor_track.track,
                         self.cursor_module.index,
-                    ))?;
-                    match self.receiver_from_audio.recv()? {
+                    )))? {
                         AudioToMain::Song(song) => {
                             self.send_to_plugin(
                                 MainToPlugin::Unload(module.id),
@@ -1027,6 +1067,11 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
+    pub fn loop_toggle(&mut self) -> Result<()> {
+        self.sender_to_singer.send(MainToAudio::Loop)?;
+        Ok(())
+    }
+
     fn module_at_cursort(&self) -> Option<&Module> {
         self.track_at_cursor()
             .and_then(|track| track.modules.get(self.cursor_module.index))
@@ -1072,6 +1117,11 @@ impl<'a> AppState<'a> {
         let json = serde_json::to_string_pretty(&self.song).unwrap();
         file.write_all(json.as_bytes()).unwrap();
         self.song_dirty_p = false;
+        Ok(())
+    }
+
+    pub fn stop(&mut self) -> Result<()> {
+        self.send_to_audio(MainToAudio::Stop)?;
         Ok(())
     }
 
@@ -1166,9 +1216,7 @@ impl<'a> AppState<'a> {
                                     for module_index in
                                         0..state.song.tracks[track_index + 1].modules.len()
                                     {
-                                        let module = &mut state.song.tracks[track_index + 1]
-                                            .modules[module_index];
-                                        state.module_load(module)?;
+                                        state.module_load((track_index + 1, module_index))?;
                                     }
 
                                     state.track_next();
@@ -1214,20 +1262,29 @@ impl<'a> AppState<'a> {
                 {
                     AudioToMain::Song(song) => {
                         self.song = song;
-                        let track = &self.song.tracks[self.cursor_track.track];
-                        for module in track.modules.iter() {
-                            self.send_to_plugin(
+                        let track = &mut self.song.tracks[self.cursor_track.track];
+                        let commands = track
+                            .modules
+                            .iter_mut()
+                            .map(|module| {
                                 MainToPlugin::Load(
                                     module.id,
                                     module.plugin_id.clone(),
                                     false,
                                     module.state.take(),
-                                ),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+
+                        for command in commands {
+                            self.send_to_plugin(
+                                command,
                                 // TODO singer にプラグインがアクティブになったことを通知？
                                 Box::new(|_, _| Ok(())),
                             )?;
                         }
                     }
+                    _ => {}
                 }
             }
         }

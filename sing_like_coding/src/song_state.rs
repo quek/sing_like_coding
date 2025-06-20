@@ -28,7 +28,7 @@ impl SongState {
     pub fn init(&mut self, singer: &Singer) {
         self.song_file_set(&singer.song_file.clone().unwrap_or_default());
         self.play_p = false;
-        self.line_play = singer.line_play;
+        self.line_play = 0;
         self.loop_p = true;
         self.loop_start = singer.loop_range.start;
         self.loop_end = singer.loop_range.end;

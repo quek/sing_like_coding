@@ -53,7 +53,7 @@ pub enum MainToAudio {
     NoteOff(usize, i16, i16, f64, usize),
     PluginLatency(usize, u32),
     PluginLoad(usize, String, String, bool),
-    PluginDelete(usize, usize),
+    PluginDelete(ModuleIndex),
     PluginSidechain(ModuleIndex, AudioInput),
     PointNew(CursorTrack, usize, clap_id),
     TrackAdd,
@@ -69,6 +69,7 @@ pub enum MainToAudio {
     SongOpen(String),
 }
 
+#[derive(Debug)]
 pub enum AudioToMain {
     PluginLoad(ModuleId, Song),
     Song(Song),
@@ -90,7 +91,7 @@ pub struct Singer {
     sender_to_main: Sender<AudioToMain>,
     sender_to_ui: Sender<AppStateCommand>,
     pub sender_to_plugin: Sender<MainToPlugin>,
-    pub line_play: usize,
+    // pub line_play: usize,
     process_track_contexts: Vec<Arc<Mutex<ProcessTrackContext>>>,
     shmems: Vec<Vec<Shmem>>,
     pub gui_context: Option<eframe::egui::Context>,
@@ -128,7 +129,7 @@ impl Singer {
             sender_to_main,
             sender_to_ui,
             sender_to_plugin,
-            line_play: 0,
+            // line_play: 0,
             process_track_contexts: vec![],
             shmems: vec![],
             gui_context: None,
@@ -149,12 +150,7 @@ impl Singer {
         self.play_position.start = self.play_position.end;
 
         let line = (self.play_position.start / 0x100) as usize;
-        if self.line_play != line {
-            self.line_play = line;
-            self.send_state();
-        } else {
-            self.line_play = line;
-        }
+        self.song_state_mut().line_play = line;
 
         if !self.song_state().play_p {
             return;
@@ -496,16 +492,16 @@ impl Singer {
         self.song_state_mut().play_p = true;
     }
 
-    pub fn plugin_delete(&mut self, track_index: usize, module_index: usize) -> Result<()> {
-        let module = self.song.tracks[track_index].modules.remove(module_index);
-        self.process_track_contexts[track_index]
+    pub fn plugin_delete(&mut self, module_index: ModuleIndex) -> Result<()> {
+        let _module = self.song.tracks[module_index.0]
+            .modules
+            .remove(module_index.1);
+        self.process_track_contexts[module_index.0]
             .lock()
             .unwrap()
             .plugins
-            .remove(module_index);
-        self.shmems[track_index].remove(module_index);
-        // self.sender_to_plugin
-        //     .send(MainToPlugin::Unload(module.id))?;
+            .remove(module_index.1);
+        self.shmems[module_index.0].remove(module_index.1);
         Ok(())
     }
 
@@ -550,7 +546,7 @@ impl Singer {
     pub fn song_close(&mut self) -> Result<()> {
         for track_index in (0..self.song.tracks.len()).rev() {
             for module_index in (0..self.song.tracks[track_index].modules.len()).rev() {
-                self.plugin_delete(track_index, module_index)?;
+                self.plugin_delete((track_index, module_index))?;
             }
         }
         self.song = Song::new();
@@ -664,18 +660,11 @@ impl Singer {
         }
     }
 
-    fn send_song(&self) -> Result<()> {
-        self.sender_to_ui
-            .send(AppStateCommand::Song(self.song.clone()))?;
-        self.gui_context.as_ref().map(|x| x.request_repaint());
-        Ok(())
-    }
-
     fn send_state(&self) {
         let state = self.song_state_mut();
         state.song_file_set(&self.song_file.clone().unwrap_or_default());
         // state.play_p = self.play_p;
-        state.line_play = self.line_play;
+        state.line_play = 0;
         state.loop_p = self.song_state().loop_p;
         state.loop_start = self.loop_range.start;
         state.loop_end = self.loop_range.end;
@@ -698,7 +687,7 @@ impl Singer {
 
     fn track_delete(&mut self, track_index: usize) -> Result<()> {
         for module_index in (0..self.song.tracks[track_index].modules.len()).rev() {
-            self.plugin_delete(track_index, module_index)?;
+            self.plugin_delete((track_index, module_index))?;
         }
         self.song.track_delete(track_index);
         self.process_track_contexts.remove(track_index);
@@ -747,12 +736,6 @@ impl Singer {
 }
 
 async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>) -> Result<()> {
-    {
-        let singer = singer.lock().unwrap();
-        singer.send_song()?;
-        singer.send_state();
-    }
-
     while let Ok(msg) = receiver.recv() {
         match msg {
             MainToAudio::Play => {
@@ -828,9 +811,9 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .sender_to_main
                     .send(AudioToMain::PluginLoad(id, singer.song.clone()))?;
             }
-            MainToAudio::PluginDelete(track_index, module_index) => {
+            MainToAudio::PluginDelete(module_index) => {
                 let mut singer = singer.lock().unwrap();
-                singer.plugin_delete(track_index, module_index)?;
+                singer.plugin_delete(module_index)?;
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
@@ -890,56 +873,65 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
             }
             MainToAudio::TrackMove(track_index, delta) => {
                 let mut singer = singer.lock().unwrap();
-                if singer.track_move(track_index, delta)? {
-                    singer.send_song()?;
-                }
+                if singer.track_move(track_index, delta)? {}
             }
             MainToAudio::TrackMute(track_index, mute) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.mute = mute;
-                    singer.send_song()?;
                 }
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackSolo(track_index, solo) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.solo = solo;
-                    singer.send_song()?;
                 }
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackPan(track_index, pan) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.pan = pan;
-                    singer.send_song()?;
                 }
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackVolume(track_index, volume) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.volume = volume;
-                    singer.send_song()?;
                 }
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::LaneAdd(track_index) => {
                 let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.lanes.push(Lane::new());
-                    singer.send_song()?;
                 }
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::SongFile(song_file) => {
                 let mut singer = singer.lock().unwrap();
                 singer.song_file = Some(song_file);
-                singer.send_state();
+                singer.sender_to_main.send(AudioToMain::Ok)?;
             }
             MainToAudio::SongOpen(song_file) => {
                 let mut singer = singer.lock().unwrap();
                 singer.song_close()?;
                 singer.song_open(song_file)?;
-                singer.send_song()?;
-                singer.send_state();
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
         }
     }

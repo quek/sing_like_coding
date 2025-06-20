@@ -66,6 +66,7 @@ impl<'a> Default for AppMain<'a> {
         sender_to_singer.send(MainToAudio::Song).unwrap();
 
         let app_state = AppState::new(
+            singer.lock().unwrap().song.clone(),
             sender_to_singer,
             receiver_from_audio,
             sender_to_plugin,
