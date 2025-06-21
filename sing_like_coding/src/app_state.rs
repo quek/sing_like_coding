@@ -321,6 +321,14 @@ impl<'a> AppState<'a> {
         this
     }
 
+    pub fn bpm_set(&mut self, bpm: f64) -> Result<()> {
+        match self.send_to_audio(MainToAudio::Bpm(bpm))? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => {}
+        }
+        Ok(())
+    }
+
     pub fn color_cursor(&self, part: FocusedPart) -> Color32 {
         if self.focused_part != part
             || SystemTime::now()

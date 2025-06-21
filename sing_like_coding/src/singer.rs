@@ -39,6 +39,7 @@ use shared_memory::Shmem;
 
 #[derive(Debug)]
 pub enum MainToAudio {
+    Bpm(f64),
     Play,
     Stop,
     Loop,
@@ -686,6 +687,13 @@ impl Singer {
 async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>) -> Result<()> {
     while let Ok(msg) = receiver.recv() {
         match msg {
+            MainToAudio::Bpm(bpm) => {
+                let mut singer = singer.lock().unwrap();
+                singer.song.bpm = bpm;
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
+            }
             MainToAudio::Play => {
                 let mut singer = singer.lock().unwrap();
                 singer.play();

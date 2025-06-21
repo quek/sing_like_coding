@@ -9,7 +9,7 @@ use common::{
     dsp::{db_from_norm, db_to_norm},
     protocol::MainToPlugin,
 };
-use eframe::egui::{CentralPanel, Color32, Key, TopBottomPanel, Ui};
+use eframe::egui::{CentralPanel, Color32, DragValue, Key, TopBottomPanel, Ui};
 
 use crate::{
     app_state::{
@@ -398,6 +398,13 @@ impl MainView {
                 if ui.button("Stop").clicked() {
                     state.stop()?;
                 }
+
+                let mut bpm = state.song.bpm;
+                ui.add(DragValue::new(&mut bpm).speed(0.1).range(999.9..=1.0));
+                if bpm != state.song.bpm {
+                    state.bpm_set(bpm)?;
+                }
+
                 ui.label(format!(
                     "{}",
                     play_position_text1(state.song_state.line_play, state.song.lpb)
@@ -424,6 +431,7 @@ impl MainView {
                     state.song_state.process_elasped_avg * 1000.0
                 ));
                 ui.label(format!("{:.3}%", state.song_state.cpu_usage * 100.0));
+                ui.label(format!("{:.1}fps", 1.0 / state.elapsed));
                 Ok(())
             });
         });
