@@ -1,5 +1,4 @@
 use std::{
-    env::current_exe,
     ffi::{c_char, CStr, CString, OsStr},
     fs::{self, create_dir_all, metadata, File},
     io::{BufReader, Write},
@@ -10,7 +9,7 @@ use anyhow::Result;
 use clap_sys::{entry::clap_plugin_entry, factory::plugin_factory::clap_plugin_factory};
 use libloading::{Library, Symbol};
 
-use crate::plugin::description::Description;
+use crate::{plugin::description::Description, util::dir_user_setting};
 
 pub struct ClapManager {
     pub setting_path: PathBuf,
@@ -19,9 +18,7 @@ pub struct ClapManager {
 
 impl ClapManager {
     pub fn new() -> Self {
-        let exe_path = current_exe().unwrap();
-        let dir = exe_path.parent().unwrap();
-        let setting_path = dir.join("user/setting/claps.json");
+        let setting_path = dir_user_setting().join("claps.json");
         let mut this = Self {
             setting_path,
             descriptions: vec![],

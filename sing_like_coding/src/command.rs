@@ -2,6 +2,7 @@ use anyhow::Result;
 
 use crate::app_state::AppState;
 
+pub mod midi_device_input;
 pub mod plugin_load;
 pub mod plugin_scan;
 pub mod song_open;

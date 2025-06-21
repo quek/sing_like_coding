@@ -3,6 +3,7 @@ mod app_state;
 mod command;
 mod commander;
 mod communicator;
+mod config;
 mod device;
 mod midi_device;
 mod model;

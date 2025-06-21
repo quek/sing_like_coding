@@ -10,6 +10,7 @@ pub mod process_track_context;
 pub mod protocol;
 pub mod shmem;
 pub mod str;
+pub mod util;
 
 pub const PIPE_CTRL_NAME: &'static str = r"\\.\pipe\sing_like_coding\ctrl";
 pub const PIPE_BUFFER_SIZE: u32 = 8092;

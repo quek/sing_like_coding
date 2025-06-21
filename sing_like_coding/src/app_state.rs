@@ -28,6 +28,7 @@ use shared_memory::Shmem;
 
 use crate::{
     command::{track_add::TrackAdd, Command},
+    config::Config,
     midi_device::MidiDevice,
     model::{lane_item::LaneItem, note::Note, song::Song, track::Track},
     singer::{AudioToMain, MainToAudio},
@@ -242,6 +243,7 @@ pub enum FocusedPart {
 }
 
 pub struct AppState<'a> {
+    pub config: Config,
     pub now: Instant,
     pub elapsed: f32,
     digit: Option<i32>,
@@ -250,7 +252,7 @@ pub struct AppState<'a> {
     pub cursor_track: CursorTrack,
     pub cursor_module: CursorModule,
     pub lane_item_last: LaneItem,
-    _midi_device: Option<MidiDevice>,
+    midi_device_input: Option<MidiDevice>,
     rec_arm: Arc<Mutex<usize>>,
     pub route: Route,
     pub select_p: bool,
@@ -261,6 +263,7 @@ pub struct AppState<'a> {
     sender_to_singer: Sender<MainToAudio>,
     receiver_from_audio: Receiver<AudioToMain>,
     sender_to_loop: Sender<MainToPlugin>,
+    sender_midi: Sender<(usize, Event)>,
     receiver_communicator_to_main_thread: Receiver<PluginToMain>,
     _song_state_shmem: Shmem,
     pub song_state: &'a SongState,
@@ -292,6 +295,7 @@ impl<'a> AppState<'a> {
         let song_state = unsafe { &*(song_state_shmem.as_ptr() as *const SongState) };
 
         let mut this = Self {
+            config: Config::load().unwrap_or_default(),
             now: Instant::now(),
             elapsed: 0.0,
             digit: None,
@@ -304,7 +308,7 @@ impl<'a> AppState<'a> {
             },
             cursor_module: CursorModule { index: 0 },
             lane_item_last: LaneItem::default(),
-            _midi_device: None,
+            midi_device_input: None,
             rec_arm: Arc::new(Mutex::new(0)),
             route: Route::Track,
             select_p: false,
@@ -315,6 +319,7 @@ impl<'a> AppState<'a> {
             sender_to_singer,
             receiver_from_audio,
             sender_to_loop,
+            sender_midi: sender_midi.clone(),
             receiver_communicator_to_main_thread,
             _song_state_shmem: song_state_shmem,
             song_state,
@@ -333,8 +338,11 @@ impl<'a> AppState<'a> {
         };
         this.compute_track_offsets();
 
-        this._midi_device =
-            Some(MidiDevice::new("LPProMK3 MIDI", sender_midi, this.rec_arm.clone()).unwrap());
+        if let Some(midi_device_input) = &this.config.midi_device_input {
+            this.midi_device_input = Some(
+                MidiDevice::new(midi_device_input, sender_midi, this.rec_arm.clone()).unwrap(),
+            );
+        }
 
         this
     }
@@ -394,6 +402,17 @@ impl<'a> AppState<'a> {
         for _ in 0..self.digit.unwrap_or(1) {
             self.cursor_track = self.cursor_track.right(&self.song);
         }
+    }
+
+    pub fn midi_device_input_open(&mut self, name: &str) -> Result<()> {
+        self.midi_device_input = Some(MidiDevice::new(
+            name,
+            self.sender_midi.clone(),
+            self.rec_arm.clone(),
+        )?);
+        self.config.midi_device_input = Some(name.to_string());
+        self.config.save()?;
+        Ok(())
     }
 
     fn module_at(&self, module_index: ModuleIndex) -> Option<&Module> {

@@ -10,6 +10,15 @@ pub struct MidiDevice {
 }
 
 impl MidiDevice {
+    pub fn list() -> Vec<String> {
+        let input = MidiInput::new("SLC").unwrap();
+        input
+            .ports()
+            .iter()
+            .filter_map(|port| input.port_name(port).ok())
+            .collect()
+    }
+
     pub fn new(
         name: &str,
         sender_midi: Sender<(usize, Event)>,

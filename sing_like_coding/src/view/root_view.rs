@@ -8,6 +8,7 @@ use eframe::egui::{ahash::HashMap, Key};
 use crate::{
     app_state::{AppState, UiCommand},
     device::Device,
+    midi_device::MidiDevice,
     view::param_select_view::ReturnState,
 };
 
@@ -16,6 +17,7 @@ use super::{
     main_view::MainView,
     param_select_view::ParamSelectView,
     plugin_select_view::{self, PluginSelectView},
+    select_view::{self, SelectItem, SelectView},
     shortcut_key::{shortcut_key, Modifier},
     sidechain_select_view::{self, SidechainSelectView},
 };
@@ -24,15 +26,28 @@ use super::{
 pub enum Route {
     Track,
     Command,
+    MidiDeviceInputSelect,
     PluginSelect,
     ParamSelect,
     SidechainSelect,
+}
+
+#[derive(Clone)]
+struct MidiPort {
+    pub name: String,
+}
+
+impl SelectItem for MidiPort {
+    fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 pub struct RootView {
     shortcut_map: HashMap<(Modifier, Key), UiCommand>,
     main_view: MainView,
     command_view: CommandView,
+    midi_device_input_select_view: Option<SelectView<MidiPort>>,
     param_select_view: Option<ParamSelectView>,
     plugin_select_view: Option<PluginSelectView>,
     sidechain_select_view: Option<SidechainSelectView>,
@@ -53,6 +68,7 @@ impl RootView {
             shortcut_map,
             main_view: MainView::new(),
             command_view: CommandView::new(),
+            midi_device_input_select_view: None,
             param_select_view: None,
             plugin_select_view: None,
             sidechain_select_view: None,
@@ -72,9 +88,40 @@ impl RootView {
         match &state.route {
             Route::Track => self.main_view.view(gui_context, state, device)?,
             Route::Command => self.command_view.view(gui_context, state)?,
+            Route::MidiDeviceInputSelect => {
+                self.midi_device_input_select_view(gui_context, state)?
+            }
             Route::ParamSelect => self.param_select_view(gui_context, state)?,
             Route::PluginSelect => self.plugin_select_view(gui_context, state)?,
             Route::SidechainSelect => self.sidechain_select_view(gui_context, state)?,
+        }
+        Ok(())
+    }
+
+    fn midi_device_input_select_view(
+        &mut self,
+        gui_context: &eframe::egui::Context,
+        state: &mut AppState,
+    ) -> Result<()> {
+        let view = self.midi_device_input_select_view.get_or_insert_with(|| {
+            let items = MidiDevice::list()
+                .into_iter()
+                .map(|name| MidiPort { name })
+                .collect();
+            SelectView::<MidiPort>::new(items)
+        });
+
+        match view.view(gui_context)? {
+            select_view::ReturnState::Selected(item) => {
+                state.midi_device_input_open(&item.name)?;
+                self.midi_device_input_select_view = None;
+                state.route = Route::Track;
+            }
+            select_view::ReturnState::Continue => {}
+            select_view::ReturnState::Cancel => {
+                self.midi_device_input_select_view = None;
+                state.route = Route::Track;
+            }
         }
         Ok(())
     }
