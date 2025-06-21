@@ -87,6 +87,17 @@ impl MainView {
             ),
         ];
         let shortcut_map_lane = [
+            ((Modifier::None, Key::Minus), UiCommand::Digit(-1)),
+            ((Modifier::None, Key::Num0), UiCommand::Digit(0)),
+            ((Modifier::None, Key::Num1), UiCommand::Digit(1)),
+            ((Modifier::None, Key::Num2), UiCommand::Digit(2)),
+            ((Modifier::None, Key::Num3), UiCommand::Digit(3)),
+            ((Modifier::None, Key::Num4), UiCommand::Digit(4)),
+            ((Modifier::None, Key::Num5), UiCommand::Digit(5)),
+            ((Modifier::None, Key::Num6), UiCommand::Digit(6)),
+            ((Modifier::None, Key::Num7), UiCommand::Digit(7)),
+            ((Modifier::None, Key::Num8), UiCommand::Digit(8)),
+            ((Modifier::None, Key::Num9), UiCommand::Digit(9)),
             (
                 (Modifier::C, Key::J),
                 UiCommand::Lane(LaneCommand::LaneItemUpdate(-1, 0, 0, false, -1)),

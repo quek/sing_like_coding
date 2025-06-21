@@ -35,6 +35,7 @@ use crate::{
 
 pub enum UiCommand {
     Command,
+    Digit(i32),
     FocusedPartNext,
     FocusedPartPrev,
     Follow,
@@ -237,6 +238,7 @@ pub enum FocusedPart {
 pub struct AppState<'a> {
     pub now: Instant,
     pub elapsed: f32,
+    digit: Option<i32>,
     pub focused_part: FocusedPart,
     pub follow_p: bool,
     pub cursor_track: CursorTrack,
@@ -283,6 +285,7 @@ impl<'a> AppState<'a> {
         let mut this = Self {
             now: Instant::now(),
             elapsed: 0.0,
+            digit: None,
             focused_part: FocusedPart::Lane,
             follow_p: true,
             cursor_track: CursorTrack {
@@ -347,19 +350,27 @@ impl<'a> AppState<'a> {
     }
 
     pub fn cursor_up(&mut self) {
-        self.cursor_track = self.cursor_track.up(&self.song);
+        for _ in 0..self.digit.unwrap_or(1) {
+            self.cursor_track = self.cursor_track.up(&self.song);
+        }
     }
 
     pub fn cursor_down(&mut self) {
-        self.cursor_track = self.cursor_track.down(&self.song);
+        for _ in 0..self.digit.unwrap_or(1) {
+            self.cursor_track = self.cursor_track.down(&self.song);
+        }
     }
 
     pub fn cursor_left(&mut self) {
-        self.cursor_track = self.cursor_track.left(&self.song);
+        for _ in 0..self.digit.unwrap_or(1) {
+            self.cursor_track = self.cursor_track.left(&self.song);
+        }
     }
 
     pub fn cursor_right(&mut self) {
-        self.cursor_track = self.cursor_track.right(&self.song);
+        for _ in 0..self.digit.unwrap_or(1) {
+            self.cursor_track = self.cursor_track.right(&self.song);
+        }
     }
 
     fn module_at(&self, module_index: ModuleIndex) -> Option<&Module> {
@@ -483,9 +494,17 @@ impl<'a> AppState<'a> {
     }
 
     pub fn run_ui_command(&mut self, command: &UiCommand) -> Result<()> {
+        let digit = self.digit.clone();
         match command {
             UiCommand::Command => {
                 self.route = Route::Command;
+            }
+            UiCommand::Digit(digit) => {
+                if let Some(x) = self.digit {
+                    self.digit = Some(x * 10 + digit);
+                } else {
+                    self.digit = Some(*digit);
+                }
             }
             UiCommand::Follow => {
                 self.follow_p = !self.follow_p;
@@ -699,6 +718,9 @@ impl<'a> AppState<'a> {
                     }
                 }
             }
+        }
+        if self.digit == digit {
+            self.digit = None;
         }
         Ok(())
     }
