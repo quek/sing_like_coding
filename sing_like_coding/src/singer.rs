@@ -698,44 +698,38 @@ impl Singer {
 
 async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>) -> Result<()> {
     while let Ok(msg) = receiver.recv() {
+        let mut singer = singer.lock().unwrap();
         match msg {
             MainToAudio::Bpm(bpm) => {
-                let mut singer = singer.lock().unwrap();
                 singer.song.bpm = bpm;
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::Play => {
-                let mut singer = singer.lock().unwrap();
                 singer.play();
                 singer.sender_to_main.send(AudioToMain::Ok)?;
             }
             MainToAudio::Stop => {
-                let mut singer = singer.lock().unwrap();
                 singer.stop();
                 singer.sender_to_main.send(AudioToMain::Ok)?;
             }
             MainToAudio::Loop => {
-                let singer = singer.lock().unwrap();
                 singer.song_state_mut().loop_p = !singer.song_state().loop_p;
                 singer.sender_to_main.send(AudioToMain::Ok)?;
             }
             MainToAudio::Song => {
-                let singer = singer.lock().unwrap();
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::LaneItem(cursor, lane_item) => {
-                let mut singer = singer.lock().unwrap();
                 singer.lane_item_set(cursor, lane_item)?;
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::LaneItemDelete(cursor) => {
-                let mut singer = singer.lock().unwrap();
                 let song = &mut singer.song;
                 if let Some(Some(lane)) = song
                     .tracks
@@ -751,12 +745,10 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                 }
             }
             MainToAudio::PluginLatency(id, latency) => {
-                let mut singer = singer.lock().unwrap();
                 singer.plugin_latency_set(id, latency)?;
                 singer.sender_to_main.send(AudioToMain::Ok)?;
             }
             MainToAudio::PluginLoad(track_index, clap_plugin_id, name) => {
-                let mut singer = singer.lock().unwrap();
                 let id = singer.plugin_load(track_index)?;
                 let track = &mut singer.song.tracks[track_index];
                 let audio_inputs = if track.modules.is_empty() {
@@ -780,28 +772,24 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .send(AudioToMain::PluginLoad(id, singer.song.clone()))?;
             }
             MainToAudio::PluginDelete(module_index) => {
-                let mut singer = singer.lock().unwrap();
                 singer.plugin_delete(module_index)?;
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::PluginSidechain(module_index, audio_input) => {
-                let mut singer = singer.lock().unwrap();
                 singer.plugin_sidechain(module_index, audio_input)?;
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::PointNew(cursor, module_index, param_id) => {
-                let mut singer = singer.lock().unwrap();
                 singer.point_new(cursor, module_index, param_id)?;
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::NoteOn(track_index, key, _channel, velocity, delay) => {
-                let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
                     .lock()
                     .unwrap()
@@ -810,7 +798,6 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                 singer.sender_to_main.send(AudioToMain::Ok)?;
             }
             MainToAudio::NoteOff(track_index, key, _channel, _velocity, delay) => {
-                let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
                     .lock()
                     .unwrap()
@@ -819,32 +806,27 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                 singer.sender_to_main.send(AudioToMain::Ok)?;
             }
             MainToAudio::TrackAdd => {
-                let mut singer = singer.lock().unwrap();
                 singer.track_add();
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackDelete(track_index) => {
-                let mut singer = singer.lock().unwrap();
                 singer.track_delete(track_index)?;
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackInsert(track_index, track) => {
-                let mut singer = singer.lock().unwrap();
                 singer.track_insert(track_index, track)?;
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackMove(track_index, delta) => {
-                let mut singer = singer.lock().unwrap();
                 if singer.track_move(track_index, delta)? {}
             }
             MainToAudio::TrackMute(track_index, mute) => {
-                let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.mute = mute;
                 }
@@ -853,7 +835,6 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackSolo(track_index, solo) => {
-                let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.solo = solo;
                 }
@@ -862,7 +843,6 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackPan(track_index, pan) => {
-                let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.pan = pan;
                 }
@@ -871,7 +851,6 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackVolume(track_index, volume) => {
-                let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.volume = volume;
                 }
@@ -880,7 +859,6 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::LaneAdd(track_index) => {
-                let mut singer = singer.lock().unwrap();
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
                     track.lanes.push(Lane::new());
                 }
@@ -889,12 +867,10 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::SongFile(song_file) => {
-                let singer = singer.lock().unwrap();
                 singer.song_state_mut().song_file_set(&song_file);
                 singer.sender_to_main.send(AudioToMain::Ok)?;
             }
             MainToAudio::SongOpen(song_file) => {
-                let mut singer = singer.lock().unwrap();
                 singer.song_close()?;
                 singer.song_open(song_file)?;
                 singer
@@ -902,7 +878,6 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::Quit => {
-                let singer = singer.lock().unwrap();
                 singer.sender_to_main.send(AudioToMain::Ok)?;
                 log::debug!("singer loop quit.");
                 break;

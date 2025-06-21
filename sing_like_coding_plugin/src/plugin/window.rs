@@ -110,10 +110,12 @@ fn adjust_size(width: u32, height: u32) -> (i32, i32) {
     (adjusted_width, adjusted_height)
 }
 
+#[allow(non_snake_case)]
 fn LOWORD(lparam: LPARAM) -> u32 {
     (lparam.0 as usize & 0xFFFF) as u32
 }
 
+#[allow(non_snake_case)]
 fn HIWORD(lparam: LPARAM) -> u32 {
     ((lparam.0 as usize >> 16) & 0xFFFF) as u32
 }
