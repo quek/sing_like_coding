@@ -111,8 +111,12 @@ impl<'a> eframe::App for AppMain<'a> {
         let _ = self.view.view(ctx, &mut self.device, &mut self.state);
 
         // 節電
-        // let repaint_after = std::time::Duration::from_secs_f64(1.0 / 4.0);
-        let repaint_after = std::time::Duration::from_secs_f64(1.0 / 30.0);
+        let fps = if self.state.song_state.play_p {
+            60.0
+        } else {
+            4.0
+        };
+        let repaint_after = std::time::Duration::from_secs_f64(1.0 / fps);
         ctx.request_repaint_after(repaint_after);
     }
 }
