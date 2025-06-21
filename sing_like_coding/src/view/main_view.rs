@@ -33,6 +33,7 @@ use super::{
 const DEFAULT_TRACK_WIDTH: f32 = 64.0;
 
 pub struct MainView {
+    bpm: Option<f64>,
     shortcut_map_common: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_track: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_lane: HashMap<(Modifier, Key), UiCommand>,
@@ -352,6 +353,7 @@ impl MainView {
         let shortcut_map_mixer: HashMap<_, _> = shortcut_map_mixer.into_iter().collect();
 
         Self {
+            bpm: None,
             shortcut_map_common,
             shortcut_map_track,
             shortcut_map_lane,
@@ -399,9 +401,18 @@ impl MainView {
                     state.stop()?;
                 }
 
-                let mut bpm = state.song.bpm;
-                ui.add(DragValue::new(&mut bpm).speed(0.1).range(999.9..=1.0));
-                if bpm != state.song.bpm {
+                let mut bpm = self.bpm.unwrap_or(state.song.bpm);
+                let response = ui.add(DragValue::new(&mut bpm).speed(0.1).range(20.0..=999.9));
+                if response.has_focus() {
+                    self.bpm = Some(bpm);
+                } else if self.bpm.is_some() {
+                    self.bpm = None;
+                    if bpm != state.song.bpm {
+                        state.bpm_set(bpm)?;
+                    }
+                }
+                if response.dragged() && bpm != state.song.bpm {
+                    self.bpm = None;
                     state.bpm_set(bpm)?;
                 }
 
