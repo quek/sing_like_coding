@@ -1,11 +1,11 @@
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::UpdateWindow;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindowLongPtrW, RegisterClassW,
-    SetWindowLongPtrW, ShowWindow, CREATESTRUCTW, CW_USEDEFAULT, GWLP_USERDATA, SW_SHOWDEFAULT,
-    WM_CREATE, WM_DESTROY, WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    AdjustWindowRectEx, CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindowLongPtrW,
+    RegisterClassW, SetWindowLongPtrW, ShowWindow, CREATESTRUCTW, CW_USEDEFAULT, GWLP_USERDATA,
+    SW_SHOWDEFAULT, WM_CREATE, WM_DESTROY, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 use std::ffi::c_void;
@@ -41,6 +41,25 @@ pub fn create_handler(
 
         RegisterClassW(&wnd_class);
 
+        let mut rect = RECT {
+            left: 0,
+            top: 0,
+            right: width as i32,
+            bottom: height as i32,
+        };
+
+        // ウィンドウスタイルに合わせて調整（WS_OVERLAPPEDWINDOW は枠あり）
+        AdjustWindowRectEx(
+            &mut rect,
+            WS_OVERLAPPEDWINDOW,
+            false, // メニューなし
+            Default::default(),
+        )
+        .unwrap();
+
+        let adjusted_width = rect.right - rect.left;
+        let adjusted_height = rect.bottom - rect.top;
+
         let hwnd = CreateWindowExW(
             Default::default(),
             PCWSTR(class_name.as_ptr()),
@@ -48,8 +67,8 @@ pub fn create_handler(
             WS_OVERLAPPEDWINDOW,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            width as i32,
-            height as i32,
+            adjusted_width as i32,
+            adjusted_height as i32,
             Some(HWND(hwnd as *mut c_void)),
             None,
             Some(hinstance.into()),
