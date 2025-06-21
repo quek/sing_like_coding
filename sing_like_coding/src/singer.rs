@@ -46,7 +46,6 @@ pub enum MainToAudio {
     LaneAdd(usize),
     LaneItem(CursorTrack, LaneItem),
     LaneItemDelete(CursorTrack),
-    Note(usize, Event),
     #[allow(dead_code)]
     NoteOn(usize, i16, i16, f64, usize),
     #[allow(dead_code)]
@@ -83,6 +82,7 @@ pub struct Singer {
     pub steady_time: i64,
     pub play_position: Range<usize>,
     all_notef_off_p: bool,
+    midi_buffers: Arc<Mutex<Vec<Vec<Event>>>>,
     pub song: Song,
     _song_state_shmem: Shmem,
     song_state_ptr: *mut SongState,
@@ -108,6 +108,7 @@ impl Singer {
             steady_time: 0,
             play_position: 0..0,
             all_notef_off_p: false,
+            midi_buffers: Arc::new(Mutex::new(vec![])),
             song,
             _song_state_shmem: song_state_shmem,
             song_state_ptr,
@@ -211,31 +212,34 @@ impl Singer {
 
         self.compute_play_position(nframes);
 
-        for track_index in 0..self.process_track_contexts.len() {
-            let mut context = self.process_track_contexts[track_index].lock().unwrap();
-            for module_index in 0..context.plugins.len() {
-                let process_data = context.plugins[module_index].process_data_mut();
-                process_data.nchannels = nchannels;
-                process_data.nframes = nframes;
-                process_data.play_p = if self.song_state().play_p { 1 } else { 0 };
-                process_data.bpm = self.song.bpm;
-                process_data.lpb = self.song.lpb;
-                process_data.sample_rate = self.song.sample_rate;
-                process_data.steady_time = self.steady_time;
-                process_data.prepare();
-            }
+        {
+            let mut midi_buffers = self.midi_buffers.lock().unwrap();
+            for track_index in 0..self.process_track_contexts.len() {
+                let mut context = self.process_track_contexts[track_index].lock().unwrap();
+                for module_index in 0..context.plugins.len() {
+                    let process_data = context.plugins[module_index].process_data_mut();
+                    process_data.nchannels = nchannels;
+                    process_data.nframes = nframes;
+                    process_data.play_p = if self.song_state().play_p { 1 } else { 0 };
+                    process_data.bpm = self.song.bpm;
+                    process_data.lpb = self.song.lpb;
+                    process_data.sample_rate = self.song.sample_rate;
+                    process_data.steady_time = self.steady_time;
+                    process_data.prepare();
+                }
 
-            context.nchannels = nchannels;
-            context.nframes = nframes;
-            context.play_p = self.song_state().play_p;
-            context.bpm = self.song.bpm;
-            context.steady_time = self.steady_time;
-            context.play_position = self.play_position.clone();
-            let song_state = self.song_state();
-            context.loop_range = song_state.loop_start..song_state.loop_end;
-            context.prepare();
-            if self.all_notef_off_p {
-                context.event_list_input.push(Event::NoteAllOff);
+                context.nchannels = nchannels;
+                context.nframes = nframes;
+                context.play_p = self.song_state().play_p;
+                context.bpm = self.song.bpm;
+                context.steady_time = self.steady_time;
+                context.play_position = self.play_position.clone();
+                let song_state = self.song_state();
+                context.loop_range = song_state.loop_start..song_state.loop_end;
+                context.prepare();
+                if let Some(midi_buffer) = midi_buffers.get_mut(track_index) {
+                    context.event_list_input.append(midi_buffer);
+                }
             }
         }
 
@@ -581,9 +585,16 @@ impl Singer {
     }
 
     pub fn start_listener(singer: Arc<Mutex<Self>>, receiver: Receiver<MainToAudio>) {
-        log::debug!("Song::start_listener");
         tokio::spawn(async move {
             singer_loop(singer, receiver).await.unwrap();
+        });
+    }
+
+    pub fn start_listener_midi(singer: Arc<Mutex<Self>>, receiver: Receiver<(usize, Event)>) {
+        let singer = singer.lock().unwrap();
+        let midi_buffers = singer.midi_buffers.clone();
+        tokio::spawn(async move {
+            midi_loop(midi_buffers, receiver).await.unwrap();
         });
     }
 
@@ -789,16 +800,6 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
-            MainToAudio::Note(track_index, event) => {
-                let singer = singer.lock().unwrap();
-                dbg!(&event);
-                singer.process_track_contexts[track_index]
-                    .lock()
-                    .unwrap()
-                    .event_list_input
-                    .push(event);
-                singer.sender_to_main.send(AudioToMain::Ok)?;
-            }
             MainToAudio::NoteOn(track_index, key, _channel, velocity, delay) => {
                 let singer = singer.lock().unwrap();
                 singer.process_track_contexts[track_index]
@@ -907,6 +908,20 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                 break;
             }
         }
+    }
+    Ok(())
+}
+
+async fn midi_loop(
+    midi_buffers: Arc<Mutex<Vec<Vec<Event>>>>,
+    receiver: Receiver<(usize, Event)>,
+) -> Result<()> {
+    while let Ok((track_index, event)) = receiver.recv() {
+        let mut midi_buffers = midi_buffers.lock().unwrap();
+        if midi_buffers.len() <= track_index {
+            midi_buffers.resize_with(track_index + 1, || vec![]);
+        }
+        midi_buffers[track_index].push(event);
     }
     Ok(())
 }

@@ -13,6 +13,7 @@ use arboard::Clipboard;
 use clap_sys::id::clap_id;
 use common::{
     dsp::{db_from_norm, db_to_norm},
+    event::Event,
     module::{AudioInput, Module, ModuleIndex},
     plugin::{description::Description, param::Param},
     protocol::{MainToPlugin, PluginToMain},
@@ -246,7 +247,7 @@ pub struct AppState<'a> {
     pub cursor_track: CursorTrack,
     pub cursor_module: CursorModule,
     pub lane_item_last: LaneItem,
-    midi_device: Option<MidiDevice>,
+    _midi_device: Option<MidiDevice>,
     pub route: Route,
     pub select_p: bool,
     pub selection_track_min: Option<CursorTrack>,
@@ -281,11 +282,12 @@ impl<'a> AppState<'a> {
         receiver_from_audio: Receiver<AudioToMain>,
         sender_to_loop: Sender<MainToPlugin>,
         receiver_communicator_to_main_thread: Receiver<PluginToMain>,
+        sender_midi: Sender<(usize, Event)>,
     ) -> Self {
         let song_state_shmem = open_shared_memory::<SongState>(SONG_STATE_NAME).unwrap();
         let song_state = unsafe { &*(song_state_shmem.as_ptr() as *const SongState) };
 
-        let midi_device = Some(MidiDevice::new("LPProMK3 MIDI").unwrap());
+        let midi_device = Some(MidiDevice::new("LPProMK3 MIDI", sender_midi).unwrap());
 
         let mut this = Self {
             now: Instant::now(),
@@ -300,7 +302,7 @@ impl<'a> AppState<'a> {
             },
             cursor_module: CursorModule { index: 0 },
             lane_item_last: LaneItem::default(),
-            midi_device,
+            _midi_device: midi_device,
             route: Route::Track,
             select_p: false,
             selection_track_min: Default::default(),
@@ -385,16 +387,6 @@ impl<'a> AppState<'a> {
         for _ in 0..self.digit.unwrap_or(1) {
             self.cursor_track = self.cursor_track.right(&self.song);
         }
-    }
-
-    pub fn midi_device_input(&mut self) -> Result<()> {
-        if let Some(mut device) = self.midi_device.take() {
-            while let Some(event) = device.next() {
-                self.send_to_audio(MainToAudio::Note(self.cursor_track.track, event))?;
-            }
-            self.midi_device = Some(device); // 処理後に戻す
-        }
-        Ok(())
     }
 
     fn module_at(&self, module_index: ModuleIndex) -> Option<&Module> {

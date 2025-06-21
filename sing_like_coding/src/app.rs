@@ -51,8 +51,10 @@ impl<'a> Default for AppMain<'a> {
         let (sender_to_singer, recevier_from_ui) = channel();
         let (sender_to_plugin, recevier_from_main_thread) = channel();
         let (sender_communicator_to_main_thread, receiver_communicator_to_main_thread) = channel();
+        let (sender_midi, receiver_midi) = channel();
         let singer = Arc::new(Mutex::new(Singer::new(sender_to_main)));
         Singer::start_listener(singer.clone(), recevier_from_ui);
+        Singer::start_listener_midi(singer.clone(), receiver_midi);
 
         let mut device = Device::open_default(singer.clone()).unwrap();
         device.start().unwrap();
@@ -64,6 +66,7 @@ impl<'a> Default for AppMain<'a> {
             receiver_from_audio,
             sender_to_plugin,
             receiver_communicator_to_main_thread,
+            sender_midi,
         );
         let view = RootView::new();
 
