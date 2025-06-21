@@ -78,27 +78,20 @@ pub enum AudioToMain {
 }
 
 pub struct Singer {
-    pub song_file: Option<String>,
     pub steady_time: i64,
-    // pub play_p: bool,
     pub play_position: Range<usize>,
-    // pub loop_p: bool,
-    pub loop_range: Range<usize>,
     all_notef_off_p: bool,
     pub song: Song,
     _song_state_shmem: Shmem,
     song_state_ptr: *mut SongState,
     sender_to_main: Sender<AudioToMain>,
-    // pub line_play: usize,
     process_track_contexts: Vec<Arc<Mutex<ProcessTrackContext>>>,
     shmems: Vec<Vec<Shmem>>,
     pub gui_context: Option<eframe::egui::Context>,
 
     cpu_usages: Vec<f64>,
-    pub cpu_usage: f64,
     process_elaspeds: Vec<f64>,
     process_elasped_last: Instant,
-    pub process_elasped_avg: f64,
 }
 
 unsafe impl Send for Singer {}
@@ -110,42 +103,38 @@ impl Singer {
         let song_state_ptr = song_state_shmem.as_ptr() as *mut SongState;
         let song = Song::new();
         let mut this = Self {
-            song_file: None,
             steady_time: 0,
-            // play_p: false,
             play_position: 0..0,
-            // loop_p: true,
-            loop_range: 0..(0x100 * 0x20),
             all_notef_off_p: false,
             song,
             _song_state_shmem: song_state_shmem,
             song_state_ptr,
             sender_to_main,
-            // line_play: 0,
             process_track_contexts: vec![],
             shmems: vec![],
             gui_context: None,
 
             cpu_usages: vec![],
-            cpu_usage: 0.0,
             process_elaspeds: vec![],
             process_elasped_last: Instant::now(),
-            process_elasped_avg: 0.0,
         };
         this.track_add();
         this.track_add();
-        this.song_state_mut().init(&this);
+        this.song_state_mut().init();
         this
     }
 
     fn compute_play_position(&mut self, frames_count: usize) {
         self.play_position.start = self.play_position.end;
 
-        let line = (self.play_position.start / 0x100) as usize;
-        self.song_state_mut().line_play = line;
+        {
+            let song_state = self.song_state_mut();
+            let line = (self.play_position.start / 0x100) as usize;
+            song_state.line_play = line;
 
-        if !self.song_state().play_p {
-            return;
+            if !song_state.play_p {
+                return;
+            }
         }
 
         let sec_per_frame = frames_count as f64 / self.song.sample_rate;
@@ -153,10 +142,13 @@ impl Singer {
         self.play_position.end =
             self.play_position.start + (sec_per_frame / sec_per_delay).round() as usize;
 
-        if self.song_state().loop_p {
-            if self.play_position.end > self.loop_range.end {
-                let overflow = self.play_position.end - self.loop_range.end;
-                self.play_position.end = self.loop_range.start + overflow;
+        {
+            let song_state = self.song_state_mut();
+            if song_state.loop_p {
+                if self.play_position.end > song_state.loop_end {
+                    let overflow = self.play_position.end - song_state.loop_end;
+                    self.play_position.end = song_state.loop_start + overflow;
+                }
             }
         }
     }
@@ -237,7 +229,8 @@ impl Singer {
             context.bpm = self.song.bpm;
             context.steady_time = self.steady_time;
             context.play_position = self.play_position.clone();
-            context.loop_range = self.loop_range.clone();
+            let song_state = self.song_state();
+            context.loop_range = song_state.loop_start..song_state.loop_end;
             context.prepare();
             if self.all_notef_off_p {
                 context.event_list_input.push(Event::NoteAllOff);
@@ -459,9 +452,10 @@ impl Singer {
         self.cpu_usages
             .push(elasped / (nframes as f64 / self.song.sample_rate));
         if self.process_elasped_last.elapsed() >= Duration::from_secs(1) {
-            self.process_elasped_avg = self.process_elaspeds.iter().sum::<f64>()
+            let song_state = self.song_state_mut();
+            song_state.process_elasped_avg = self.process_elaspeds.iter().sum::<f64>()
                 / self.process_elaspeds.len().max(1) as f64;
-            self.cpu_usage =
+            song_state.cpu_usage =
                 self.cpu_usages.iter().sum::<f64>() / self.cpu_usages.len().max(1) as f64;
             self.process_elaspeds.clear();
             self.cpu_usages.clear();
@@ -563,7 +557,7 @@ impl Singer {
             }
         }
 
-        self.song_file = Some(song_file);
+        self.song_state_mut().song_file_set(&song_file);
         Ok(())
     }
 
@@ -612,6 +606,7 @@ impl Singer {
             }
         }
 
+        // オートメンション対象のパラメータを特定するため
         'top: for (track_index, context) in self.process_track_contexts.iter().enumerate() {
             for (module_index, plugin) in context.lock().unwrap().plugins.iter().enumerate() {
                 let process_data = plugin.process_data();
@@ -873,8 +868,8 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::SongFile(song_file) => {
-                let mut singer = singer.lock().unwrap();
-                singer.song_file = Some(song_file);
+                let singer = singer.lock().unwrap();
+                singer.song_state_mut().song_file_set(&song_file);
                 singer.sender_to_main.send(AudioToMain::Ok)?;
             }
             MainToAudio::SongOpen(song_file) => {

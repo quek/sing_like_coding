@@ -1,7 +1,6 @@
 use clap_sys::id::clap_id;
 use common::process_data::MAX_CHANNELS;
 
-use crate::singer::Singer;
 use crate::view::stereo_peak_meter::DB_MIN;
 
 pub const MAX_PATH_LEN: usize = 1024;
@@ -25,15 +24,15 @@ pub struct SongState {
 }
 
 impl SongState {
-    pub fn init(&mut self, singer: &Singer) {
-        self.song_file_set(&singer.song_file.clone().unwrap_or_default());
+    pub fn init(&mut self) {
+        self.song_file[0] = 0;
         self.play_p = false;
         self.line_play = 0;
         self.loop_p = true;
-        self.loop_start = singer.loop_range.start;
-        self.loop_end = singer.loop_range.end;
-        self.process_elasped_avg = singer.process_elasped_avg;
-        self.cpu_usage = singer.cpu_usage;
+        self.loop_start = 0;
+        self.loop_end = 0x100 * 0x20;
+        self.process_elasped_avg = 0.0;
+        self.cpu_usage = 0.0;
         for track in self.tracks.iter_mut() {
             for peak in track.peaks.iter_mut() {
                 *peak = DB_MIN;
