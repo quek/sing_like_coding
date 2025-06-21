@@ -4,7 +4,10 @@ use std::{
     fs::{create_dir_all, File},
     io::Write,
     path::PathBuf,
-    sync::mpsc::{Receiver, Sender},
+    sync::{
+        mpsc::{Receiver, Sender},
+        Arc, Mutex,
+    },
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -248,6 +251,7 @@ pub struct AppState<'a> {
     pub cursor_module: CursorModule,
     pub lane_item_last: LaneItem,
     _midi_device: Option<MidiDevice>,
+    rec_arm: Arc<Mutex<usize>>,
     pub route: Route,
     pub select_p: bool,
     pub selection_track_min: Option<CursorTrack>,
@@ -287,8 +291,6 @@ impl<'a> AppState<'a> {
         let song_state_shmem = open_shared_memory::<SongState>(SONG_STATE_NAME).unwrap();
         let song_state = unsafe { &*(song_state_shmem.as_ptr() as *const SongState) };
 
-        let midi_device = Some(MidiDevice::new("LPProMK3 MIDI", sender_midi).unwrap());
-
         let mut this = Self {
             now: Instant::now(),
             elapsed: 0.0,
@@ -302,7 +304,8 @@ impl<'a> AppState<'a> {
             },
             cursor_module: CursorModule { index: 0 },
             lane_item_last: LaneItem::default(),
-            _midi_device: midi_device,
+            _midi_device: None,
+            rec_arm: Arc::new(Mutex::new(0)),
             route: Route::Track,
             select_p: false,
             selection_track_min: Default::default(),
@@ -329,6 +332,10 @@ impl<'a> AppState<'a> {
             flatten_lane_index_to_track_lane_vec: vec![],
         };
         this.compute_track_offsets();
+
+        this._midi_device =
+            Some(MidiDevice::new("LPProMK3 MIDI", sender_midi, this.rec_arm.clone()).unwrap());
+
         this
     }
 
@@ -739,6 +746,7 @@ impl<'a> AppState<'a> {
         if self.digit == digit {
             self.digit = None;
         }
+        *self.rec_arm.lock().unwrap() = self.cursor_track.track;
         Ok(())
     }
 
