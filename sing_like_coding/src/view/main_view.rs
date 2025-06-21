@@ -98,6 +98,7 @@ impl MainView {
             ((Modifier::None, Key::Num7), UiCommand::Digit(7)),
             ((Modifier::None, Key::Num8), UiCommand::Digit(8)),
             ((Modifier::None, Key::Num9), UiCommand::Digit(9)),
+            ((Modifier::None, Key::G), UiCommand::Lane(LaneCommand::Go)),
             (
                 (Modifier::C, Key::J),
                 UiCommand::Lane(LaneCommand::LaneItemUpdate(-1, 0, 0, false, -1)),

@@ -74,6 +74,7 @@ pub enum LaneCommand {
     CursorLeft,
     CursorRight,
     CursorUp,
+    Go,
     Dup,
     LaneItemDelete,
     LaneItemMove(i64, i64),
@@ -361,6 +362,14 @@ impl<'a> AppState<'a> {
         }
     }
 
+    pub fn cursor_go(&mut self) {
+        if let Some(bar) = self.digit {
+            if bar > 0 {
+                self.cursor_track.line = ((bar - 1) * 4 * 4) as usize;
+            }
+        }
+    }
+
     pub fn cursor_left(&mut self) {
         for _ in 0..self.digit.unwrap_or(1) {
             self.cursor_track = self.cursor_track.left(&self.song);
@@ -588,6 +597,7 @@ impl<'a> AppState<'a> {
             UiCommand::Lane(LaneCommand::CursorDown) => self.cursor_down(),
             UiCommand::Lane(LaneCommand::CursorLeft) => self.cursor_left(),
             UiCommand::Lane(LaneCommand::CursorRight) => self.cursor_right(),
+            UiCommand::Lane(LaneCommand::Go) => self.cursor_go(),
             UiCommand::Lane(LaneCommand::Dup) => self.lane_items_dup()?,
             UiCommand::Lane(LaneCommand::LaneItemDelete) => {
                 match self.send_to_audio(MainToAudio::LaneItemDelete(self.cursor_track.clone()))? {
