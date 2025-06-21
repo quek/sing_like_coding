@@ -5,7 +5,7 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRectEx, CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindowLongPtrW,
     RegisterClassW, SetWindowLongPtrW, ShowWindow, CREATESTRUCTW, CW_USEDEFAULT, GWLP_USERDATA,
-    SW_SHOWDEFAULT, WM_CREATE, WM_DESTROY, WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    SW_SHOWDEFAULT, WM_CREATE, WM_DESTROY, WM_SIZE, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 use std::ffi::c_void;
@@ -83,6 +83,14 @@ pub fn create_handler(
     }
 }
 
+fn LOWORD(lparam: LPARAM) -> u32 {
+    (lparam.0 as usize & 0xFFFF) as u32
+}
+
+fn HIWORD(lparam: LPARAM) -> u32 {
+    ((lparam.0 as usize >> 16) & 0xFFFF) as u32
+}
+
 unsafe extern "system" fn wnd_proc(
     hwnd: HWND,
     msg: u32,
@@ -100,6 +108,14 @@ unsafe extern "system" fn wnd_proc(
             let ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) };
             let plugin = unsafe { &mut *(ptr as *mut Plugin) };
             plugin.gui_close().unwrap();
+            LRESULT(0)
+        }
+        WM_SIZE => {
+            let width = LOWORD(lparam);
+            let height = HIWORD(lparam);
+            let ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) };
+            let plugin = unsafe { &mut *(ptr as *mut Plugin) };
+            plugin.gui_size(width, height).unwrap();
             LRESULT(0)
         }
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },

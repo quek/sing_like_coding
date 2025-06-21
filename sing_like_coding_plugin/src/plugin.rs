@@ -544,6 +544,12 @@ impl Plugin {
         Ok(())
     }
 
+    pub fn gui_size(&self, width: u32, height: u32) -> Result<()> {
+        let gui = unsafe { &*self.ext_gui.unwrap() };
+        unsafe { gui.set_size.unwrap()(self.plugin, width, height) };
+        Ok(())
+    }
+
     pub fn latency(&self) -> Option<u32> {
         unsafe {
             let ext_latency = &*self.ext_latency?;
