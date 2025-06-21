@@ -824,7 +824,10 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackMove(track_index, delta) => {
-                if singer.track_move(track_index, delta)? {}
+                singer.track_move(track_index, delta)?;
+                singer
+                    .sender_to_main
+                    .send(AudioToMain::Song(singer.song.clone()))?;
             }
             MainToAudio::TrackMute(track_index, mute) => {
                 if let Some(track) = singer.song.tracks.get_mut(track_index) {
