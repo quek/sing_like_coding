@@ -36,55 +36,39 @@ impl Default for Note {
     }
 }
 
+const NOTE_NAMES: &[&str] = &[
+    "C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-",
+];
+
 pub fn midi_to_note_name(midi: i16) -> Option<String> {
     if midi > 127 {
         return None;
     }
-    let note_names = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    ];
-    let note = note_names[(midi % 12) as usize];
-    let octave = (midi / 12).wrapping_sub(1); // C4 = 60
-    Some(format!("{}{}", note, octave))
+    let note = NOTE_NAMES[(midi % 12) as usize];
+    let octave = midi / 12; // C4 = 48
+    Some(format!("{}{:x}", note, octave))
 }
 
 pub fn note_name_to_midi(note: &str) -> Option<i16> {
-    if note.len() < 2 {
+    if note.len() != 3 {
         return None;
     }
 
-    let note_map = [
-        ("C", 0),
-        ("C#", 1),
-        ("D", 2),
-        ("D#", 3),
-        ("E", 4),
-        ("F", 5),
-        ("F#", 6),
-        ("G", 7),
-        ("G#", 8),
-        ("A", 9),
-        ("A#", 10),
-        ("B", 11),
-    ];
-
     let note = note.to_uppercase();
-    let (note_str, octave_str) = note.trim().split_at(note.len() - 1);
-    let (base, octave_offset) = if let Ok(octave) = octave_str.parse::<i16>() {
+    let (note_str, octave_str) = note.split_at(2);
+    let (base, octave_offset) = if let Ok(octave) = i16::from_str_radix(octave_str, 16) {
         (note_str, octave)
     } else {
-        let (note_str, rest) = note.split_at(note.len() - 2);
-        if let Ok(octave) = rest.parse::<i16>() {
-            (note_str, octave)
-        } else {
-            return None;
-        }
+        return None;
     };
 
-    let semitone = note_map.iter().find(|(n, _)| *n == base)?.1;
-    let midi = (octave_offset + 1) * 12 + semitone;
-    if midi >= 0 && midi <= 127 {
-        Some(midi)
+    if let Some(semitone) = NOTE_NAMES.iter().position(|x| *x == base) {
+        let midi = octave_offset * 12 + semitone as i16;
+        if midi >= 0 && midi <= 127 {
+            Some(midi)
+        } else {
+            None
+        }
     } else {
         None
     }
