@@ -28,7 +28,7 @@ use shared_memory::Shmem;
 
 use crate::{
     command::{track_add::TrackAdd, Command},
-    midi::MidiDevice,
+    midi_device::MidiDevice,
     model::{lane_item::LaneItem, note::Note, song::Song, track::Track},
     singer::{AudioToMain, MainToAudio},
     song_state::SongState,
