@@ -574,7 +574,7 @@ impl MainView {
     ) -> anyhow::Result<()> {
         let track = &state.song.tracks[track_index];
         let peak_level_state = self.stereo_peak_level_state(track_index);
-        peak_level_state.update(&state.song_state.tracks[track_index].peaks);
+        peak_level_state.update(&state.song_state.tracks[track_index].peaks, state.elapsed);
         for x in [&peak_level_state.left, &peak_level_state.right] {
             LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
         }

@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use common::dsp::db_to_norm;
 use eframe::egui::{
     Align2, Color32, FontId, Painter, Pos2, Rect, Response, Sense, Ui, Vec2, Widget,
@@ -15,9 +13,9 @@ pub struct StereoPeakLevelState {
 }
 
 impl StereoPeakLevelState {
-    pub fn update(&mut self, peaks: &[f32]) {
-        self.left.update(peaks[0]);
-        self.right.update(peaks[1]);
+    pub fn update(&mut self, peaks: &[f32], dt: f32) {
+        self.left.update(peaks[0], dt);
+        self.right.update(peaks[1], dt);
     }
 }
 
@@ -25,7 +23,6 @@ pub struct PeakLevelState {
     pub current_db: f32,
     pub hold_db: f32,
     pub hold_timer: f32,
-    pub now: Instant,
 }
 
 impl Default for PeakLevelState {
@@ -34,14 +31,12 @@ impl Default for PeakLevelState {
             current_db: DB_MIN,
             hold_db: DB_MIN,
             hold_timer: 0.0,
-            now: Instant::now(),
         }
     }
 }
 
 impl PeakLevelState {
-    pub fn update(&mut self, new_db: f32) {
-        let dt = self.now.elapsed().as_secs_f32();
+    pub fn update(&mut self, new_db: f32, dt: f32) {
         let hold_time = 1.0;
         let fall_rate = 20.0;
 
@@ -56,7 +51,6 @@ impl PeakLevelState {
                 self.hold_db = (self.hold_db - fall_rate * dt).max(new_db).max(DB_MIN);
             }
         }
-        self.now = Instant::now();
     }
 }
 

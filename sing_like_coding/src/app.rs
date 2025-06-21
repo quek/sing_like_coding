@@ -92,6 +92,7 @@ impl<'a> eframe::App for AppMain<'a> {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.state.now_update();
         if let Some(receiver_main_thread_to_communicator) = self.recevier_from_main_thread.take() {
             let hwnd = get_hwnd(frame);
             let mut communicator = Communicator::new(

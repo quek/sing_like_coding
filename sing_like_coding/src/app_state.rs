@@ -5,7 +5,7 @@ use std::{
     io::Write,
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
@@ -235,6 +235,8 @@ pub enum FocusedPart {
 }
 
 pub struct AppState<'a> {
+    pub now: Instant,
+    pub elapsed: f32,
     pub focused_part: FocusedPart,
     pub follow_p: bool,
     pub cursor_track: CursorTrack,
@@ -279,6 +281,8 @@ impl<'a> AppState<'a> {
         let song_state = unsafe { &*(song_state_shmem.as_ptr() as *const SongState) };
 
         let mut this = Self {
+            now: Instant::now(),
+            elapsed: 0.0,
             focused_part: FocusedPart::Lane,
             follow_p: true,
             cursor_track: CursorTrack {
@@ -373,6 +377,11 @@ impl<'a> AppState<'a> {
             Box::new(|_, _| Ok(())),
         )?;
         Ok(())
+    }
+
+    pub fn now_update(&mut self) {
+        self.elapsed = self.now.elapsed().as_secs_f32();
+        self.now = Instant::now();
     }
 
     pub fn param_set(&mut self, module_index: usize, param_id: clap_id) -> Result<()> {
