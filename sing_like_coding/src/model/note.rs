@@ -45,7 +45,7 @@ pub fn midi_to_note_name(midi: i16) -> Option<String> {
         return None;
     }
     let note = NOTE_NAMES[(midi % 12) as usize];
-    let octave = midi / 12; // C4 = 48
+    let octave = midi / 12; // C5 = 60 FL と同じ
     Some(format!("{}{:x}", note, octave))
 }
 
