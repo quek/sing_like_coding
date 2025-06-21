@@ -49,7 +49,7 @@ use common::{
 };
 use libloading::{Library, Symbol};
 use stream::{IStream, OStream};
-use window::{create_handler, destroy_handler};
+use window::{create_handler, destroy_handler, resize};
 
 use crate::{
     event_list::{EventListInput, EventListOutput},
@@ -181,11 +181,14 @@ impl Plugin {
     }
 
     unsafe extern "C" fn gui_request_resize(
-        _host: *const clap_host,
-        _width: u32,
-        _height: u32,
+        host: *const clap_host,
+        width: u32,
+        height: u32,
     ) -> bool {
-        log::debug!("gui_request_resize");
+        let this = unsafe { &mut *((*host).host_data as *mut Self) };
+        if let Some(hwnd) = this.window_handler {
+            let _ = resize(hwnd, width, height);
+        }
         true
     }
 

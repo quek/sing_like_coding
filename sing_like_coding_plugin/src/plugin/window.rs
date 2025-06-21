@@ -1,11 +1,13 @@
+use anyhow::Result;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::UpdateWindow;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRectEx, CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindowLongPtrW,
-    RegisterClassW, SetWindowLongPtrW, ShowWindow, CREATESTRUCTW, CW_USEDEFAULT, GWLP_USERDATA,
-    SW_SHOWDEFAULT, WM_CREATE, WM_DESTROY, WM_SIZE, WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    RegisterClassW, SetWindowLongPtrW, SetWindowPos, ShowWindow, CREATESTRUCTW, CW_USEDEFAULT,
+    GWLP_USERDATA, SWP_NOMOVE, SWP_NOZORDER, SW_SHOWDEFAULT, WM_CREATE, WM_DESTROY, WM_SIZE,
+    WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 use std::ffi::c_void;
@@ -41,24 +43,7 @@ pub fn create_handler(
 
         RegisterClassW(&wnd_class);
 
-        let mut rect = RECT {
-            left: 0,
-            top: 0,
-            right: width as i32,
-            bottom: height as i32,
-        };
-
-        // ウィンドウスタイルに合わせて調整（WS_OVERLAPPEDWINDOW は枠あり）
-        AdjustWindowRectEx(
-            &mut rect,
-            WS_OVERLAPPEDWINDOW,
-            false, // メニューなし
-            Default::default(),
-        )
-        .unwrap();
-
-        let adjusted_width = rect.right - rect.left;
-        let adjusted_height = rect.bottom - rect.top;
+        let (adjusted_width, adjusted_height) = adjust_size(width, height);
 
         let hwnd = CreateWindowExW(
             Default::default(),
@@ -81,6 +66,48 @@ pub fn create_handler(
 
         hwnd.0
     }
+}
+
+pub fn resize(hwnd: *mut c_void, width: u32, height: u32) -> Result<()> {
+    let (adjusted_width, adjusted_height) = adjust_size(width, height);
+    unsafe {
+        SetWindowPos(
+            HWND(hwnd),
+            None,
+            0,
+            0,
+            adjusted_width,
+            adjusted_height,
+            SWP_NOZORDER | SWP_NOMOVE,
+        )
+        .unwrap();
+    }
+    Ok(())
+}
+
+fn adjust_size(width: u32, height: u32) -> (i32, i32) {
+    let mut rect = RECT {
+        left: 0,
+        top: 0,
+        right: width as i32,
+        bottom: height as i32,
+    };
+
+    // ウィンドウスタイルに合わせて調整（WS_OVERLAPPEDWINDOW は枠あり）
+    unsafe {
+        AdjustWindowRectEx(
+            &mut rect,
+            WS_OVERLAPPEDWINDOW,
+            false, // メニューなし
+            Default::default(),
+        )
+        .unwrap()
+    };
+
+    let adjusted_width = rect.right - rect.left;
+    let adjusted_height = rect.bottom - rect.top;
+
+    (adjusted_width, adjusted_height)
 }
 
 fn LOWORD(lparam: LPARAM) -> u32 {
