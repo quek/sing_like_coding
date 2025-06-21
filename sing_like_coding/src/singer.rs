@@ -591,11 +591,12 @@ impl Singer {
         for track_index in 0..self.process_track_contexts.len() {
             let context = self.process_track_contexts[track_index].lock().unwrap();
             if let Some(plugin_ref) = context.plugins.last() {
-                let process_data = if track_index == 0 {
-                    main_process_data
-                } else {
-                    plugin_ref.process_data()
-                };
+                let process_data = plugin_ref.process_data();
+                for channel in 0..process_data.nchannels {
+                    song_state.tracks[track_index].peaks[channel] = process_data.peak(0, channel);
+                }
+            } else if track_index == 0 {
+                let process_data = main_process_data;
                 for channel in 0..process_data.nchannels {
                     song_state.tracks[track_index].peaks[channel] = process_data.peak(0, channel);
                 }
