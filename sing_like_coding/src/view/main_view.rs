@@ -560,8 +560,10 @@ impl MainView {
     }
 
     fn stereo_peak_level_state(&mut self, track_index: usize) -> &mut StereoPeakLevelState {
-        self.stereo_peak_level_states
-            .resize_with(track_index + 1, Default::default);
+        if self.stereo_peak_level_states.len() <= track_index {
+            self.stereo_peak_level_states
+                .resize_with(track_index + 1, Default::default);
+        }
         &mut self.stereo_peak_level_states[track_index]
     }
 
