@@ -16,6 +16,7 @@ env_logger = "0.11.8"
 futures = "0.3.31"
 libloading = "0.8.7"
 log = "0.4.27"
+midir = "0.10.1"
 miow = "0.6.0"
 rayon = "1.10.0"
 rfd = "0.15.3"
@@ -34,3 +35,4 @@ windows = { version = "0.61.1", features = [
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_LibraryLoader"
 ] }
+wmidi = "4.0.10"

@@ -1,6 +1,6 @@
 use clap_sys::id::clap_id;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Event {
     NoteOn(i16, f64, usize),
     NoteOff(i16, usize),

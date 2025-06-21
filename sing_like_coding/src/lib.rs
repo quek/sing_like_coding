@@ -4,6 +4,7 @@ mod command;
 mod commander;
 mod communicator;
 mod device;
+mod midi;
 mod model;
 mod singer;
 mod song_state;

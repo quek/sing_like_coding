@@ -65,6 +65,8 @@ impl RootView {
         device: &mut Option<Device>,
         state: &mut AppState,
     ) -> Result<()> {
+        // TODO fps 依存の遅延が発生するので、別の仕組みで受信したい
+        state.midi_device_input()?;
         self.process_shortcut(state, gui_context)?;
 
         state.receive_from_communicator()?;

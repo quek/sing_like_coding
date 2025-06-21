@@ -46,6 +46,7 @@ pub enum MainToAudio {
     LaneAdd(usize),
     LaneItem(CursorTrack, LaneItem),
     LaneItemDelete(CursorTrack),
+    Note(usize, Event),
     #[allow(dead_code)]
     NoteOn(usize, i16, i16, f64, usize),
     #[allow(dead_code)]
@@ -787,6 +788,16 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
+            }
+            MainToAudio::Note(track_index, event) => {
+                let singer = singer.lock().unwrap();
+                dbg!(&event);
+                singer.process_track_contexts[track_index]
+                    .lock()
+                    .unwrap()
+                    .event_list_input
+                    .push(event);
+                singer.sender_to_main.send(AudioToMain::Ok)?;
             }
             MainToAudio::NoteOn(track_index, key, _channel, velocity, delay) => {
                 let singer = singer.lock().unwrap();
