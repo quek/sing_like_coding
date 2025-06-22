@@ -51,6 +51,7 @@ pub enum UiCommand {
     Mixer(MixerCommand),
     Module(ModuleCommand),
     PlayToggle,
+    Redo,
     SongSave,
     Track(TrackCommand),
     TrackAdd,
@@ -58,6 +59,7 @@ pub enum UiCommand {
     TrackPan(usize, f32),
     TrackSolo(Option<usize>, Option<bool>),
     TrackVolume(usize, f32),
+    Undo,
 }
 
 pub enum TrackCommand {
@@ -535,6 +537,14 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
+    fn redo(&mut self) -> Result<()> {
+        match self.send_to_audio(MainToAudio::Redo)? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => {}
+        }
+        Ok(())
+    }
+
     pub fn run_ui_command(&mut self, command: &UiCommand) -> Result<()> {
         let digit = self.digit.clone();
         match command {
@@ -577,12 +587,9 @@ impl<'a> AppState<'a> {
                     self.send_to_audio(MainToAudio::Play)?;
                 }
             }
-            UiCommand::SongSave => {
-                self.song_save()?;
-            }
-
+            UiCommand::Redo => self.redo()?,
+            UiCommand::SongSave => self.song_save()?,
             UiCommand::Track(command) => self.run_track_command(command)?,
-
             UiCommand::TrackAdd => {
                 TrackAdd {}.call(self)?;
             }
@@ -614,6 +621,7 @@ impl<'a> AppState<'a> {
                     _ => unreachable!(),
                 }
             }
+            UiCommand::Undo => self.undo()?,
             UiCommand::LaneAdd => {
                 match self.send_to_audio(MainToAudio::LaneAdd(self.cursor_track.track))? {
                     AudioToMain::Song(song) => self.song = song,
@@ -1404,6 +1412,14 @@ impl<'a> AppState<'a> {
             self.cursor_track.track -= 1;
         }
         self.cursor_track.lane = 0;
+    }
+
+    fn undo(&mut self) -> Result<()> {
+        match self.send_to_audio(MainToAudio::Undo)? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => {}
+        }
+        Ok(())
     }
 }
 

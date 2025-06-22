@@ -56,6 +56,8 @@ impl MainView {
             ((Modifier::C, Key::S), UiCommand::SongSave),
             ((Modifier::C, Key::T), UiCommand::TrackAdd),
             ((Modifier::CS, Key::T), UiCommand::LaneAdd),
+            ((Modifier::C, Key::Z), UiCommand::Undo),
+            ((Modifier::CS, Key::Z), UiCommand::Redo),
         ];
         let shortcut_map_track = [
             (

@@ -9,5 +9,6 @@ mod midi_device;
 mod model;
 mod singer;
 mod song_state;
+mod undo_history;
 mod util;
 mod view;
