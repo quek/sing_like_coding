@@ -633,7 +633,10 @@ impl<'a> AppState<'a> {
             UiCommand::Lane(LaneCommand::Go) => self.cursor_go(),
             UiCommand::Lane(LaneCommand::Dup) => self.lane_items_dup()?,
             UiCommand::Lane(LaneCommand::LaneItemDelete) => {
-                match self.send_to_audio(MainToAudio::LaneItemDelete(self.cursor_track.clone()))? {
+                match self.send_to_audio(MainToAudio::LaneItem(vec![(
+                    self.cursor_track.clone(),
+                    None,
+                )]))? {
                     AudioToMain::Song(song) => self.song = song,
                     _ => unreachable!(),
                 }
@@ -876,7 +879,7 @@ impl<'a> AppState<'a> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
         }
-        let mut song_new = None;
+        let mut commands = vec![];
         if let (Some(min), Some(max)) = (&self.selection_track_min, &self.selection_track_max) {
             let mut itemss = vec![];
             for track_index in min.track..=max.track {
@@ -897,16 +900,14 @@ impl<'a> AppState<'a> {
                             for line in min.line..=max.line {
                                 items.push(lane.item(line).clone());
                                 if !copy_p {
-                                    match self.send_to_audio(MainToAudio::LaneItemDelete(
+                                    commands.push((
                                         CursorTrack {
                                             track: track_index,
                                             lane: lane_index,
                                             line,
                                         },
-                                    ))? {
-                                        AudioToMain::Song(song) => song_new = Some(song),
-                                        _ => unreachable!(),
-                                    }
+                                        None,
+                                    ));
                                 }
                             }
                             itemss.push(items);
@@ -922,15 +923,13 @@ impl<'a> AppState<'a> {
             let mut clipboard = Clipboard::new().unwrap();
             clipboard.set_text(&json)?;
             if !copy_p {
-                match self.send_to_audio(MainToAudio::LaneItemDelete(self.cursor_track.clone()))? {
-                    AudioToMain::Song(song) => song_new = Some(song),
-                    _ => unreachable!(),
-                }
+                commands.push((self.cursor_track.clone(), None));
             }
         }
 
-        if let Some(song) = song_new {
-            self.song = song;
+        match self.send_to_audio(MainToAudio::LaneItem(commands))? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => unreachable!(),
         }
         Ok(())
     }
@@ -953,9 +952,9 @@ impl<'a> AppState<'a> {
             for items in itemss.into_iter() {
                 for item in items.into_iter() {
                     if let Some((_, item)) = item {
-                        commands.push(MainToAudio::LaneItem(cursor, item));
+                        commands.push((cursor, Some(item)));
                     } else {
-                        commands.push(MainToAudio::LaneItemDelete(cursor));
+                        commands.push((cursor, None));
                     }
                     cursor = cursor.down(&self.song);
                 }
@@ -968,17 +967,12 @@ impl<'a> AppState<'a> {
             max.line += line_delta;
         } else if let Some(item) = self.song.lane_item(&self.cursor_track) {
             self.cursor_track.line += 1;
-            commands.push(MainToAudio::LaneItem(
-                self.cursor_track.clone(),
-                item.clone(),
-            ));
+            commands.push((self.cursor_track.clone(), Some(item.clone())));
         }
 
-        for command in commands {
-            match self.send_to_audio(command)? {
-                AudioToMain::Song(song) => self.song = song,
-                _ => unreachable!(),
-            }
+        match self.send_to_audio(MainToAudio::LaneItem(commands))? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => unreachable!(),
         }
 
         Ok(())
@@ -989,11 +983,11 @@ impl<'a> AppState<'a> {
         if self.selection_track_min.is_some() {
             let itemss = self.lane_items_selected_cloned();
             for (cursor, _) in itemss.clone().into_iter().flatten().filter_map(|x| x) {
-                commands.push(MainToAudio::LaneItemDelete(cursor));
+                commands.push((cursor, None));
             }
             for (cursor, item) in itemss.into_iter().flatten().filter_map(|x| x) {
                 let cursor = cursor.move_by(lane_delta, line_delta, &self.song);
-                commands.push(MainToAudio::LaneItem(cursor, item));
+                commands.push((cursor, Some(item)));
             }
 
             self.selection_track_min = self
@@ -1005,22 +999,20 @@ impl<'a> AppState<'a> {
                 .as_ref()
                 .map(|x| x.move_by(lane_delta, line_delta, &self.song));
         } else if let Some(item) = self.song.lane_item(&self.cursor_track) {
-            commands.push(MainToAudio::LaneItemDelete(self.cursor_track.clone()));
+            commands.push((self.cursor_track.clone(), None));
             let cursor = self
                 .cursor_track
                 .move_by(lane_delta, line_delta, &self.song);
-            commands.push(MainToAudio::LaneItem(cursor, item.clone()));
+            commands.push((cursor, Some(item.clone())));
         }
 
         self.cursor_track = self
             .cursor_track
             .move_by(lane_delta, line_delta, &self.song);
 
-        for command in commands {
-            match self.send_to_audio(command)? {
-                AudioToMain::Song(song) => self.song = song,
-                _ => {}
-            }
+        match self.send_to_audio(MainToAudio::LaneItem(commands))? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => unreachable!(),
         }
         Ok(())
     }
@@ -1034,9 +1026,9 @@ impl<'a> AppState<'a> {
                 for items in itemss.into_iter() {
                     for item in items.into_iter() {
                         if let Some(item) = item {
-                            commands.push(MainToAudio::LaneItem(cursor, item));
+                            commands.push((cursor, Some(item)));
                         } else {
-                            commands.push(MainToAudio::LaneItemDelete(cursor));
+                            commands.push((cursor, None));
                         }
                         cursor = cursor.down(&self.song);
                     }
@@ -1046,11 +1038,9 @@ impl<'a> AppState<'a> {
             }
         }
 
-        for command in commands {
-            match self.send_to_audio(command)? {
-                AudioToMain::Song(song) => self.song = song,
-                _ => {}
-            }
+        match self.send_to_audio(MainToAudio::LaneItem(commands))? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => unreachable!(),
         }
         Ok(())
     }
@@ -1131,7 +1121,7 @@ impl<'a> AppState<'a> {
                         point.value = (point.value as i16 + value_delta).clamp(0, 0xff) as u8;
                     }
                 }
-                commands.push(MainToAudio::LaneItem(cursor, lane_item));
+                commands.push((cursor, Some(lane_item)));
             }
         } else {
             let lane_item = if let Some(mut lane_item) =
@@ -1153,21 +1143,16 @@ impl<'a> AppState<'a> {
                 self.lane_item_last.clone()
             };
 
-            commands.push(MainToAudio::LaneItem(
-                self.cursor_track.clone(),
-                lane_item.clone(),
-            ));
+            commands.push((self.cursor_track.clone(), Some(lane_item.clone())));
 
             if let LaneItem::Note(Note { off: false, .. }) = lane_item {
                 self.lane_item_last = lane_item;
             }
         }
 
-        for command in commands {
-            match self.send_to_audio(command)? {
-                AudioToMain::Song(song) => self.song = song,
-                _ => {}
-            }
+        match self.send_to_audio(MainToAudio::LaneItem(commands))? {
+            AudioToMain::Song(song) => self.song = song,
+            _ => unreachable!(),
         }
         Ok(())
     }

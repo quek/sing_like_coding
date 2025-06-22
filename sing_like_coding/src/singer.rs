@@ -44,8 +44,7 @@ pub enum MainToAudio {
     Stop,
     Loop,
     LaneAdd(usize),
-    LaneItem(CursorTrack, LaneItem),
-    LaneItemDelete(CursorTrack),
+    LaneItem(Vec<(CursorTrack, Option<LaneItem>)>),
     #[allow(dead_code)]
     NoteOn(usize, i16, i16, f64, usize),
     #[allow(dead_code)]
@@ -75,7 +74,6 @@ pub enum AudioToMain {
     PluginLoad(ModuleId, Song),
     Song(Song),
     Ok,
-    Nop,
 }
 
 pub struct Singer {
@@ -156,14 +154,25 @@ impl Singer {
         }
     }
 
-    pub fn lane_item_set(&mut self, cursor: CursorTrack, lane_item: LaneItem) -> Result<()> {
+    fn lane_item_set(&mut self, cursor: CursorTrack, lane_item: Option<LaneItem>) -> Result<()> {
         let song = &mut self.song;
         if let Some(Some(lane)) = song
             .tracks
             .get_mut(cursor.track)
             .map(|x| x.lanes.get_mut(cursor.lane))
         {
-            lane.items.insert(cursor.line, lane_item);
+            if let Some(item) = lane_item {
+                lane.items.insert(cursor.line, item);
+            } else {
+                lane.items.remove(&cursor.line);
+            }
+        }
+        Ok(())
+    }
+
+    fn lane_items_set(&mut self, items: Vec<(CursorTrack, Option<LaneItem>)>) -> Result<()> {
+        for (cursor, item) in items {
+            self.lane_item_set(cursor, item)?;
         }
         Ok(())
     }
@@ -525,7 +534,7 @@ impl Singer {
             value: 0,
             delay: 0,
         };
-        self.lane_item_set(cursor, LaneItem::Point(point))?;
+        self.lane_item_set(cursor, Some(LaneItem::Point(point)))?;
 
         Ok(())
     }
@@ -723,26 +732,11 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
             }
-            MainToAudio::LaneItem(cursor, lane_item) => {
-                singer.lane_item_set(cursor, lane_item)?;
+            MainToAudio::LaneItem(items) => {
+                singer.lane_items_set(items)?;
                 singer
                     .sender_to_main
                     .send(AudioToMain::Song(singer.song.clone()))?;
-            }
-            MainToAudio::LaneItemDelete(cursor) => {
-                let song = &mut singer.song;
-                if let Some(Some(lane)) = song
-                    .tracks
-                    .get_mut(cursor.track)
-                    .map(|x| x.lanes.get_mut(cursor.lane))
-                {
-                    lane.items.remove(&cursor.line);
-                    singer
-                        .sender_to_main
-                        .send(AudioToMain::Song(singer.song.clone()))?;
-                } else {
-                    singer.sender_to_main.send(AudioToMain::Nop)?;
-                }
             }
             MainToAudio::PluginLatency(id, latency) => {
                 singer.plugin_latency_set(id, latency)?;
