@@ -44,6 +44,7 @@ pub enum MainToAudio {
     Play,
     Stop,
     Loop,
+    LoopRange(Range<usize>),
     LaneAdd(usize),
     LaneItem(Vec<(CursorTrack, Option<LaneItem>)>),
     #[allow(dead_code)]
@@ -130,6 +131,11 @@ impl Singer {
     }
 
     fn compute_play_position(&mut self, frames_count: usize) {
+        let loop_p = self.song_state().loop_p;
+        let loop_start = self.song_state().loop_start;
+        if loop_p && self.play_position.end < loop_start {
+            self.play_position.end = loop_start;
+        }
         self.play_position.start = self.play_position.end;
 
         {
@@ -149,7 +155,7 @@ impl Singer {
 
         {
             let song_state = self.song_state_mut();
-            if song_state.loop_p {
+            if loop_p {
                 if self.play_position.end > song_state.loop_end {
                     let overflow = self.play_position.end - song_state.loop_end;
                     self.play_position.end = song_state.loop_start + overflow;
@@ -757,6 +763,11 @@ fn run_main_to_audio(
         }
         MainToAudio::Loop => {
             singer.song_state_mut().loop_p = !singer.song_state().loop_p;
+            Ok(AudioToMain::Ok)
+        }
+        MainToAudio::LoopRange(range) => {
+            singer.song_state_mut().loop_start = range.start;
+            singer.song_state_mut().loop_end = range.end;
             Ok(AudioToMain::Ok)
         }
         MainToAudio::Song => Ok(AudioToMain::Song(singer.song.clone())),

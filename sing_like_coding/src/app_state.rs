@@ -48,6 +48,7 @@ pub enum UiCommand {
     Lane(LaneCommand),
     LaneAdd,
     Loop,
+    LoopRange,
     Mixer(MixerCommand),
     Module(ModuleCommand),
     PlayToggle,
@@ -412,6 +413,19 @@ impl<'a> AppState<'a> {
         }
     }
 
+    fn loop_range(&mut self) -> Result<()> {
+        if self.select_p {
+            self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
+        }
+        if let (Some(min), Some(max)) =
+            (&mut self.selection_track_min, &mut self.selection_track_max)
+        {
+            let range = (min.line * 0x100)..(max.line * 0x100);
+            self.send_to_audio(MainToAudio::LoopRange(range))?;
+        }
+        Ok(())
+    }
+
     pub fn midi_device_input_open(&mut self, name: &str) -> Result<()> {
         self.midi_device_input = Some(MidiDevice::new(
             name,
@@ -569,6 +583,9 @@ impl<'a> AppState<'a> {
             }
             UiCommand::Loop => {
                 self.send_to_audio(MainToAudio::Loop)?;
+            }
+            UiCommand::LoopRange => {
+                self.loop_range()?;
             }
             UiCommand::FocusedPartNext => {
                 self.focused_part = match self.focused_part {

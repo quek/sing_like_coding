@@ -52,6 +52,7 @@ impl MainView {
             ((Modifier::None, Key::M), UiCommand::TrackMute(None, None)),
             ((Modifier::None, Key::P), UiCommand::Loop),
             ((Modifier::S, Key::P), UiCommand::Follow),
+            ((Modifier::C, Key::P), UiCommand::LoopRange),
             ((Modifier::None, Key::S), UiCommand::TrackSolo(None, None)),
             ((Modifier::C, Key::S), UiCommand::SongSave),
             ((Modifier::C, Key::T), UiCommand::TrackAdd),
