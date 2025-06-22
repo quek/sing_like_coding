@@ -64,6 +64,7 @@ pub enum MainToAudio {
     TrackMute(usize, bool),
     TrackSolo(usize, bool),
     TrackPan(usize, f32),
+    TrackRename(usize, String),
     TrackVolume(usize, f32),
     Undo,
     #[allow(dead_code)]
@@ -854,6 +855,12 @@ fn run_main_to_audio(
         MainToAudio::TrackPan(track_index, pan) => {
             if let Some(track) = singer.song.tracks.get_mut(track_index) {
                 track.pan = pan;
+            }
+            Ok(AudioToMain::Song(singer.song.clone()))
+        }
+        MainToAudio::TrackRename(track_index, name) => {
+            if let Some(track) = singer.song.tracks.get_mut(track_index) {
+                track.name = name;
             }
             Ok(AudioToMain::Song(singer.song.clone()))
         }

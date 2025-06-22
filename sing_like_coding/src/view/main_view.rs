@@ -9,7 +9,7 @@ use common::{
     dsp::{db_from_norm, db_to_norm},
     protocol::MainToPlugin,
 };
-use eframe::egui::{CentralPanel, Color32, DragValue, Key, TopBottomPanel, Ui};
+use eframe::egui::{CentralPanel, Color32, DragValue, Key, TextEdit, TopBottomPanel, Ui};
 
 use crate::{
     app_state::{
@@ -86,6 +86,10 @@ impl MainView {
             (
                 (Modifier::None, Key::Delete),
                 UiCommand::Track(TrackCommand::Delete),
+            ),
+            (
+                (Modifier::None, Key::R),
+                UiCommand::Track(TrackCommand::Rename),
             ),
         ];
         let shortcut_map_lane = [
@@ -934,13 +938,26 @@ impl MainView {
         ui.vertical(|ui| -> anyhow::Result<()> {
             with_font_mono(ui, |ui| {
                 let height_before_track_header = ui.available_height();
-                LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
-                    .bg_color(if state.cursor_track.track == track_index {
-                        state.color_cursor(FocusedPart::Track)
-                    } else {
-                        Color32::BLACK
-                    })
-                    .build();
+                if state.rename_track_index == Some(track_index) {
+                    // TODO テキスト全選択方法がわからない
+                    let edit = TextEdit::singleline(&mut state.rename_buffer);
+                    let response = ui.add_sized([DEFAULT_TRACK_WIDTH, 0.0], edit);
+                    if state.rename_request_focus_p {
+                        state.rename_request_focus_p = false;
+                        response.request_focus();
+                    }
+                    if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                        state.track_rename().unwrap();
+                    }
+                } else {
+                    LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
+                        .bg_color(if state.cursor_track.track == track_index {
+                            state.color_cursor(FocusedPart::Track)
+                        } else {
+                            Color32::BLACK
+                        })
+                        .build();
+                }
                 let height_after_track_header = ui.available_height();
                 if self.height_track_header == 0.0 {
                     self.height_track_header =

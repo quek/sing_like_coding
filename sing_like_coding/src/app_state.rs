@@ -72,6 +72,7 @@ pub enum TrackCommand {
     MoveLeft,
     MoveRight,
     Paste,
+    Rename,
 }
 
 pub enum LaneCommand {
@@ -256,6 +257,9 @@ pub struct AppState<'a> {
     pub lane_item_last: LaneItem,
     midi_device_input: Option<MidiDevice>,
     rec_arm: Arc<Mutex<usize>>,
+    pub rename_buffer: String,
+    pub rename_request_focus_p: bool,
+    pub rename_track_index: Option<usize>,
     pub route: Route,
     pub select_p: bool,
     pub selection_track_min: Option<CursorTrack>,
@@ -312,6 +316,9 @@ impl<'a> AppState<'a> {
             lane_item_last: LaneItem::default(),
             midi_device_input: None,
             rec_arm: Arc::new(Mutex::new(0)),
+            rename_buffer: Default::default(),
+            rename_track_index: None,
+            rename_request_focus_p: false,
             route: Route::Track,
             select_p: false,
             selection_track_min: Default::default(),
@@ -1190,6 +1197,11 @@ impl<'a> AppState<'a> {
             TrackCommand::MoveLeft => self.track_move(-1)?,
             TrackCommand::MoveRight => self.track_move(1)?,
             TrackCommand::Paste => self.track_paste()?,
+            TrackCommand::Rename => {
+                self.rename_track_index = Some(self.cursor_track.track);
+                self.rename_buffer = self.song.tracks[self.cursor_track.track].name.clone();
+                self.rename_request_focus_p = true;
+            }
         }
         Ok(())
     }
@@ -1412,6 +1424,19 @@ impl<'a> AppState<'a> {
             self.cursor_track.track -= 1;
         }
         self.cursor_track.lane = 0;
+    }
+
+    pub fn track_rename(&mut self) -> Result<()> {
+        if let Some(track_index) = self.rename_track_index.take() {
+            match self.send_to_audio(MainToAudio::TrackRename(
+                track_index,
+                self.rename_buffer.clone(),
+            ))? {
+                AudioToMain::Song(song) => self.song = song,
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     fn undo(&mut self) -> Result<()> {
