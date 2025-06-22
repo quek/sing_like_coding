@@ -1,4 +1,8 @@
-use eframe::egui::{Color32, Frame, Response, Ui, Vec2, WidgetText};
+use eframe::egui::{
+    text::{CCursor, CCursorRange},
+    text_edit::TextEditState,
+    Color32, Frame, Id, Response, Ui, Vec2, WidgetText,
+};
 
 pub struct LabelBuilder<'a> {
     ui: &'a mut Ui,
@@ -40,4 +44,14 @@ impl<'a> LabelBuilder<'a> {
             })
             .inner
     }
+}
+
+// 何だこのひどいコード。テキスト全選択したいだけなのに。
+pub fn select_all_text(ui: &Ui, id: Id, text: &str) {
+    let mut text_state = TextEditState::load(ui.ctx(), id).unwrap_or_default();
+    text_state.cursor.set_char_range(Some(CCursorRange::two(
+        CCursor::new(0),
+        CCursor::new(text.len()),
+    )));
+    text_state.store(ui.ctx(), id);
 }

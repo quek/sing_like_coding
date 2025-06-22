@@ -27,7 +27,7 @@ use super::{
     root_view::Route,
     shortcut_key::{shortcut_key, Modifier},
     stereo_peak_meter::{StereoPeakLevelState, StereoPeakMeter, DB_MAX, DB_MIN},
-    util::LabelBuilder,
+    util::{select_all_text, LabelBuilder},
 };
 
 const DEFAULT_TRACK_WIDTH: f32 = 64.0;
@@ -939,15 +939,18 @@ impl MainView {
             with_font_mono(ui, |ui| {
                 let height_before_track_header = ui.available_height();
                 if state.rename_track_index == Some(track_index) {
-                    // TODO テキスト全選択方法がわからない
-                    let edit = TextEdit::singleline(&mut state.rename_buffer);
-                    let response = ui.add_sized([DEFAULT_TRACK_WIDTH, 0.0], edit);
-                    if state.rename_request_focus_p {
-                        state.rename_request_focus_p = false;
-                        response.request_focus();
-                    }
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                        state.track_rename().unwrap();
+                    {
+                        let id = ui.make_persistent_id("track_rename_textedit");
+                        let edit = TextEdit::singleline(&mut state.rename_buffer).id(id);
+                        let response = ui.add_sized([DEFAULT_TRACK_WIDTH, 0.0], edit);
+                        if state.rename_request_focus_p {
+                            state.rename_request_focus_p = false;
+                            response.request_focus();
+                            select_all_text(ui, id, &state.rename_buffer);
+                        }
+                        if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                            state.track_rename().unwrap();
+                        }
                     }
                 } else {
                     LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
