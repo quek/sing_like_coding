@@ -45,11 +45,17 @@ impl PluginSelectView {
                     gui_context.memory_mut(|x| x.request_focus(response.id));
                 }
 
-                for item in self.quried_items.iter() {
-                    let button = Button::new(&item.name).wrap_mode(egui::TextWrapMode::Extend);
-                    if ui.add(button).clicked() {
-                        return Ok(ReturnState::Selected(item.clone()));
+                let mut selected = None;
+                ui.horizontal_wrapped(|ui| {
+                    for item in self.quried_items.iter() {
+                        let button = Button::new(&item.name).wrap_mode(egui::TextWrapMode::Extend);
+                        if ui.add(button).clicked() {
+                            selected = Some(item.clone());
+                        }
                     }
+                });
+                if let Some(item) = selected {
+                    return Ok(ReturnState::Selected(item));
                 }
 
                 ui.separator();

@@ -61,17 +61,19 @@ impl CommandView {
                 }
             }
 
-            let mut called = false;
-            for command in self.commands.iter() {
-                let mut command = command.lock().unwrap();
-                let button = Button::new(command.name()).wrap_mode(egui::TextWrapMode::Extend);
-                if ui.add(button).clicked() {
-                    state.route = Route::Track;
-                    command.call(state)?;
-                    called = true;
+            let mut selected = None;
+            ui.horizontal_wrapped(|ui| {
+                for command in self.commands.iter().cloned() {
+                    let name = command.lock().unwrap().name().to_string();
+                    let button = Button::new(name).wrap_mode(egui::TextWrapMode::Extend);
+                    if ui.add(button).clicked() {
+                        selected = Some(command);
+                    }
                 }
-            }
-            if called {
+            });
+            if let Some(command) = selected {
+                state.route = Route::Track;
+                command.lock().unwrap().call(state)?;
                 self.close();
                 return Ok(());
             }
