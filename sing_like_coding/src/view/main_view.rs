@@ -727,8 +727,9 @@ impl MainView {
                 if state.cursor_track.track == track_index
                     && state.cursor_track.lane == lane_index
                     && state.cursor_track.line == line
+                    && state.focused_part == FocusedPart::Lane
                 {
-                    color = state.color_cursor(FocusedPart::Lane);
+                    color = state.color_cursor();
                 } else if line == state.song_state.line_play {
                     color = Color32::DARK_GREEN;
                 } else if let Some(min) = &state.selection_track_min {
@@ -823,8 +824,9 @@ impl MainView {
         let module = &state.song.tracks[track_index].modules[module_index];
         let color = if state.cursor_track.track == track_index
             && state.cursor_module.index == module_index
+            && state.focused_part == FocusedPart::Module
         {
-            state.color_cursor(FocusedPart::Module)
+            state.color_cursor()
         } else {
             Color32::BLACK
         };
@@ -856,8 +858,9 @@ impl MainView {
 
         let color = if state.cursor_track.track == track_index
             && state.cursor_module.index == state.song.tracks[track_index].modules.len()
+            && state.focused_part == FocusedPart::Module
         {
-            state.color_cursor(FocusedPart::Module)
+            state.color_cursor()
         } else {
             Color32::BLACK
         };
@@ -889,7 +892,7 @@ impl MainView {
                 for line in line_range.clone() {
                     let color = if line == state.song_state.line_play {
                         Color32::DARK_GREEN
-                    } else if (state.song_state.loop_start..state.song_state.loop_start)
+                    } else if (state.song_state.loop_start..state.song_state.loop_end)
                         .contains(&(line * 0x100))
                     {
                         Color32::from_rgb(0x00, 0x30, 0x00)
@@ -910,7 +913,7 @@ impl MainView {
                 for line in line_range.clone() {
                     let color = if line == state.song_state.line_play {
                         Color32::DARK_GREEN
-                    } else if (state.song_state.loop_start..state.song_state.loop_start)
+                    } else if (state.song_state.loop_start..state.song_state.loop_end)
                         .contains(&(line * 0x100))
                     {
                         Color32::from_rgb(0x00, 0x30, 0x00)
@@ -954,11 +957,15 @@ impl MainView {
                     }
                 } else {
                     LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
-                        .bg_color(if state.cursor_track.track == track_index {
-                            state.color_cursor(FocusedPart::Track)
-                        } else {
-                            Color32::BLACK
-                        })
+                        .bg_color(
+                            if state.cursor_track.track == track_index
+                                && state.focused_part == FocusedPart::Track
+                            {
+                                state.color_cursor()
+                            } else {
+                                Color32::BLACK
+                            },
+                        )
                         .build();
                 }
                 let height_after_track_header = ui.available_height();

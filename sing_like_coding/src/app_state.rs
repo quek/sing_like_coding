@@ -364,15 +364,14 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    pub fn color_cursor(&self, part: FocusedPart) -> Color32 {
-        if self.focused_part != part
-            || SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis()
-                % 1000
-                / 500
-                == 0
+    pub fn color_cursor(&self) -> Color32 {
+        if SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            % 1000
+            / 500
+            == 0
         {
             // Color32::YELLOW
             Color32::from_rgba_premultiplied(0xff, 0xff, 0, 0xa0)
