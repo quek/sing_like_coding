@@ -1,21 +1,23 @@
 use eframe::egui::{
     text::{CCursor, CCursorRange},
     text_edit::TextEditState,
-    Color32, Frame, Id, Response, Ui, Vec2, WidgetText,
+    Color32, Frame, Id, Response, RichText, Ui, Vec2,
 };
 
 pub struct LabelBuilder<'a> {
     ui: &'a mut Ui,
-    text: WidgetText,
+    text: String,
+    color: Color32,
     bg_color: Color32,
     size: Option<Vec2>,
 }
 
 impl<'a> LabelBuilder<'a> {
-    pub fn new(ui: &'a mut Ui, text: impl Into<WidgetText>) -> Self {
+    pub fn new(ui: &'a mut Ui, text: impl Into<String>) -> Self {
         Self {
             ui,
             text: text.into(),
+            color: Color32::GRAY,
             bg_color: Color32::BLACK,
             size: None,
         }
@@ -23,6 +25,11 @@ impl<'a> LabelBuilder<'a> {
 
     pub fn bg_color(mut self, color: Color32) -> Self {
         self.bg_color = color;
+        self
+    }
+
+    pub fn color(mut self, color: Color32) -> Self {
+        self.color = color;
         self
     }
 
@@ -35,7 +42,8 @@ impl<'a> LabelBuilder<'a> {
         Frame::NONE
             .fill(self.bg_color)
             .show(self.ui, |ui| -> Response {
-                let label = eframe::egui::Label::new(self.text).truncate();
+                let label =
+                    eframe::egui::Label::new(RichText::new(self.text).color(self.color)).truncate();
                 if let Some(size) = self.size {
                     ui.add_sized(size, label)
                 } else {

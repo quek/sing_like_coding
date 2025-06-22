@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    ops::Range,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::HashMap, ops::Range};
 
 use anyhow::Result;
 use common::{
@@ -674,18 +670,7 @@ impl MainView {
                 bg_color: if state.focused_part == FocusedPart::Mixer
                     && track_index == state.cursor_track.track
                 {
-                    if SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_millis()
-                        % 1000
-                        / 500
-                        == 0
-                    {
-                        Color32::from_rgb(0x55, 0x55, 0)
-                    } else {
-                        Color32::from_rgb(0x33, 0x33, 0)
-                    }
+                    state.color_cursor()
                 } else {
                     Color32::BLACK
                 },
@@ -724,15 +709,20 @@ impl MainView {
     ) -> anyhow::Result<()> {
         let inner = ui.vertical(|ui| -> anyhow::Result<()> {
             for line in line_range.clone() {
-                let mut color = Color32::BLACK;
+                let color = if state.cursor_track.line == line {
+                    Color32::WHITE
+                } else {
+                    Color32::GRAY
+                };
+                let mut bg_color = Color32::BLACK;
                 if state.cursor_track.track == track_index
                     && state.cursor_track.lane == lane_index
                     && state.cursor_track.line == line
                     && state.focused_part == FocusedPart::Lane
                 {
-                    color = state.color_cursor();
+                    bg_color = state.color_cursor();
                 } else if line == state.song_state.line_play {
-                    color = Color32::DARK_GREEN;
+                    bg_color = Color32::DARK_GREEN;
                 } else if let Some(min) = &state.selection_track_min {
                     if let (min, Some(max)) = if state.select_p {
                         (
@@ -748,7 +738,7 @@ impl MainView {
                             line,
                         };
                         if min <= current && current <= max {
-                            color = Color32::LIGHT_BLUE;
+                            bg_color = Color32::LIGHT_BLUE;
                         }
                     }
                 };
@@ -779,11 +769,17 @@ impl MainView {
 
                 if self.height_line == 0.0 {
                     let height_before = ui.available_height();
-                    LabelBuilder::new(ui, text).bg_color(color).build();
+                    LabelBuilder::new(ui, text)
+                        .color(color)
+                        .bg_color(bg_color)
+                        .build();
                     let height_after = ui.available_height();
                     self.height_line = height_before - height_after;
                 } else {
-                    LabelBuilder::new(ui, text).bg_color(color).build();
+                    LabelBuilder::new(ui, text)
+                        .color(color)
+                        .bg_color(bg_color)
+                        .build();
                 }
             }
             Ok(())

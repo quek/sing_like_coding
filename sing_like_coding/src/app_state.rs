@@ -374,10 +374,9 @@ impl<'a> AppState<'a> {
             / 500
             == 0
         {
-            // Color32::YELLOW
-            Color32::from_rgba_premultiplied(0xff, 0xff, 0, 0xa0)
+            Color32::from_rgb(0x00, 0x00, 0x88)
         } else {
-            Color32::from_rgb(200, 200, 0)
+            Color32::from_rgb(0x00, 0x00, 0x66)
         }
     }
 
