@@ -248,6 +248,7 @@ pub enum FocusedPart {
 
 pub struct AppState<'a> {
     pub config: Config,
+    pub confirm_exit_popup_p: bool,
     pub now: Instant,
     pub elapsed: f32,
     digit: Option<i32>,
@@ -303,6 +304,7 @@ impl<'a> AppState<'a> {
 
         let mut this = Self {
             config: Config::load().unwrap_or_default(),
+            confirm_exit_popup_p: false,
             now: Instant::now(),
             elapsed: 0.0,
             digit: None,
@@ -526,7 +528,7 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    pub fn quit(&self) {
+    pub fn quit(&mut self) {
         let _ = self.send_to_audio(MainToAudio::Quit);
     }
 
@@ -741,14 +743,15 @@ impl<'a> AppState<'a> {
                 }
             }
             UiCommand::Module(ModuleCommand::Delete) => {
-                if let Some(module) = self.module_at_cursort() {
-                    match self.send_to_audio(MainToAudio::PluginDelete((
-                        self.cursor_track.track,
-                        self.cursor_module.index,
-                    )))? {
+                if let Some(module_id) = self.module_at_cursort().map(|x| x.id) {
+                    let track_index = self.cursor_track.track;
+                    let module_index = self.cursor_module.index;
+                    match self
+                        .send_to_audio(MainToAudio::PluginDelete((track_index, module_index)))?
+                    {
                         AudioToMain::Song(song) => {
                             self.send_to_plugin(
-                                MainToPlugin::Unload(module.id),
+                                MainToPlugin::Unload(module_id),
                                 Box::new(|_, _| Ok(())),
                             )?;
                             self.song = song;
@@ -802,9 +805,10 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn send_to_audio(&self, command: MainToAudio) -> Result<AudioToMain> {
+    fn send_to_audio(&mut self, command: MainToAudio) -> Result<AudioToMain> {
         self.sender_to_singer.send(command)?;
         let res = self.receiver_from_audio.recv()?;
+        self.song_dirty_p = true;
         Ok(res)
     }
 

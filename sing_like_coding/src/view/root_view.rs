@@ -95,6 +95,7 @@ impl RootView {
             Route::PluginSelect => self.plugin_select_view(gui_context, state)?,
             Route::SidechainSelect => self.sidechain_select_view(gui_context, state)?,
         }
+
         Ok(())
     }
 

@@ -4,7 +4,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use common::protocol::{MainToPlugin, PluginToMain};
-use eframe::egui;
+use eframe::egui::{self, Align2, Context, Window};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 use crate::app_state::AppState;
@@ -114,6 +114,8 @@ impl<'a> eframe::App for AppMain<'a> {
         }
         let _ = self.view.view(ctx, &mut self.device, &mut self.state);
 
+        let _ = maybe_exit(ctx, &mut self.state);
+
         // 節電
         let fps = if self.state.song_state.play_p {
             60.0
@@ -132,4 +134,40 @@ fn get_hwnd(frame: &eframe::Frame) -> isize {
         }
     }
     unreachable!("get_hwd failed!");
+}
+
+fn maybe_exit(ctx: &Context, state: &mut AppState) -> anyhow::Result<()> {
+    if ctx.input(|i| i.viewport().close_requested()) {
+        if state.song_dirty_p {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            state.confirm_exit_popup_p = true;
+        }
+    }
+
+    if state.confirm_exit_popup_p {
+        Window::new("Save?")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.label("Save?");
+
+                if ui.button("Save").clicked() {
+                    let _ = state.song_save();
+                    state.confirm_exit_popup_p = false;
+                }
+
+                if ui.button("No, exit!").clicked() {
+                    state.song_dirty_p = false;
+                    state.confirm_exit_popup_p = false;
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+
+                if ui.button("Cancel").clicked() {
+                    state.confirm_exit_popup_p = false;
+                }
+            });
+    }
+
+    Ok(())
 }
