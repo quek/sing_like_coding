@@ -268,6 +268,7 @@ pub struct AppState<'a> {
     pub selection_track_max: Option<CursorTrack>,
     pub song: Song,
     song_next: Option<Song>,
+    song_apply_callbacks: VecDeque<Box<dyn Fn(&mut AppState) -> Result<()>>>,
     pub song_dirty_p: bool,
     sender_to_singer: Sender<MainToAudio>,
     receiver_from_audio: Receiver<AudioToMain>,
@@ -329,6 +330,7 @@ impl<'a> AppState<'a> {
             selection_track_max: Default::default(),
             song: song.clone(),
             song_next: Some(song),
+            song_apply_callbacks: Default::default(),
             song_dirty_p: false,
             sender_to_singer,
             receiver_from_audio,
@@ -816,6 +818,10 @@ impl<'a> AppState<'a> {
                 max.track = track;
                 max.lane = max.lane.min(self.song.tracks[track].lanes.len() - 1);
             }
+
+            while let Some(callback) = self.song_apply_callbacks.pop_front() {
+                callback(self)?;
+            }
         }
         Ok(())
     }
@@ -828,19 +834,19 @@ impl<'a> AppState<'a> {
             self.send_to_audio(MainToAudio::SongOpen(
                 path.to_str().map(|s| s.to_string()).unwrap(),
             ))?;
-            self.cursor_track = Default::default();
-            self.cursor_module = Default::default();
-            self.select_p = false;
-            self.selection_track_min = Default::default();
-            self.selection_track_max = Default::default();
-            for track_index in 0..self.song_next.as_ref().unwrap().tracks.len() {
-                for module_index in 0..self.song_next.as_ref().unwrap().tracks[track_index]
-                    .modules
-                    .len()
-                {
-                    self.module_load((track_index, module_index), false)?;
+            self.song_apply_callbacks.push_back(Box::new(|state| {
+                state.cursor_track = Default::default();
+                state.cursor_module = Default::default();
+                state.select_p = false;
+                state.selection_track_min = Default::default();
+                state.selection_track_max = Default::default();
+                for track_index in 0..state.song.tracks.len() {
+                    for module_index in 0..state.song.tracks[track_index].modules.len() {
+                        state.module_load((track_index, module_index), false)?;
+                    }
                 }
-            }
+                Ok(())
+            }));
         }
         Ok(())
     }
@@ -1308,15 +1314,17 @@ impl<'a> AppState<'a> {
                                 track_index + 1,
                                 state.song.tracks[track_index].clone(),
                             ))?;
-
-                            for module_index in 0..state.song_next.as_ref().unwrap().tracks
-                                [track_index + 1]
-                                .modules
-                                .len()
-                            {
-                                state.module_load((track_index + 1, module_index), false)?;
-                            }
-                            state.track_next();
+                            state.song_apply_callbacks.push_back(Box::new(move |state| {
+                                for module_index in 0..state.song_next.as_ref().unwrap().tracks
+                                    [track_index + 1]
+                                    .modules
+                                    .len()
+                                {
+                                    state.module_load((track_index + 1, module_index), false)?;
+                                }
+                                state.track_next();
+                                Ok(())
+                            }));
                             Ok(())
                         })
                     } else {
@@ -1351,28 +1359,31 @@ impl<'a> AppState<'a> {
         if let Ok(text) = Clipboard::new()?.get_text() {
             if let Ok(track) = serde_json::from_str::<Track>(&text) {
                 self.send_to_audio(MainToAudio::TrackInsert(self.cursor_track.track, track))?;
+                self.song_apply_callbacks.push_back(Box::new(|state| {
+                    let track =
+                        &mut state.song_next.as_mut().unwrap().tracks[state.cursor_track.track];
+                    let commands = track
+                        .modules
+                        .iter_mut()
+                        .map(|module| {
+                            MainToPlugin::Load(
+                                module.id,
+                                module.plugin_id.clone(),
+                                false,
+                                module.state.take(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
 
-                let track = &mut self.song_next.as_mut().unwrap().tracks[self.cursor_track.track];
-                let commands = track
-                    .modules
-                    .iter_mut()
-                    .map(|module| {
-                        MainToPlugin::Load(
-                            module.id,
-                            module.plugin_id.clone(),
-                            false,
-                            module.state.take(),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-
-                for command in commands {
-                    self.send_to_plugin(
-                        command,
-                        // TODO singer にプラグインがアクティブになったことを通知？
-                        Box::new(|_, _| Ok(())),
-                    )?;
-                }
+                    for command in commands {
+                        state.send_to_plugin(
+                            command,
+                            // TODO singer にプラグインがアクティブになったことを通知？
+                            Box::new(|_, _| Ok(())),
+                        )?;
+                    }
+                    Ok(())
+                }));
             }
         }
         Ok(())
