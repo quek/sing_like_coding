@@ -81,6 +81,7 @@ impl RootView {
         device: &mut Option<Device>,
         state: &mut AppState,
     ) -> Result<()> {
+        state.song_next_apply()?;
         self.process_shortcut(state, gui_context)?;
 
         state.receive_from_communicator()?;
