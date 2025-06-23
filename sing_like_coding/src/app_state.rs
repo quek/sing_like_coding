@@ -845,6 +845,7 @@ impl<'a> AppState<'a> {
                         state.module_load((track_index, module_index), false)?;
                     }
                 }
+                state.song_dirty_p = false;
                 Ok(())
             }));
         }
