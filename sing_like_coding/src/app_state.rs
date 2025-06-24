@@ -1316,10 +1316,8 @@ impl<'a> AppState<'a> {
                                 state.song.tracks[track_index].clone(),
                             ))?;
                             state.song_apply_callbacks.push_back(Box::new(move |state| {
-                                for module_index in 0..state.song_next.as_ref().unwrap().tracks
-                                    [track_index + 1]
-                                    .modules
-                                    .len()
+                                for module_index in
+                                    0..state.song.tracks[track_index + 1].modules.len()
                                 {
                                     state.module_load((track_index + 1, module_index), false)?;
                                 }
@@ -1348,11 +1346,14 @@ impl<'a> AppState<'a> {
             return Ok(());
         }
         self.send_to_audio(MainToAudio::TrackMove(self.cursor_track.track, delta))?;
-        self.cursor_track.track = self
-            .cursor_track
-            .track
-            .saturating_add_signed(delta)
-            .min(self.song_next.as_ref().unwrap().tracks.len() - 1);
+        self.song_apply_callbacks.push_back(Box::new(move |state| {
+            state.cursor_track.track = state
+                .cursor_track
+                .track
+                .saturating_add_signed(delta)
+                .min(state.song.tracks.len() - 1);
+            Ok(())
+        }));
         Ok(())
     }
 
