@@ -1163,6 +1163,11 @@ impl<'a> AppState<'a> {
                     }
                 }
                 lane_item
+            } else if off {
+                LaneItem::Note(Note {
+                    off: true,
+                    ..Default::default()
+                })
             } else {
                 self.lane_item_last.clone()
             };
