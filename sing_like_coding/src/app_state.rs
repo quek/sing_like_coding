@@ -799,7 +799,6 @@ impl<'a> AppState<'a> {
                 .index
                 // + ボタンがあるので 1 引く必要はない
                 .min(self.song.tracks[self.cursor_track.track].modules.len());
-            self.selection_track_min = Default::default();
             if self.selection_track_min.is_some() {
                 let track = self.selection_track_min.as_ref().unwrap().track;
                 if track > self.song.tracks.len() - 1 {
