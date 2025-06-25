@@ -664,8 +664,8 @@ impl<'a> AppState<'a> {
                 if self.select_p {
                     self.selection_track_min = Some(self.cursor_track);
                     self.selection_track_max = None;
-                } else {
-                    let range = self.lane_items_selection_range().unwrap();
+                } else if let Some(range) = self.lane_items_selection_range() {
+                    // song の構造が変わっている場合もあるのでちゃんと if let Some する必要がある。
                     self.selection_track_min = Some(range.0);
                     self.selection_track_max = Some(range.1);
                 }
