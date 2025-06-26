@@ -13,7 +13,6 @@ use std::{
 use crate::{
     app_state::CursorTrack,
     model::{
-        lane::Lane,
         lane_item::LaneItem,
         point::Point,
         song::{topological_levels, Song},
@@ -231,9 +230,6 @@ impl Singer {
             .push(PluginRef::new(id, shmem.as_ptr() as *mut ProcessData)?);
         self.shmems[track_index].push(shmem);
 
-        // self.sender_to_plugin
-        //     .send(MainToPlugin::Load(id, clap_plugin_id, gui_open_p))?;
-
         Ok(id)
     }
 
@@ -277,6 +273,10 @@ impl Singer {
 
                 if song_state.tracks[track_index].rec_p {
                     context.event_list_input.append(&mut midi_buffer.clone());
+                    if song_state.rec_p {
+                        self.song.tracks[track_index]
+                            .events_append(&midi_buffer, &self.play_position)?;
+                    }
                 }
             }
         }
@@ -931,7 +931,7 @@ fn run_main_to_audio(
         }
         MainToAudio::LaneAdd(track_index) => {
             if let Some(track) = singer.song.tracks.get_mut(track_index) {
-                track.lanes.push(Lane::new());
+                track.lane_add();
             }
             Ok(AudioToMain::Song(singer.song.clone()))
         }

@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    ops::Range,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::Result;
 use clap_sys::id::clap_id;
@@ -7,7 +10,7 @@ use common::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{lane::Lane, lane_item::LaneItem};
+use super::{lane::Lane, lane_item::LaneItem, note::Note};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
@@ -110,6 +113,48 @@ impl Track {
                 }
             }
         }
+    }
+
+    pub fn events_append(
+        &mut self,
+        events: &Vec<Event>,
+        play_position: &Range<usize>,
+    ) -> Result<()> {
+        let line = play_position.start / 0x100;
+        let delay = (play_position.start % 0x100) as u8;
+        for event in events {
+            for lane_index in 0..usize::MAX {
+                if self.lanes.len() - 1 < lane_index {
+                    self.lane_add();
+                }
+                if !self.lanes[lane_index].items.contains_key(&line) {
+                    let lane_item = match event {
+                        Event::NoteOn(key, velocity, _) => LaneItem::Note(Note {
+                            key: *key,
+                            velocity: *velocity,
+                            delay,
+                            ..Default::default()
+                        }),
+                        // TODO NoteOn と同じ lane じゃないとだめだよね
+                        Event::NoteOff(key, _) => LaneItem::Note(Note {
+                            key: *key,
+                            off: true,
+                            delay,
+                            ..Default::default()
+                        }),
+                        Event::NoteAllOff => break,
+                        Event::ParamValue(_, _, _, _) => break,
+                    };
+                    self.lanes[lane_index].items.insert(line, lane_item);
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn lane_add(&mut self) {
+        self.lanes.push(Lane::new());
     }
 
     fn prepare_module_audio(
