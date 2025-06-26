@@ -58,6 +58,7 @@ pub enum MainToAudio {
     PluginSidechain(ModuleIndex, AudioInput),
     PointNew(CursorTrack, usize, clap_id),
     Quit,
+    RecToggle,
     Redo,
     TrackAdd,
     TrackDelete(usize),
@@ -577,6 +578,11 @@ impl Singer {
         Ok(())
     }
 
+    fn rec_toggle(&mut self) {
+        let song_state = self.song_state_mut();
+        song_state.rec_p = !song_state.rec_p;
+    }
+
     pub fn song_close(&mut self) -> Result<()> {
         for track_index in (0..self.song.tracks.len()).rev() {
             for module_index in (0..self.song.tracks[track_index].modules.len()).rev() {
@@ -836,6 +842,10 @@ fn run_main_to_audio(
         MainToAudio::PointNew(cursor, module_index, param_id) => {
             singer.point_new(cursor, module_index, param_id)?;
             Ok(AudioToMain::Song(singer.song.clone()))
+        }
+        MainToAudio::RecToggle => {
+            singer.rec_toggle();
+            Ok(AudioToMain::Ok)
         }
         MainToAudio::Redo => {
             if let Some(redo) = undo_history.redo() {

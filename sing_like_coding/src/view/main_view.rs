@@ -409,11 +409,19 @@ impl MainView {
                 );
                 ui.heading(song_name);
 
-                if ui.button("Play").clicked() {
-                    state.play()?;
+                if state.song_state.play_p {
+                    if ui.button("Stop").clicked() {
+                        state.stop()?;
+                    }
+                } else {
+                    if ui.button("Play").clicked() {
+                        state.play()?;
+                    }
                 }
-                if ui.button("Stop").clicked() {
-                    state.stop()?;
+
+                let mut rec_p = state.song_state.rec_p;
+                if ui.toggle_value(&mut rec_p, "REC").clicked() {
+                    commands.push(UiCommand::RecToggle);
                 }
 
                 let mut bpm = self.bpm.unwrap_or(state.song.bpm);

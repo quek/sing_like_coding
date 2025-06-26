@@ -50,6 +50,7 @@ pub enum UiCommand {
     Module(ModuleCommand),
     PlayCursor,
     PlayToggle,
+    RecToggle,
     Redo,
     SongSave,
     Track(TrackCommand),
@@ -601,6 +602,9 @@ impl<'a> AppState<'a> {
                 } else {
                     self.send_to_audio(MainToAudio::Play)?;
                 }
+            }
+            UiCommand::RecToggle => {
+                self.send_to_audio(MainToAudio::RecToggle)?;
             }
             UiCommand::Redo => self.redo()?,
             UiCommand::SongSave => self.song_save()?,
