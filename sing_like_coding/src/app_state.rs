@@ -50,14 +50,14 @@ pub enum UiCommand {
     Module(ModuleCommand),
     PlayCursor,
     PlayToggle,
-    RecOn(usize),
-    RecOff(usize),
     Redo,
     SongSave,
     Track(TrackCommand),
     TrackAdd,
     TrackMute(Option<usize>, Option<bool>),
     TrackPan(usize, f32),
+    TrackRecOn(usize),
+    TrackRecOff(usize),
     TrackSolo(Option<usize>, Option<bool>),
     TrackVolume(usize, f32),
     Undo,
@@ -515,9 +515,9 @@ impl<'a> AppState<'a> {
 
     fn rec_set(&mut self, track_index: usize, value: bool) -> Result<()> {
         if value {
-            self.send_to_audio(MainToAudio::RecOn(track_index))?;
+            self.send_to_audio(MainToAudio::TrackRecOn(track_index))?;
         } else {
-            self.send_to_audio(MainToAudio::RecOff(track_index))?;
+            self.send_to_audio(MainToAudio::TrackRecOff(track_index))?;
         }
         Ok(())
     }
@@ -602,12 +602,6 @@ impl<'a> AppState<'a> {
                     self.send_to_audio(MainToAudio::Play)?;
                 }
             }
-            UiCommand::RecOn(track_index) => {
-                self.rec_set(*track_index, true)?;
-            }
-            UiCommand::RecOff(track_index) => {
-                self.rec_set(*track_index, false)?;
-            }
             UiCommand::Redo => self.redo()?,
             UiCommand::SongSave => self.song_save()?,
             UiCommand::Track(command) => self.run_track_command(command)?,
@@ -618,6 +612,12 @@ impl<'a> AppState<'a> {
                 let track_index = track_index.unwrap_or(self.cursor_track.track);
                 let mute = mute.unwrap_or(!self.song.tracks[track_index].mute);
                 self.send_to_audio(MainToAudio::TrackMute(track_index, mute))?;
+            }
+            UiCommand::TrackRecOn(track_index) => {
+                self.rec_set(*track_index, true)?;
+            }
+            UiCommand::TrackRecOff(track_index) => {
+                self.rec_set(*track_index, false)?;
             }
             UiCommand::TrackSolo(track_index, solo) => {
                 let track_index = track_index.unwrap_or(self.cursor_track.track);
@@ -767,11 +767,11 @@ impl<'a> AppState<'a> {
 
         let track_index = self.cursor_track.track;
         if track_index_last != track_index {
-            if self.song_state.tracks[track_index_last].rec {
-                self.send_to_audio(MainToAudio::RecOff(track_index_last))?;
+            if self.song_state.tracks[track_index_last].rec_p {
+                self.send_to_audio(MainToAudio::TrackRecOff(track_index_last))?;
             }
-            if !self.song_state.tracks[track_index].rec {
-                self.send_to_audio(MainToAudio::RecOn(track_index))?;
+            if !self.song_state.tracks[track_index].rec_p {
+                self.send_to_audio(MainToAudio::TrackRecOn(track_index))?;
             }
         }
 

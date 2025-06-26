@@ -58,8 +58,6 @@ pub enum MainToAudio {
     PluginSidechain(ModuleIndex, AudioInput),
     PointNew(CursorTrack, usize, clap_id),
     Quit,
-    RecOn(usize),
-    RecOff(usize),
     Redo,
     TrackAdd,
     TrackDelete(usize),
@@ -68,6 +66,8 @@ pub enum MainToAudio {
     TrackMute(usize, bool),
     TrackSolo(usize, bool),
     TrackPan(usize, f32),
+    TrackRecOn(usize),
+    TrackRecOff(usize),
     TrackRename(usize, String),
     TrackVolume(usize, f32),
     Undo,
@@ -274,7 +274,7 @@ impl Singer {
                 context.loop_range = song_state.loop_start..song_state.loop_end;
                 context.prepare();
 
-                if song_state.tracks[track_index].rec {
+                if song_state.tracks[track_index].rec_p {
                     context.event_list_input.append(&mut midi_buffer.clone());
                 }
             }
@@ -837,14 +837,6 @@ fn run_main_to_audio(
             singer.point_new(cursor, module_index, param_id)?;
             Ok(AudioToMain::Song(singer.song.clone()))
         }
-        MainToAudio::RecOn(track_index) => {
-            singer.song_state_mut().tracks[track_index].rec = true;
-            Ok(AudioToMain::Ok)
-        }
-        MainToAudio::RecOff(track_index) => {
-            singer.song_state_mut().tracks[track_index].rec = false;
-            Ok(AudioToMain::Ok)
-        }
         MainToAudio::Redo => {
             if let Some(redo) = undo_history.redo() {
                 run_main_to_audio(singer, redo, undo_history)?;
@@ -900,6 +892,14 @@ fn run_main_to_audio(
                 track.pan = pan;
             }
             Ok(AudioToMain::Song(singer.song.clone()))
+        }
+        MainToAudio::TrackRecOn(track_index) => {
+            singer.song_state_mut().tracks[track_index].rec_p = true;
+            Ok(AudioToMain::Ok)
+        }
+        MainToAudio::TrackRecOff(track_index) => {
+            singer.song_state_mut().tracks[track_index].rec_p = false;
+            Ok(AudioToMain::Ok)
         }
         MainToAudio::TrackRename(track_index, name) => {
             if let Some(track) = singer.song.tracks.get_mut(track_index) {

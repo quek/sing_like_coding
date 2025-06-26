@@ -650,12 +650,12 @@ impl MainView {
             Ok(())
         });
 
-        let mut rec = state.song_state.tracks[track_index].rec;
+        let mut rec = state.song_state.tracks[track_index].rec_p;
         if ui.toggle_value(&mut rec, "REC").clicked() {
             if rec {
-                commands.push(UiCommand::RecOn(track_index));
+                commands.push(UiCommand::TrackRecOn(track_index));
             } else {
-                commands.push(UiCommand::RecOff(track_index));
+                commands.push(UiCommand::TrackRecOff(track_index));
             }
         }
 

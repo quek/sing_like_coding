@@ -21,6 +21,7 @@ pub struct SongState {
     pub param_track_index: usize,
     pub param_module_index: usize,
     pub param_id: clap_id,
+    pub rec_p: bool,
 }
 
 impl SongState {
@@ -37,9 +38,10 @@ impl SongState {
             for peak in track.peaks.iter_mut() {
                 *peak = DB_MIN;
             }
-            track.rec = false;
+            track.rec_p = false;
         }
         self.param_track_index = usize::MAX;
+        self.rec_p = false;
     }
 
     pub fn song_file_get(&self) -> Option<String> {
@@ -66,5 +68,5 @@ impl SongState {
 #[derive(Debug)]
 pub struct TrackState {
     pub peaks: [f32; MAX_CHANNELS],
-    pub rec: bool,
+    pub rec_p: bool,
 }
