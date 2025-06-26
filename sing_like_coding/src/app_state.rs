@@ -373,9 +373,9 @@ impl<'a> AppState<'a> {
             / 500
             == 0
         {
-            Color32::from_rgb(0x00, 0x00, 0x88)
+            Color32::from_rgb(0x00, 0x77, 0x77)
         } else {
-            Color32::from_rgb(0x00, 0x00, 0x66)
+            Color32::from_rgb(0x00, 0x55, 0x55)
         }
     }
 

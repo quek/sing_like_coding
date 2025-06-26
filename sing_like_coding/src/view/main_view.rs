@@ -781,7 +781,7 @@ impl MainView {
                             .unwrap_or("---".to_string());
                         format!("{} {:02X} {:02X}", param, point.value, point.delay)
                     }
-                    None => "--- -- --".to_string(),
+                    None => "         ".to_string(),
                 };
 
                 if self.height_line == 0.0 {
@@ -836,16 +836,17 @@ impl MainView {
         module_index: usize,
     ) -> anyhow::Result<()> {
         let module = &state.song.tracks[track_index].modules[module_index];
-        let color = if state.cursor_track.track == track_index
+        let (color, bg_color) = if state.cursor_track.track == track_index
             && state.cursor_module.index == module_index
             && state.focused_part == FocusedPart::Module
         {
-            state.color_cursor()
+            (Color32::LIGHT_GRAY, state.color_cursor())
         } else {
-            Color32::BLACK
+            (Color32::GRAY, Color32::BLACK)
         };
         let label = LabelBuilder::new(ui, &module.name)
-            .bg_color(color)
+            .color(color)
+            .bg_color(bg_color)
             .size([DEFAULT_TRACK_WIDTH, 0.0])
             .build();
         if label.clicked() {
@@ -970,16 +971,16 @@ impl MainView {
                         }
                     }
                 } else {
+                    let (color, bg_color) = if state.cursor_track.track == track_index
+                        && state.focused_part == FocusedPart::Track
+                    {
+                        (Color32::LIGHT_GRAY, state.color_cursor())
+                    } else {
+                        (Color32::GRAY, Color32::BLACK)
+                    };
                     LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
-                        .bg_color(
-                            if state.cursor_track.track == track_index
-                                && state.focused_part == FocusedPart::Track
-                            {
-                                state.color_cursor()
-                            } else {
-                                Color32::BLACK
-                            },
-                        )
+                        .color(color)
+                        .bg_color(bg_color)
                         .build();
                 }
                 let height_after_track_header = ui.available_height();
