@@ -491,6 +491,7 @@ impl<'a> AppState<'a> {
             description.name.clone(),
         ))? {
             AudioToMain::PluginLoad(_id, song) => {
+                // TODO 残ってる
                 self.song = song;
                 let module_index = self.song.tracks[self.cursor_track.track].modules.len() - 1;
                 self.module_load((self.cursor_track.track, module_index), gui_open_p)?;
@@ -806,6 +807,7 @@ impl<'a> AppState<'a> {
     }
 
     pub fn song_next_apply(&mut self) -> Result<()> {
+        // TODO song_state も同じようにしないとカーソルがちらつく
         if let Some(song) = self.song_next.take() {
             self.song = song;
             self.compute_track_offsets();

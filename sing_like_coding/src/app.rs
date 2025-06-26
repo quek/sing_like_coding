@@ -15,7 +15,7 @@ use crate::view::root_view::RootView;
 
 pub fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1200.0, 1200.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1200.0, 1000.0]),
         ..Default::default()
     };
     let result = eframe::run_native(
