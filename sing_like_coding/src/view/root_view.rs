@@ -57,7 +57,8 @@ impl RootView {
     pub fn new() -> Self {
         let shortcut_map = [
             ((Modifier::None, Key::Space), UiCommand::PlayToggle),
-            ((Modifier::C, Key::Space), UiCommand::Command),
+            ((Modifier::C, Key::Space), UiCommand::PlayCursor),
+            ((Modifier::None, Key::Slash), UiCommand::Command),
             ((Modifier::None, Key::V), UiCommand::FocusedPartNext),
             ((Modifier::S, Key::V), UiCommand::FocusedPartPrev),
         ];

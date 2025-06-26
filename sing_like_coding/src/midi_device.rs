@@ -1,4 +1,4 @@
-use std::sync::{mpsc::Sender, Arc, Mutex};
+use std::sync::mpsc::Sender;
 
 use anyhow::{anyhow, Result};
 use common::event::Event;
@@ -19,11 +19,7 @@ impl MidiDevice {
             .collect()
     }
 
-    pub fn new(
-        name: &str,
-        sender_midi: Sender<(usize, Event)>,
-        track_index: Arc<Mutex<usize>>,
-    ) -> Result<Self> {
+    pub fn new(name: &str, sender_midi: Sender<Event>) -> Result<Self> {
         let input = MidiInput::new("SLC")?;
         let port = input
             .ports()
@@ -44,7 +40,7 @@ impl MidiDevice {
                     MidiMessage::NoteOff(_channel, key, _velocity) => Event::NoteOff(key as i16, 0),
                     _ => return,
                 };
-                let _ = sender_midi.send((*track_index.lock().unwrap(), event));
+                let _ = sender_midi.send(event);
             },
             (),
         )?;

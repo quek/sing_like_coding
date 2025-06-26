@@ -650,6 +650,15 @@ impl MainView {
             Ok(())
         });
 
+        let mut rec = state.song_state.tracks[track_index].rec;
+        if ui.toggle_value(&mut rec, "REC").clicked() {
+            if rec {
+                commands.push(UiCommand::RecOn(track_index));
+            } else {
+                commands.push(UiCommand::RecOff(track_index));
+            }
+        }
+
         ui.horizontal(|ui| -> anyhow::Result<()> {
             let height = 160.0;
 

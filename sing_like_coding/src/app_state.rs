@@ -4,10 +4,7 @@ use std::{
     fs::{create_dir_all, File},
     io::Write,
     path::PathBuf,
-    sync::{
-        mpsc::{Receiver, Sender},
-        Arc, Mutex,
-    },
+    sync::mpsc::{Receiver, Sender},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -51,7 +48,10 @@ pub enum UiCommand {
     LoopRange,
     Mixer(MixerCommand),
     Module(ModuleCommand),
+    PlayCursor,
     PlayToggle,
+    RecOn(usize),
+    RecOff(usize),
     Redo,
     SongSave,
     Track(TrackCommand),
@@ -258,7 +258,6 @@ pub struct AppState<'a> {
     pub cursor_module: CursorModule,
     pub lane_item_last: LaneItem,
     midi_device_input: Option<MidiDevice>,
-    rec_arm: Arc<Mutex<usize>>,
     pub rename_buffer: String,
     pub rename_request_focus_p: bool,
     pub rename_track_index: Option<usize>,
@@ -273,7 +272,7 @@ pub struct AppState<'a> {
     sender_to_singer: Sender<MainToAudio>,
     receiver_from_audio: Receiver<AudioToMain>,
     sender_to_loop: Sender<MainToPlugin>,
-    sender_midi: Sender<(usize, Event)>,
+    sender_midi: Sender<Event>,
     receiver_communicator_to_main_thread: Receiver<PluginToMain>,
     _song_state_shmem: Shmem,
     pub song_state: &'a SongState,
@@ -299,7 +298,7 @@ impl<'a> AppState<'a> {
         receiver_from_audio: Receiver<AudioToMain>,
         sender_to_loop: Sender<MainToPlugin>,
         receiver_communicator_to_main_thread: Receiver<PluginToMain>,
-        sender_midi: Sender<(usize, Event)>,
+        sender_midi: Sender<Event>,
     ) -> Self {
         let song_state_shmem = open_shared_memory::<SongState>(SONG_STATE_NAME).unwrap();
         let song_state = unsafe { &*(song_state_shmem.as_ptr() as *const SongState) };
@@ -320,7 +319,6 @@ impl<'a> AppState<'a> {
             cursor_module: CursorModule { index: 0 },
             lane_item_last: LaneItem::default(),
             midi_device_input: None,
-            rec_arm: Arc::new(Mutex::new(0)),
             rename_buffer: Default::default(),
             rename_track_index: None,
             rename_request_focus_p: false,
@@ -354,9 +352,7 @@ impl<'a> AppState<'a> {
         };
 
         if let Some(midi_device_input) = &this.config.midi_device_input {
-            this.midi_device_input = Some(
-                MidiDevice::new(midi_device_input, sender_midi, this.rec_arm.clone()).unwrap(),
-            );
+            this.midi_device_input = Some(MidiDevice::new(midi_device_input, sender_midi).unwrap());
         }
 
         this
@@ -421,18 +417,14 @@ impl<'a> AppState<'a> {
         if let (Some(min), Some(max)) =
             (&mut self.selection_track_min, &mut self.selection_track_max)
         {
-            let range = (min.line * 0x100)..(max.line * 0x100);
+            let range = (min.line * 0x100)..((max.line + 1) * 0x100);
             self.send_to_audio(MainToAudio::LoopRange(range))?;
         }
         Ok(())
     }
 
     pub fn midi_device_input_open(&mut self, name: &str) -> Result<()> {
-        self.midi_device_input = Some(MidiDevice::new(
-            name,
-            self.sender_midi.clone(),
-            self.rec_arm.clone(),
-        )?);
+        self.midi_device_input = Some(MidiDevice::new(name, self.sender_midi.clone())?);
         self.config.midi_device_input = Some(name.to_string());
         self.config.save()?;
         Ok(())
@@ -521,6 +513,15 @@ impl<'a> AppState<'a> {
         let _ = self.send_to_audio(MainToAudio::Quit);
     }
 
+    fn rec_set(&mut self, track_index: usize, value: bool) -> Result<()> {
+        if value {
+            self.send_to_audio(MainToAudio::RecOn(track_index))?;
+        } else {
+            self.send_to_audio(MainToAudio::RecOff(track_index))?;
+        }
+        Ok(())
+    }
+
     pub fn receive_from_communicator(&mut self) -> Result<()> {
         while let Ok(mut message) = self.receiver_communicator_to_main_thread.try_recv() {
             match &mut message {
@@ -554,6 +555,7 @@ impl<'a> AppState<'a> {
 
     pub fn run_ui_command(&mut self, command: &UiCommand) -> Result<()> {
         let digit = self.digit.clone();
+        let track_index_last = self.cursor_track.track;
         match command {
             UiCommand::Command => {
                 self.route = Route::Command;
@@ -590,12 +592,21 @@ impl<'a> AppState<'a> {
                     FocusedPart::Module => FocusedPart::Mixer,
                 }
             }
+            UiCommand::PlayCursor => {
+                self.send_to_audio(MainToAudio::PlayLine(self.cursor_track.line))?;
+            }
             UiCommand::PlayToggle => {
                 if self.song_state.play_p {
                     self.send_to_audio(MainToAudio::Stop)?;
                 } else {
                     self.send_to_audio(MainToAudio::Play)?;
                 }
+            }
+            UiCommand::RecOn(track_index) => {
+                self.rec_set(*track_index, true)?;
+            }
+            UiCommand::RecOff(track_index) => {
+                self.rec_set(*track_index, false)?;
             }
             UiCommand::Redo => self.redo()?,
             UiCommand::SongSave => self.song_save()?,
@@ -753,7 +764,17 @@ impl<'a> AppState<'a> {
         if self.digit == digit {
             self.digit = None;
         }
-        *self.rec_arm.lock().unwrap() = self.cursor_track.track;
+
+        let track_index = self.cursor_track.track;
+        if track_index_last != track_index {
+            if self.song_state.tracks[track_index_last].rec {
+                self.send_to_audio(MainToAudio::RecOff(track_index_last))?;
+            }
+            if !self.song_state.tracks[track_index].rec {
+                self.send_to_audio(MainToAudio::RecOn(track_index))?;
+            }
+        }
+
         Ok(())
     }
 

@@ -37,6 +37,7 @@ impl SongState {
             for peak in track.peaks.iter_mut() {
                 *peak = DB_MIN;
             }
+            track.rec = false;
         }
         self.param_track_index = usize::MAX;
     }
@@ -65,4 +66,5 @@ impl SongState {
 #[derive(Debug)]
 pub struct TrackState {
     pub peaks: [f32; MAX_CHANNELS],
+    pub rec: bool,
 }

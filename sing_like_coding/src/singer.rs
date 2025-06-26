@@ -42,6 +42,7 @@ use shared_memory::Shmem;
 pub enum MainToAudio {
     Bpm(f64),
     Play,
+    PlayLine(usize),
     Stop,
     Loop,
     LoopRange(Range<usize>),
@@ -57,6 +58,8 @@ pub enum MainToAudio {
     PluginSidechain(ModuleIndex, AudioInput),
     PointNew(CursorTrack, usize, clap_id),
     Quit,
+    RecOn(usize),
+    RecOff(usize),
     Redo,
     TrackAdd,
     TrackDelete(usize),
@@ -84,8 +87,9 @@ pub enum AudioToMain {
 pub struct Singer {
     pub steady_time: i64,
     pub play_position: Range<usize>,
+    play_position_start_last: usize,
     all_notef_off_p: bool,
-    midi_buffers: Arc<Mutex<Vec<Vec<Event>>>>,
+    midi_buffer: Arc<Mutex<Vec<Event>>>,
     pub song: Song,
     _song_state_shmem: Shmem,
     song_state_ptr: *mut SongState,
@@ -110,8 +114,9 @@ impl Singer {
         let mut this = Self {
             steady_time: 0,
             play_position: 0..0,
+            play_position_start_last: 0,
             all_notef_off_p: false,
-            midi_buffers: Arc::new(Mutex::new(vec![])),
+            midi_buffer: Arc::new(Mutex::new(vec![])),
             song,
             _song_state_shmem: song_state_shmem,
             song_state_ptr,
@@ -240,7 +245,11 @@ impl Singer {
         self.compute_play_position(nframes);
 
         {
-            let mut midi_buffers = self.midi_buffers.lock().unwrap();
+            let midi_buffer = {
+                let mut x = self.midi_buffer.lock().unwrap();
+                std::mem::take(&mut *x)
+            };
+
             for track_index in 0..self.process_track_contexts.len() {
                 let mut context = self.process_track_contexts[track_index].lock().unwrap();
                 for module_index in 0..context.plugins.len() {
@@ -264,8 +273,9 @@ impl Singer {
                 let song_state = self.song_state();
                 context.loop_range = song_state.loop_start..song_state.loop_end;
                 context.prepare();
-                if let Some(midi_buffer) = midi_buffers.get_mut(track_index) {
-                    context.event_list_input.append(midi_buffer);
+
+                if song_state.tracks[track_index].rec {
+                    context.event_list_input.append(&mut midi_buffer.clone());
                 }
             }
         }
@@ -502,8 +512,18 @@ impl Singer {
         if self.song_state().play_p {
             return;
         }
-        // self.play_p = true;
         self.song_state_mut().play_p = true;
+        self.play_position.end = self.play_position_start_last;
+    }
+
+    pub fn play_line(&mut self, line: usize) {
+        if self.song_state().play_p {
+            return;
+        }
+        self.song_state_mut().play_p = true;
+        let position = line * 0x100;
+        self.play_position.end = position;
+        self.play_position_start_last = position;
     }
 
     pub fn plugin_delete(&mut self, module_index: ModuleIndex) -> Result<()> {
@@ -617,11 +637,11 @@ impl Singer {
         });
     }
 
-    pub fn start_listener_midi(singer: Arc<Mutex<Self>>, receiver: Receiver<(usize, Event)>) {
+    pub fn start_listener_midi(singer: Arc<Mutex<Self>>, receiver: Receiver<Event>) {
         let singer = singer.lock().unwrap();
-        let midi_buffers = singer.midi_buffers.clone();
+        let midi_buffer = singer.midi_buffer.clone();
         tokio::spawn(async move {
-            midi_loop(midi_buffers, receiver).await.unwrap();
+            midi_loop(midi_buffer, receiver).await.unwrap();
         });
     }
 
@@ -757,6 +777,10 @@ fn run_main_to_audio(
             singer.play();
             Ok(AudioToMain::Ok)
         }
+        MainToAudio::PlayLine(line) => {
+            singer.play_line(line);
+            Ok(AudioToMain::Ok)
+        }
         MainToAudio::Stop => {
             singer.stop();
             Ok(AudioToMain::Ok)
@@ -812,6 +836,14 @@ fn run_main_to_audio(
         MainToAudio::PointNew(cursor, module_index, param_id) => {
             singer.point_new(cursor, module_index, param_id)?;
             Ok(AudioToMain::Song(singer.song.clone()))
+        }
+        MainToAudio::RecOn(track_index) => {
+            singer.song_state_mut().tracks[track_index].rec = true;
+            Ok(AudioToMain::Ok)
+        }
+        MainToAudio::RecOff(track_index) => {
+            singer.song_state_mut().tracks[track_index].rec = false;
+            Ok(AudioToMain::Ok)
         }
         MainToAudio::Redo => {
             if let Some(redo) = undo_history.redo() {
@@ -906,16 +938,10 @@ fn run_main_to_audio(
     }
 }
 
-async fn midi_loop(
-    midi_buffers: Arc<Mutex<Vec<Vec<Event>>>>,
-    receiver: Receiver<(usize, Event)>,
-) -> Result<()> {
-    while let Ok((track_index, event)) = receiver.recv() {
-        let mut midi_buffers = midi_buffers.lock().unwrap();
-        if midi_buffers.len() <= track_index {
-            midi_buffers.resize_with(track_index + 1, || vec![]);
-        }
-        midi_buffers[track_index].push(event);
+async fn midi_loop(midi_buffer: Arc<Mutex<Vec<Event>>>, receiver: Receiver<Event>) -> Result<()> {
+    while let Ok(event) = receiver.recv() {
+        let mut midi_buffer = midi_buffer.lock().unwrap();
+        midi_buffer.push(event);
     }
     Ok(())
 }
