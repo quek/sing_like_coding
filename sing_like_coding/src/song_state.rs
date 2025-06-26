@@ -22,6 +22,7 @@ pub struct SongState {
     pub param_module_index: usize,
     pub param_id: clap_id,
     pub rec_p: bool,
+    pub song_dirty_p: bool,
 }
 
 impl SongState {
@@ -42,6 +43,7 @@ impl SongState {
         }
         self.param_track_index = usize::MAX;
         self.rec_p = false;
+        self.song_dirty_p = false;
     }
 
     pub fn song_file_get(&self) -> Option<String> {

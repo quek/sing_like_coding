@@ -271,12 +271,15 @@ impl Singer {
                 context.loop_range = song_state.loop_start..song_state.loop_end;
                 context.prepare();
 
-                if song_state.tracks[track_index].rec_p {
-                    context.event_list_input.append(&mut midi_buffer.clone());
-                    if song_state.rec_p {
-                        self.song.tracks[track_index]
-                            .events_append(&midi_buffer, &self.play_position)?;
+                if !midi_buffer.is_empty() {
+                    if song_state.tracks[track_index].rec_p {
+                        context.event_list_input.append(&mut midi_buffer.clone());
+                        if song_state.rec_p {
+                            self.song.tracks[track_index]
+                                .events_append(&midi_buffer, &self.play_position)?;
+                        }
                     }
+                    self.song_state_mut().song_dirty_p = true;
                 }
             }
         }
@@ -759,6 +762,9 @@ async fn singer_loop(singer: Arc<Mutex<Singer>>, receiver: Receiver<MainToAudio>
             break_p = true;
         }
         let response = run_main_to_audio(&mut singer, msg, &mut undo_history)?;
+        if let AudioToMain::Song(_) = &response {
+            singer.song_state_mut().song_dirty_p = false;
+        }
         singer.sender_to_main.send(response)?;
         if break_p {
             break;

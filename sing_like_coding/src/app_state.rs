@@ -808,6 +808,9 @@ impl<'a> AppState<'a> {
 
     pub fn song_next_apply(&mut self) -> Result<()> {
         // TODO song_state も同じようにしないとカーソルがちらつく
+        if self.song_state.song_dirty_p {
+            self.send_to_audio(MainToAudio::Song)?;
+        }
         if let Some(song) = self.song_next.take() {
             self.song = song;
             self.compute_track_offsets();
