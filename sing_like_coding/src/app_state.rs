@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     env::current_exe,
     fs::{self, create_dir_all, File},
     io::Write,
@@ -19,7 +19,7 @@ use common::{
     protocol::{MainToPlugin, PluginToMain},
     shmem::{open_shared_memory, SONG_STATE_NAME},
 };
-use eframe::egui::{ahash::HashMap, Color32};
+use eframe::egui::Color32;
 use midly::{MidiMessage, Smf};
 use rfd::FileDialog;
 use shared_memory::Shmem;
@@ -429,7 +429,7 @@ impl<'a> AppState<'a> {
     pub fn midi_file_read(
         &mut self,
         track_index: usize,
-        lane_index: usize,
+        _lane_index: usize,
         path: &PathBuf,
     ) -> Result<()> {
         let data = fs::read(path)?;
@@ -444,6 +444,8 @@ impl<'a> AppState<'a> {
 
         for smf_track in smf.tracks.iter() {
             let mut ticks = 0u32;
+            // let mut key_lane_map = HashMap::new();
+            let mut lane_line_map = HashMap::new();
             let mut lane_items = vec![];
             for event in smf_track.iter() {
                 ticks += event.delta.as_int();
@@ -480,10 +482,17 @@ impl<'a> AppState<'a> {
                     midly::TrackEventKind::Escape(_items) => continue,
                     midly::TrackEventKind::Meta(_meta_message) => continue,
                 };
+                let mut lane = 0;
+                while lane_line_map.contains_key(&(lane, line)) {
+                    lane += 1;
+                }
+                if matches!(lane_item, LaneItem::Note(Note { off: false, .. })) {
+                    lane_line_map.insert((lane, line), true);
+                }
                 lane_items.push((
                     CursorTrack {
                         track: track_index,
-                        lane: lane_index,
+                        lane,
                         line,
                     },
                     Some(lane_item),

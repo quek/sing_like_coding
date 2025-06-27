@@ -176,11 +176,11 @@ impl Singer {
     ) -> Result<(CursorTrack, Option<LaneItem>)> {
         let song = &mut self.song;
         let mut result = (cursor.clone(), None);
-        if let Some(Some(lane)) = song
-            .tracks
-            .get_mut(cursor.track)
-            .map(|x| x.lanes.get_mut(cursor.lane))
-        {
+        if let Some(track) = song.tracks.get_mut(cursor.track) {
+            while track.lanes.len() - 1 < cursor.lane {
+                track.lane_add();
+            }
+            let lane = &mut track.lanes[cursor.lane];
             result.1 = lane.items.remove(&cursor.line);
             if let Some(item) = lane_item {
                 lane.items.insert(cursor.line, item);

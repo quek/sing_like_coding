@@ -825,7 +825,6 @@ impl MainView {
             )
             .hovered()
         {
-            dbg!(self.dropped_files.len());
             for file in self.dropped_files.iter() {
                 if let Some(path) = &file.path {
                     if path
