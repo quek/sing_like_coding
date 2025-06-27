@@ -9,7 +9,6 @@ pub const MAX_PORTS: usize = 8;
 
 #[repr(C)]
 pub struct ProcessData {
-    pub nchannels: usize,
     pub nframes: usize,
     pub play_p: u8,
     pub bpm: f64,
@@ -22,9 +21,11 @@ pub struct ProcessData {
     pub events_output: [Event; MAX_EVENTS],
     pub nports_in: usize,
     pub buffer_in: [[[f32; MAX_FRAMES]; MAX_CHANNELS]; MAX_PORTS],
+    pub nchannels_in: [usize; MAX_PORTS],
+    pub constant_mask_in: [u64; MAX_PORTS],
     pub nports_out: usize,
     pub buffer_out: [[[f32; MAX_FRAMES]; MAX_CHANNELS]; MAX_PORTS],
-    pub constant_mask_in: [u64; MAX_PORTS],
+    pub nchannels_out: [usize; MAX_PORTS],
     pub constant_mask_out: [u64; MAX_PORTS],
 }
 
@@ -51,7 +52,6 @@ pub enum EventKind {
 impl ProcessData {
     pub fn new() -> Self {
         Self {
-            nchannels: MAX_CHANNELS,
             nframes: MAX_FRAMES,
             play_p: 0,
             bpm: 120.0,
@@ -80,9 +80,11 @@ impl ProcessData {
             }; MAX_EVENTS],
             nports_in: 1,
             buffer_in: [[[0.0; MAX_FRAMES]; MAX_CHANNELS]; MAX_PORTS],
+            nchannels_in: [2; MAX_PORTS],
+            constant_mask_in: [0; MAX_PORTS],
             nports_out: 1,
             buffer_out: [[[0.0; MAX_FRAMES]; MAX_CHANNELS]; MAX_PORTS],
-            constant_mask_in: [0; MAX_PORTS],
+            nchannels_out: [2; MAX_PORTS],
             constant_mask_out: [0; MAX_PORTS],
         }
     }

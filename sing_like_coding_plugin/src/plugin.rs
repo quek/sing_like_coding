@@ -409,10 +409,11 @@ impl Plugin {
                     let mut info = std::mem::zeroed::<clap_audio_port_info>();
                     if get(self.plugin, i, is_input, &mut info) {
                         log::debug!(
-                            "{} {} {}",
+                            "{} {} {} {}ch",
                             if is_input { "入力" } else { "出力" },
                             i,
-                            CStr::from_ptr(info.name.as_ptr()).to_string_lossy()
+                            CStr::from_ptr(info.name.as_ptr()).to_string_lossy(),
+                            info.channel_count
                         );
                         xs.push(info);
                     } else {
@@ -607,18 +608,24 @@ impl Plugin {
     pub fn process(&mut self, context: &mut ProcessData) -> Result<()> {
         context.nports_in = self.audio_port_info_inputs.len().min(MAX_PORTS);
         context.nports_out = self.audio_port_info_outputs.len().min(MAX_PORTS);
+        for port in 0..context.nports_in {
+            context.nchannels_in[port] = self.audio_port_info_inputs[port].channel_count as usize;
+        }
+        for port in 0..context.nports_out {
+            context.nchannels_out[port] = self.audio_port_info_outputs[port].channel_count as usize;
+        }
 
         let mut audio_inputs = Vec::with_capacity(context.nports_in);
         let mut buffer_keeps = vec![];
         for port in 0..context.nports_in {
             let mut in_buffer = vec![];
-            for channel in 0..context.nchannels {
+            for channel in 0..context.nchannels_in[port] {
                 in_buffer.push(context.buffer_in[port][channel].as_mut_ptr());
             }
             let audio_input = clap_audio_buffer {
                 data32: in_buffer.as_mut_ptr(),
                 data64: null_mut::<*mut f64>(),
-                channel_count: context.nchannels as u32,
+                channel_count: context.nchannels_in[port] as u32,
                 latency: 0,
                 constant_mask: context.constant_mask_in[port],
             };
@@ -629,13 +636,13 @@ impl Plugin {
         let mut audio_outputs = Vec::with_capacity(context.nports_out);
         for port in 0..context.nports_out {
             let mut out_buffer = vec![];
-            for channel in 0..context.nchannels {
+            for channel in 0..context.nchannels_out[port] {
                 out_buffer.push(context.buffer_out[port][channel].as_mut_ptr());
             }
             let audio_output = clap_audio_buffer {
                 data32: out_buffer.as_mut_ptr(),
                 data64: null_mut::<*mut f64>(),
-                channel_count: context.nchannels as u32,
+                channel_count: context.nchannels_out[port] as u32,
                 latency: 0,
                 constant_mask: 0,
             };

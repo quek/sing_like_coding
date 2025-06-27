@@ -251,7 +251,6 @@ impl Singer {
                 let mut context = self.process_track_contexts[track_index].lock().unwrap();
                 for module_index in 0..context.plugins.len() {
                     let process_data = context.plugins[module_index].process_data_mut();
-                    process_data.nchannels = nchannels;
                     process_data.nframes = nframes;
                     process_data.play_p = if self.song_state().play_p { 1 } else { 0 };
                     process_data.bpm = self.song.bpm;
@@ -661,12 +660,12 @@ impl Singer {
             let context = self.process_track_contexts[track_index].lock().unwrap();
             if let Some(plugin_ref) = context.plugins.last() {
                 let process_data = plugin_ref.process_data();
-                for channel in 0..process_data.nchannels {
+                for channel in 0..process_data.nchannels_out[0] {
                     song_state.tracks[track_index].peaks[channel] = process_data.peak(0, channel);
                 }
             } else if track_index == 0 {
                 let process_data = main_process_data;
-                for channel in 0..process_data.nchannels {
+                for channel in 0..process_data.nchannels_out[0] {
                     song_state.tracks[track_index].peaks[channel] = process_data.peak(0, channel);
                 }
             } else {
