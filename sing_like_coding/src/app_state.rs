@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     env::current_exe,
     fs::{self, create_dir_all, File},
     io::Write,
@@ -444,8 +444,8 @@ impl<'a> AppState<'a> {
 
         for smf_track in smf.tracks.iter() {
             let mut ticks = 0u32;
-            // let mut key_lane_map = HashMap::new();
-            let mut lane_line_map = HashMap::new();
+            let mut key_lane_map = HashMap::new();
+            let mut lane_line_used = HashSet::new();
             let mut lane_items = vec![];
             for event in smf_track.iter() {
                 ticks += event.delta.as_int();
@@ -463,12 +463,13 @@ impl<'a> AppState<'a> {
                     }),
                     midly::TrackEventKind::Midi {
                         channel,
-                        message: MidiMessage::NoteOn { key: _, vel: _ },
+                        message: MidiMessage::NoteOn { key, vel: _ },
                     }
                     | midly::TrackEventKind::Midi {
                         channel,
-                        message: MidiMessage::NoteOff { key: _, vel: _ },
+                        message: MidiMessage::NoteOff { key, vel: _ },
                     } => LaneItem::Note(Note {
+                        key: key.as_int() as i16, // OFF にする lane をさがすために
                         off: true,
                         delay,
                         channel: channel.as_int() as i16,
@@ -482,13 +483,31 @@ impl<'a> AppState<'a> {
                     midly::TrackEventKind::Escape(_items) => continue,
                     midly::TrackEventKind::Meta(_meta_message) => continue,
                 };
+
                 let mut lane = 0;
-                while lane_line_map.contains_key(&(lane, line)) {
+
+                match &lane_item {
+                    LaneItem::Note(Note { key, off: true, .. }) => {
+                        if let Some(x) = key_lane_map.get(key) {
+                            lane = *x;
+                        }
+                    }
+                    _ => {}
+                }
+
+                while lane_line_used.contains(&(lane, line)) {
                     lane += 1;
                 }
-                if matches!(lane_item, LaneItem::Note(Note { off: false, .. })) {
-                    lane_line_map.insert((lane, line), true);
+                match &lane_item {
+                    LaneItem::Note(Note {
+                        key, off: false, ..
+                    }) => {
+                        key_lane_map.insert(*key, lane);
+                        lane_line_used.insert((lane, line));
+                    }
+                    _ => {}
                 }
+
                 lane_items.push((
                     CursorTrack {
                         track: track_index,
