@@ -25,7 +25,7 @@ pub struct Track {
     pub modules: Vec<Module>,
     pub lanes: Vec<Lane>,
     pub automation_params: Vec<(usize, clap_id)>, // (module_index, param_id)
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing, skip_deserializing)]
     on_key_lane_map: HashMap<i16, usize>,
 }
 

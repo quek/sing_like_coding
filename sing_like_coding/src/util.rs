@@ -28,6 +28,13 @@ where
     result
 }
 
+pub fn midi_tick_to_line_delay(tick: u32, ticks_per_line: u32) -> (usize, u8) {
+    let line = (tick / ticks_per_line) as usize;
+    let tick_in_line = tick % ticks_per_line;
+    let delay = ((tick_in_line * 256) / ticks_per_line).min(255) as u8;
+    (line, delay)
+}
+
 pub fn is_subsequence_case_insensitive(name: &str, query: &str) -> bool {
     let mut query_chars = query.chars().map(|c| c.to_ascii_lowercase());
     let mut current_q = query_chars.next();

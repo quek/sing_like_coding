@@ -1,7 +1,7 @@
 use std::{
     collections::VecDeque,
     env::current_exe,
-    fs::{create_dir_all, File},
+    fs::{self, create_dir_all, File},
     io::Write,
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
@@ -20,6 +20,7 @@ use common::{
     shmem::{open_shared_memory, SONG_STATE_NAME},
 };
 use eframe::egui::{ahash::HashMap, Color32};
+use midly::{MidiMessage, Smf};
 use rfd::FileDialog;
 use shared_memory::Shmem;
 
@@ -30,6 +31,7 @@ use crate::{
     model::{lane_item::LaneItem, note::Note, song::Song, track::Track},
     singer::{AudioToMain, MainToAudio},
     song_state::SongState,
+    util::midi_tick_to_line_delay,
     view::{
         root_view::Route,
         stereo_peak_meter::{DB_MAX, DB_MIN},
@@ -420,6 +422,75 @@ impl<'a> AppState<'a> {
         {
             let range = (min.line * 0x100)..((max.line + 1) * 0x100);
             self.send_to_audio(MainToAudio::LoopRange(range))?;
+        }
+        Ok(())
+    }
+
+    pub fn midi_file_read(
+        &mut self,
+        track_index: usize,
+        lane_index: usize,
+        path: &PathBuf,
+    ) -> Result<()> {
+        let data = fs::read(path)?;
+        let smf = Smf::parse(&data)?;
+        let ppq = match smf.header.timing {
+            midly::Timing::Metrical(t) => t.as_int() as u32,
+            _ => panic!("Unsupported timing format"),
+        };
+        let lpb = self.song.lpb as u32;
+        // MIDI の 1 拍（1 quarter note）を lpb で割る
+        let ticks_per_line = ppq / lpb;
+
+        for smf_track in smf.tracks.iter() {
+            let mut ticks = 0u32;
+            let mut lane_items = vec![];
+            for event in smf_track.iter() {
+                ticks += event.delta.as_int();
+                let (line, delay) = midi_tick_to_line_delay(ticks, ticks_per_line);
+                let lane_item = match event.kind {
+                    midly::TrackEventKind::Midi {
+                        channel,
+                        message: MidiMessage::NoteOn { key, vel },
+                    } if vel > 0 => LaneItem::Note(Note {
+                        key: key.as_int() as i16,
+                        velocity: vel.as_int() as f64,
+                        delay,
+                        channel: channel.as_int() as i16,
+                        ..Default::default()
+                    }),
+                    midly::TrackEventKind::Midi {
+                        channel,
+                        message: MidiMessage::NoteOn { key: _, vel: _ },
+                    }
+                    | midly::TrackEventKind::Midi {
+                        channel,
+                        message: MidiMessage::NoteOff { key: _, vel: _ },
+                    } => LaneItem::Note(Note {
+                        off: true,
+                        delay,
+                        channel: channel.as_int() as i16,
+                        ..Default::default()
+                    }),
+                    midly::TrackEventKind::Midi {
+                        channel: _,
+                        message: _,
+                    } => continue,
+                    midly::TrackEventKind::SysEx(_items) => continue,
+                    midly::TrackEventKind::Escape(_items) => continue,
+                    midly::TrackEventKind::Meta(_meta_message) => continue,
+                };
+                lane_items.push((
+                    CursorTrack {
+                        track: track_index,
+                        lane: lane_index,
+                        line,
+                    },
+                    Some(lane_item),
+                ));
+            }
+
+            self.send_to_audio(MainToAudio::LaneItem(lane_items))?;
         }
         Ok(())
     }

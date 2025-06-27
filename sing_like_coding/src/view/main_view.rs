@@ -5,7 +5,9 @@ use common::{
     dsp::{db_from_norm, db_to_norm},
     protocol::MainToPlugin,
 };
-use eframe::egui::{CentralPanel, Color32, DragValue, Key, TextEdit, TopBottomPanel, Ui};
+use eframe::egui::{
+    CentralPanel, Color32, DragValue, DroppedFile, Key, TextEdit, TopBottomPanel, Ui,
+};
 
 use crate::{
     app_state::{
@@ -30,6 +32,8 @@ const DEFAULT_TRACK_WIDTH: f32 = 64.0;
 
 pub struct MainView {
     bpm: Option<f64>,
+    dropped_files: Vec<DroppedFile>,
+    dropped_files_pre: Vec<DroppedFile>,
     shortcut_map_common: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_track: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_lane: HashMap<(Modifier, Key), UiCommand>,
@@ -369,6 +373,8 @@ impl MainView {
 
         Self {
             bpm: None,
+            dropped_files: Default::default(),
+            dropped_files_pre: Default::default(),
             shortcut_map_common,
             shortcut_map_track,
             shortcut_map_lane,
@@ -388,6 +394,10 @@ impl MainView {
         state: &mut AppState,
         device: &mut Option<Device>,
     ) -> Result<()> {
+        // hovered の判定が1フレーム遅れるので。
+        self.dropped_files = std::mem::take(&mut self.dropped_files_pre);
+        self.dropped_files_pre = gui_context.input(|i| i.raw.dropped_files.clone());
+
         self.process_shortcut(gui_context, state)?;
 
         let mut commands = vec![];
@@ -805,6 +815,31 @@ impl MainView {
         if state.width_lane <= 1.0 {
             state.width_lane = inner.response.rect.width();
             state.compute_track_offsets();
+        }
+
+        if ui
+            .interact(
+                inner.response.rect,
+                ui.id().with(("lane", track_index, lane_index)),
+                eframe::egui::Sense::hover(),
+            )
+            .hovered()
+        {
+            dbg!(self.dropped_files.len());
+            for file in self.dropped_files.iter() {
+                if let Some(path) = &file.path {
+                    if path
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map_or(false, |ext| {
+                            matches!(ext.to_lowercase().as_str(), "mid" | "midi")
+                        })
+                    {
+                        state.midi_file_read(track_index, lane_index, &path)?;
+                    }
+                }
+            }
+            self.dropped_files.clear();
         }
 
         Ok(())
