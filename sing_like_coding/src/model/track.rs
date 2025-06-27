@@ -183,23 +183,74 @@ impl Track {
                 context.plugins[autdio_input.src_module_index.1].ptr
             };
             let src_process_data = unsafe { &*src_ptr };
-            let src_constant_mask = src_process_data.constant_mask_out;
-            let src_buffer = &src_process_data.buffer_out;
+            let src_constant_mask = src_process_data.constant_mask_out[autdio_input.src_port_index];
+            let src_buffer = &src_process_data.buffer_out[autdio_input.src_port_index];
+            let src_nchannels = src_process_data.nchannels_out[autdio_input.src_port_index];
             let dst_process_data = context.plugins[module_index].process_data_mut();
-            let dst_buffer = &mut dst_process_data.buffer_in;
+            let dst_constant_mask =
+                &mut dst_process_data.constant_mask_in[autdio_input.dst_port_index];
+            let dst_buffer = &mut dst_process_data.buffer_in[autdio_input.dst_port_index];
+            let dst_nchannels = dst_process_data.nchannels_in[autdio_input.dst_port_index];
 
-            for ch in 0..context.nchannels {
-                let constant_mask_bit = 1 << ch;
-                if (src_constant_mask[autdio_input.src_port_index] & constant_mask_bit) == 0 {
-                    dst_process_data.constant_mask_in[autdio_input.dst_port_index] &=
-                        !constant_mask_bit;
-                    dst_buffer[autdio_input.dst_port_index][ch]
-                        .copy_from_slice(&src_buffer[autdio_input.src_port_index][ch]);
-                } else {
-                    dst_process_data.constant_mask_in[autdio_input.dst_port_index] |=
-                        constant_mask_bit;
-                    dst_buffer[autdio_input.dst_port_index][ch][0] =
-                        src_buffer[autdio_input.src_port_index][ch][0];
+            match (src_nchannels, dst_nchannels) {
+                (src_nchannels, dst_nchannels) if src_nchannels == dst_nchannels => {
+                    for ch in 0..src_nchannels {
+                        let constant_mask_bit = 1 << ch;
+                        if (src_constant_mask & constant_mask_bit) == 0 {
+                            *dst_constant_mask &= !constant_mask_bit;
+                            dst_buffer[ch].copy_from_slice(&src_buffer[ch]);
+                        } else {
+                            *dst_constant_mask |= constant_mask_bit;
+                            dst_buffer[ch][0] = src_buffer[ch][0];
+                        }
+                    }
+                }
+                (1, dst_nchannels) => {
+                    for ch in 0..dst_nchannels {
+                        let constant_mask_bit = 1 << ch;
+                        if (src_constant_mask & 1) == 0 {
+                            *dst_constant_mask &= !constant_mask_bit;
+                            dst_buffer[ch].copy_from_slice(&src_buffer[0]);
+                        } else {
+                            *dst_constant_mask |= constant_mask_bit;
+                            dst_buffer[ch][0] = src_buffer[0][0];
+                        }
+                    }
+                }
+                (src_nchannels, 1) => {
+                    for ch in 0..src_nchannels {
+                        let constant_mask_bit = 1 << ch;
+                        if (src_constant_mask & constant_mask_bit) == 0 {
+                            for i in 0..context.nframes {
+                                if ch == 0 {
+                                    dst_buffer[0][i] = src_buffer[ch][i] / src_nchannels as f32;
+                                } else {
+                                    dst_buffer[0][i] += src_buffer[ch][i] / src_nchannels as f32;
+                                }
+                            }
+                        } else {
+                            for i in 0..context.nframes {
+                                if ch == 0 {
+                                    dst_buffer[0][i] = src_buffer[ch][0] / src_nchannels as f32;
+                                } else {
+                                    dst_buffer[0][i] += src_buffer[ch][0] / src_nchannels as f32;
+                                }
+                            }
+                        }
+                    }
+                    *dst_constant_mask = 0;
+                }
+                (src_nchannels, dst_nchannels) => {
+                    for ch in 0..(src_nchannels.min(dst_nchannels)) {
+                        let constant_mask_bit = 1 << ch;
+                        if (src_constant_mask & constant_mask_bit) == 0 {
+                            *dst_constant_mask &= !constant_mask_bit;
+                            dst_buffer[ch].copy_from_slice(&src_buffer[ch]);
+                        } else {
+                            *dst_constant_mask |= constant_mask_bit;
+                            dst_buffer[ch][0] = src_buffer[ch][0];
+                        }
+                    }
                 }
             }
         }
