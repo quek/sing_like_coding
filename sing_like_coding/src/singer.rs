@@ -366,11 +366,12 @@ impl Singer {
         for ((buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)), buffer) in
             data[1..].iter_mut().zip(buffers[1..].iter_mut())
         {
-            if let (Some((_, constant_mask, _nports_in, nports_out)), Some(buffer)) =
+            if let (Some((process_data, constant_mask, _nports_in, nports_out)), Some(buffer)) =
                 (buffer_constant_mask, buffer)
             {
+                let process_data = unsafe { &**process_data };
                 for port in 0..*nports_out {
-                    for channel in 0..nchannels {
+                    for channel in 0..process_data.nchannels_out[port] {
                         let constp = (constant_mask[port] & (1 << channel)) != 0;
                         let gain = if channel == 0 {
                             *gain_ch0
@@ -418,9 +419,11 @@ impl Singer {
                     .iter()
                     .zip(buffers[1..].iter())
                     .map(|((buffer_constant_mask, (mute, solo, _, _, _)), buffer)| {
-                        if let (Some((_, constant_mask, _, _)), Some(buffer)) =
+                        if let (Some((process_data, constant_mask, _, _)), Some(buffer)) =
                             (&buffer_constant_mask, buffer)
                         {
+                            let process_data = unsafe { &**process_data };
+                            let channel = channel % process_data.nchannels_out[0];
                             if *mute || (solo_any && !*solo) {
                                 0.0
                             } else {
@@ -660,13 +663,17 @@ impl Singer {
             let context = self.process_track_contexts[track_index].lock().unwrap();
             if let Some(plugin_ref) = context.plugins.last() {
                 let process_data = plugin_ref.process_data();
-                for channel in 0..process_data.nchannels_out[0] {
-                    song_state.tracks[track_index].peaks[channel] = process_data.peak(0, channel);
+                let nchannels = process_data.nchannels_out[0];
+                for channel in 0..2 {
+                    song_state.tracks[track_index].peaks[channel] =
+                        process_data.peak(0, channel % nchannels);
                 }
             } else if track_index == 0 {
                 let process_data = main_process_data;
+                let nchannels = process_data.nchannels_out[0];
                 for channel in 0..process_data.nchannels_out[0] {
-                    song_state.tracks[track_index].peaks[channel] = process_data.peak(0, channel);
+                    song_state.tracks[track_index].peaks[channel] =
+                        process_data.peak(0, channel % nchannels);
                 }
             } else {
                 for channel in 0..2 {
