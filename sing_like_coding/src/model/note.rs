@@ -45,7 +45,7 @@ pub fn midi_to_note_name(midi: i16) -> Option<String> {
         return None;
     }
     let note = NOTE_NAMES[(midi % 12) as usize];
-    let octave = midi / 12 - 2; // C3 = 60
+    let octave = midi / 12; // C5 = 60
     Some(format!("{}{:x}", note, (octave & 0x0f)))
 }
 
@@ -63,7 +63,7 @@ pub fn note_name_to_midi(note: &str) -> Option<i16> {
     };
 
     if let Some(semitone) = NOTE_NAMES.iter().position(|x| *x == base) {
-        let midi = (octave_offset + 2) * 12 + semitone as i16;
+        let midi = octave_offset * 12 + semitone as i16;
         if midi >= 0 && midi <= 127 {
             Some(midi)
         } else {
