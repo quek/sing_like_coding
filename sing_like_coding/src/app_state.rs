@@ -252,6 +252,7 @@ pub enum FocusedPart {
 pub struct AppState<'a> {
     pub config: Config,
     pub confirm_exit_popup_p: bool,
+    pub confirm_exit_popup_focus_request_p: bool,
     pub now: Instant,
     pub elapsed: f32,
     digit: Option<i32>,
@@ -309,6 +310,7 @@ impl<'a> AppState<'a> {
         let mut this = Self {
             config: Config::load().unwrap_or_default(),
             confirm_exit_popup_p: false,
+            confirm_exit_popup_focus_request_p: true,
             now: Instant::now(),
             elapsed: 0.0,
             digit: None,

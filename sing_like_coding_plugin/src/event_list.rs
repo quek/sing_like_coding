@@ -143,6 +143,7 @@ impl EventListInput {
         self.events.clear();
     }
 
+    #[allow(dead_code)]
     pub fn transport(&mut self, event: clap_event_transport) {
         let event = Box::new(event);
         self.events

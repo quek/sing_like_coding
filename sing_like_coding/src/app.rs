@@ -141,31 +141,39 @@ fn maybe_exit(ctx: &Context, state: &mut AppState) -> anyhow::Result<()> {
         if state.song_dirty_p {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             state.confirm_exit_popup_p = true;
+            state.confirm_exit_popup_focus_request_p = true;
         }
     }
 
     if state.confirm_exit_popup_p {
-        Window::new("Save?")
+        Window::new("Save Changes?")
             .collapsible(false)
             .resizable(false)
             .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
-                ui.label("Save?");
+                ui.label("You have unsaved changes.");
 
-                if ui.button("Save").clicked() {
-                    let _ = state.song_save();
-                    state.confirm_exit_popup_p = false;
-                }
+                ui.horizontal(|ui| {
+                    let save_button = ui.button("Save Changes");
+                    if save_button.clicked() {
+                        let _ = state.song_save();
+                        state.confirm_exit_popup_p = false;
+                    }
+                    if state.confirm_exit_popup_focus_request_p {
+                        state.confirm_exit_popup_focus_request_p = false;
+                        save_button.request_focus();
+                    }
 
-                if ui.button("No, exit!").clicked() {
-                    state.song_dirty_p = false;
-                    state.confirm_exit_popup_p = false;
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-                }
+                    if ui.button("Exit without Saving").clicked() {
+                        state.song_dirty_p = false;
+                        state.confirm_exit_popup_p = false;
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
 
-                if ui.button("Cancel").clicked() {
-                    state.confirm_exit_popup_p = false;
-                }
+                    if ui.button("Cancel").clicked() {
+                        state.confirm_exit_popup_p = false;
+                    }
+                });
             });
     }
 
