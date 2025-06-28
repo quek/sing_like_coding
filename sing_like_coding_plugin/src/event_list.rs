@@ -52,6 +52,22 @@ impl EventListInput {
             .unwrap_or(std::ptr::null())
     }
 
+    pub fn midi(&mut self, value: u8, time: u32) {
+        let event = Box::new(clap_event_midi {
+            header: clap_event_header {
+                size: size_of::<clap_event_note>() as u32,
+                time,
+                space_id: CLAP_CORE_EVENT_SPACE_ID,
+                type_: CLAP_EVENT_MIDI,
+                flags: 0,
+            },
+            port_index: 0,
+            data: [value, 0, 0],
+        });
+        self.events
+            .push(Box::into_raw(event) as *const clap_event_header);
+    }
+
     pub fn note_on(&mut self, key: i16, channel: i16, velocity: f64, time: u32) {
         let velocity = velocity / 127.0;
         let event = Box::new(clap_event_note {

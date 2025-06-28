@@ -85,6 +85,9 @@ pub struct Plugin {
     host_params: clap_host_params,
     hwnd: isize,
     params: BTreeMap<clap_id, Param>,
+
+    next_clock_sample: f64,
+    play_p: bool,
 }
 
 pub const NAME: &CStr = cstr!("Sing Like Coding");
@@ -158,6 +161,9 @@ impl Plugin {
             host_params,
             hwnd,
             params: Default::default(),
+
+            next_clock_sample: 0.0,
+            play_p: false,
         });
 
         let ptr = this.as_mut().get_mut() as *mut _ as *mut c_void;
@@ -708,6 +714,25 @@ impl Plugin {
                             .param_value(event.param_id, event.value, delay);
                     }
                 }
+            }
+        }
+
+        {
+            if !self.play_p && context.play_p == 1 {
+                self.next_clock_sample = 0.0;
+                self.event_list_input.midi(0xFA, 0);
+            } else if self.play_p && context.play_p == 0 {
+                self.event_list_input.midi(0xFC, 0);
+            }
+            self.play_p = context.play_p == 1;
+            if self.play_p {
+                let samples_per_clock = context.sample_rate / ((context.bpm / 60.0) * 24.0);
+                while self.next_clock_sample < context.nframes as f64 {
+                    let frame = self.next_clock_sample as u32;
+                    self.event_list_input.midi(0xF8, frame);
+                    self.next_clock_sample += samples_per_clock;
+                }
+                self.next_clock_sample -= context.nframes as f64;
             }
         }
 
