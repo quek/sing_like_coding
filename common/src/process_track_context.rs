@@ -14,6 +14,8 @@ pub struct ProcessTrackContext {
     pub loop_range: Range<usize>,
     pub on_keys: Vec<Option<i16>>,
     pub event_list_input: Vec<Event>,
+    pub line_offset: isize,
+    pub line_offset_stack: Vec<isize>,
     pub plugins: Vec<PluginRef>,
 }
 

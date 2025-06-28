@@ -61,12 +61,36 @@ impl Track {
         if !context.play_p {
             return;
         }
+        let position_offset = context.line_offset * 0x100;
         let ranges = if context.play_position.start < context.play_position.end {
-            vec![context.play_position.clone()]
+            vec![
+                context
+                    .play_position
+                    .start
+                    .saturating_add_signed(position_offset)
+                    ..context
+                        .play_position
+                        .end
+                        .saturating_add_signed(position_offset),
+            ]
         } else {
             vec![
-                context.play_position.start..context.loop_range.end,
-                context.loop_range.start..context.play_position.end,
+                context
+                    .play_position
+                    .start
+                    .saturating_add_signed(position_offset)
+                    ..context
+                        .loop_range
+                        .end
+                        .saturating_add_signed(position_offset),
+                context
+                    .loop_range
+                    .start
+                    .saturating_add_signed(position_offset)
+                    ..context
+                        .play_position
+                        .end
+                        .saturating_add_signed(position_offset),
             ]
         };
         for range in ranges {
@@ -111,13 +135,18 @@ impl Track {
                                 }
                             }
                             LaneItem::Label(_) => {
-                                // TODO
+                                // 何もしなくていいよね
                             }
-                            LaneItem::Call(_) => {
-                                // TODO
+                            LaneItem::Call(label) => {
+                                if let Some(line_label) = self.label_find(label) {
+                                    context.line_offset_stack.push(context.line_offset);
+                                    context.line_offset = line_label as isize - *line as isize;
+                                }
                             }
                             LaneItem::Ret => {
-                                // TODO
+                                if let Some(line_offset) = context.line_offset_stack.pop() {
+                                    context.line_offset = line_offset;
+                                }
                             }
                         }
                     }
@@ -171,6 +200,17 @@ impl Track {
             }
         }
         Ok(())
+    }
+
+    fn label_find(&self, label: &str) -> Option<usize> {
+        for lane in self.lanes.iter() {
+            for (line, item) in lane.items.iter() {
+                if matches!(item, LaneItem::Label(x) if x == label) {
+                    return Some(*line);
+                }
+            }
+        }
+        None
     }
 
     pub fn lane_add(&mut self) {

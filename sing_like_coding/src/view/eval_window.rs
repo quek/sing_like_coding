@@ -26,6 +26,7 @@ impl EvalWindow {
                 if ui.input(|i| i.key_pressed(Key::Enter)) {
                     state.eval_window_open_p = false;
                     state.eval(&self.buffer)?;
+                    self.buffer.clear();
                 }
 
                 if ui.input(|i| i.key_pressed(Key::Escape)) {
