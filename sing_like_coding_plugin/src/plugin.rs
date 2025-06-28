@@ -690,7 +690,6 @@ impl Plugin {
             tsig_num: 4,
             tsig_denom: 4,
         };
-        // self.event_list_input.transport(transport.clone());
 
         let samples_per_delay =
             (context.sample_rate * 60.0) / (context.bpm * context.lpb as f64 * 256.0);

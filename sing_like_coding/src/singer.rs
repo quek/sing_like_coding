@@ -266,8 +266,8 @@ impl Singer {
                     process_data.song_pos_seconds = (process_data.song_pos_beats as f64
                         * (60.0 / process_data.bpm))
                         as clap_sectime;
-                    process_data.loop_start_beats = song_state.loop_start as i64;
-                    process_data.loop_end_beats = song_state.loop_end as i64;
+                    process_data.loop_start_beats = song_state.loop_start as i64 / 0x100;
+                    process_data.loop_end_beats = song_state.loop_end as i64 / 0x100;
                     process_data.loop_start_seconds = (process_data.loop_start_beats as f64
                         * (60.0 / process_data.bpm))
                         as clap_sectime;
