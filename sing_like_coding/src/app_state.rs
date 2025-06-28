@@ -27,6 +27,7 @@ use shared_memory::Shmem;
 use crate::{
     command::{track_add::TrackAdd, Command},
     config::Config,
+    eval::Eval,
     midi_device::MidiDevice,
     model::{lane_item::LaneItem, note::Note, song::Song, track::Track},
     singer::{AudioToMain, MainToAudio},
@@ -41,6 +42,7 @@ use crate::{
 pub enum UiCommand {
     Command,
     Digit(i32),
+    EvalWindowOpen,
     FocusedPartNext,
     FocusedPartPrev,
     Follow,
@@ -256,6 +258,7 @@ pub struct AppState<'a> {
     pub now: Instant,
     pub elapsed: f32,
     digit: Option<i32>,
+    pub eval_window_open_p: bool,
     pub focused_part: FocusedPart,
     pub follow_p: bool,
     pub cursor_track: CursorTrack,
@@ -314,6 +317,7 @@ impl<'a> AppState<'a> {
             now: Instant::now(),
             elapsed: 0.0,
             digit: None,
+            eval_window_open_p: false,
             focused_part: FocusedPart::Lane,
             follow_p: true,
             cursor_track: CursorTrack {
@@ -413,6 +417,19 @@ impl<'a> AppState<'a> {
         for _ in 0..self.digit.unwrap_or(1) {
             self.cursor_track = self.cursor_track.right(&self.song);
         }
+    }
+
+    pub fn eval(&mut self, buffer: &str) -> Result<()> {
+        Eval::eval(buffer, self)?;
+        Ok(())
+    }
+
+    pub fn label_set(&mut self, label: String) -> Result<()> {
+        self.send_to_audio(MainToAudio::LaneItem(vec![(
+            self.cursor_track.clone(),
+            Some(LaneItem::Label(label)),
+        )]))?;
+        Ok(())
     }
 
     fn loop_range(&mut self) -> Result<()> {
@@ -669,6 +686,9 @@ impl<'a> AppState<'a> {
                 } else {
                     self.digit = Some(*digit);
                 }
+            }
+            UiCommand::EvalWindowOpen => {
+                self.eval_window_open_p = true;
             }
             UiCommand::Follow => {
                 self.follow_p = !self.follow_p;
@@ -1274,6 +1294,7 @@ impl<'a> AppState<'a> {
                     LaneItem::Point(point) => {
                         point.value = (point.value as i16 + value_delta).clamp(0, 0xff) as u8;
                     }
+                    LaneItem::Label(_) => {}
                 }
                 commands.push((cursor, Some(lane_item)));
             }
@@ -1291,6 +1312,7 @@ impl<'a> AppState<'a> {
                     LaneItem::Point(point) => {
                         point.value = (point.value as i16 + value_delta).clamp(0, 0xff) as u8;
                     }
+                    LaneItem::Label(_) => {}
                 }
                 lane_item
             } else if off {

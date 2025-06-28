@@ -1,5 +1,6 @@
 mod command_view;
 mod db_slider;
+mod eval_window;
 mod knob;
 pub mod main_view;
 pub mod param_select_view;

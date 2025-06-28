@@ -110,6 +110,9 @@ impl Track {
                                     ))
                                 }
                             }
+                            LaneItem::Label(_) => {
+                                // TODO
+                            }
                         }
                     }
                 }

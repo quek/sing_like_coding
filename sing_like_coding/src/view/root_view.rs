@@ -14,6 +14,7 @@ use crate::{
 
 use super::{
     command_view::CommandView,
+    eval_window::EvalWindow,
     main_view::MainView,
     param_select_view::ParamSelectView,
     plugin_select_view::{self, PluginSelectView},
@@ -44,6 +45,7 @@ impl SelectItem for MidiPort {
 }
 
 pub struct RootView {
+    eval_window: EvalWindow,
     shortcut_map: HashMap<(Modifier, Key), UiCommand>,
     main_view: MainView,
     command_view: CommandView,
@@ -61,11 +63,13 @@ impl RootView {
             ((Modifier::None, Key::Slash), UiCommand::Command),
             ((Modifier::None, Key::V), UiCommand::FocusedPartNext),
             ((Modifier::S, Key::V), UiCommand::FocusedPartPrev),
+            ((Modifier::None, Key::Q), UiCommand::EvalWindowOpen),
         ];
 
         let shortcut_map: HashMap<_, _> = shortcut_map.into_iter().collect();
 
         Self {
+            eval_window: EvalWindow::new(),
             shortcut_map,
             main_view: MainView::new(),
             command_view: CommandView::new(),
@@ -84,6 +88,10 @@ impl RootView {
     ) -> Result<()> {
         state.song_next_apply()?;
         self.process_shortcut(state, gui_context)?;
+
+        if state.eval_window_open_p {
+            self.eval_window.view(gui_context, state)?;
+        }
 
         state.receive_from_communicator()?;
 

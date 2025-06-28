@@ -791,6 +791,9 @@ impl MainView {
                             .unwrap_or("---".to_string());
                         format!("{} {:02X} {:02X}", param, point.value, point.delay)
                     }
+                    Some(LaneItem::Label(label)) => {
+                        format!("'{:<8}", label)
+                    }
                     None => "         ".to_string(),
                 };
 

@@ -5,6 +5,7 @@ mod commander;
 mod communicator;
 mod config;
 mod device;
+mod eval;
 mod midi_device;
 mod model;
 mod singer;
