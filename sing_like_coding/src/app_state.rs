@@ -424,10 +424,26 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    pub fn label_set(&mut self, label: String) -> Result<()> {
+    pub fn eval_call(&mut self, label: String) -> Result<()> {
+        self.send_to_audio(MainToAudio::LaneItem(vec![(
+            self.cursor_track.clone(),
+            Some(LaneItem::Call(label)),
+        )]))?;
+        Ok(())
+    }
+
+    pub fn eval_label(&mut self, label: String) -> Result<()> {
         self.send_to_audio(MainToAudio::LaneItem(vec![(
             self.cursor_track.clone(),
             Some(LaneItem::Label(label)),
+        )]))?;
+        Ok(())
+    }
+
+    pub fn eval_ret(&mut self) -> Result<()> {
+        self.send_to_audio(MainToAudio::LaneItem(vec![(
+            self.cursor_track.clone(),
+            Some(LaneItem::Ret),
         )]))?;
         Ok(())
     }
@@ -1295,6 +1311,8 @@ impl<'a> AppState<'a> {
                         point.value = (point.value as i16 + value_delta).clamp(0, 0xff) as u8;
                     }
                     LaneItem::Label(_) => {}
+                    LaneItem::Call(_) => {}
+                    LaneItem::Ret => {}
                 }
                 commands.push((cursor, Some(lane_item)));
             }
@@ -1313,6 +1331,8 @@ impl<'a> AppState<'a> {
                         point.value = (point.value as i16 + value_delta).clamp(0, 0xff) as u8;
                     }
                     LaneItem::Label(_) => {}
+                    LaneItem::Call(_) => {}
+                    LaneItem::Ret => {}
                 }
                 lane_item
             } else if off {

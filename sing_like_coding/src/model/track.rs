@@ -113,6 +113,12 @@ impl Track {
                             LaneItem::Label(_) => {
                                 // TODO
                             }
+                            LaneItem::Call(_) => {
+                                // TODO
+                            }
+                            LaneItem::Ret => {
+                                // TODO
+                            }
                         }
                     }
                 }

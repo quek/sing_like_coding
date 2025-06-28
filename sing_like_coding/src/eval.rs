@@ -30,10 +30,18 @@ impl Eval {
         }
         if let Some(Word::Word(word)) = stack.pop() {
             match word {
+                "call" => {
+                    if let Some(word) = stack.pop() {
+                        state.eval_call(word.to_string())?;
+                    }
+                }
                 "label" => {
                     if let Some(word) = stack.pop() {
-                        state.label_set(word.to_string())?;
+                        state.eval_label(word.to_string())?;
                     }
+                }
+                "ret" => {
+                    state.eval_ret()?;
                 }
                 _ => {}
             }

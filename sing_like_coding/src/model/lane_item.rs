@@ -6,7 +6,9 @@ use super::{note::Note, point::Point};
 pub enum LaneItem {
     Note(Note),
     Point(Point),
+    Call(String),
     Label(String),
+    Ret,
 }
 
 impl LaneItem {
@@ -14,7 +16,9 @@ impl LaneItem {
         match self {
             LaneItem::Note(Note { delay, .. }) => *delay,
             LaneItem::Point(Point { delay, .. }) => *delay,
+            LaneItem::Call(_) => 0,
             LaneItem::Label(_) => 0,
+            LaneItem::Ret => 0,
         }
     }
 }
