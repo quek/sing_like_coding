@@ -3,9 +3,9 @@ use std::{ffi::c_void, pin::Pin, ptr::null_mut};
 use clap_sys::{
     events::{
         clap_event_header, clap_event_midi, clap_event_note, clap_event_param_value,
-        clap_input_events, clap_output_events, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI,
-        CLAP_EVENT_MIDI2, CLAP_EVENT_MIDI_SYSEX, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_END,
-        CLAP_EVENT_NOTE_EXPRESSION, CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON,
+        clap_event_transport, clap_input_events, clap_output_events, CLAP_CORE_EVENT_SPACE_ID,
+        CLAP_EVENT_MIDI, CLAP_EVENT_MIDI2, CLAP_EVENT_MIDI_SYSEX, CLAP_EVENT_NOTE_CHOKE,
+        CLAP_EVENT_NOTE_END, CLAP_EVENT_NOTE_EXPRESSION, CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON,
         CLAP_EVENT_PARAM_GESTURE_BEGIN, CLAP_EVENT_PARAM_GESTURE_END, CLAP_EVENT_PARAM_MOD,
         CLAP_EVENT_PARAM_VALUE, CLAP_EVENT_TRANSPORT,
     },
@@ -130,6 +130,9 @@ impl EventListInput {
                         CLAP_EVENT_PARAM_VALUE => {
                             drop(Box::from_raw(ptr as *mut clap_event_param_value));
                         }
+                        CLAP_EVENT_TRANSPORT => {
+                            drop(Box::from_raw(ptr as *mut clap_event_transport));
+                        }
                         _ => {
                             unreachable!();
                         }
@@ -138,6 +141,12 @@ impl EventListInput {
             }
         }
         self.events.clear();
+    }
+
+    pub fn transport(&mut self, event: clap_event_transport) {
+        let event = Box::new(event);
+        self.events
+            .push(Box::into_raw(event) as *const clap_event_header);
     }
 }
 

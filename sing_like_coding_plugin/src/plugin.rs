@@ -662,7 +662,7 @@ impl Plugin {
         if context.loop_p != 0 {
             transport_flags |= CLAP_TRANSPORT_IS_LOOP_ACTIVE;
         }
-        let transport = Some(clap_event_transport {
+        let transport = clap_event_transport {
             header: clap_event_header {
                 size: size_of::<clap_event_transport>() as u32,
                 time: 0,
@@ -683,8 +683,8 @@ impl Plugin {
             bar_number: context.bar_number,
             tsig_num: 4,
             tsig_denom: 4,
-        });
-        dbg!(&transport);
+        };
+        // self.event_list_input.transport(transport.clone());
 
         let samples_per_delay =
             (context.sample_rate * 60.0) / (context.bpm * context.lpb as f64 * 256.0);
@@ -717,7 +717,7 @@ impl Plugin {
         let prc = clap_process {
             steady_time: context.steady_time,
             frames_count: context.nframes as u32,
-            transport: transport.as_ref().map(|x| x as *const _).unwrap_or(null()),
+            transport: &transport,
             audio_inputs: audio_inputs.as_mut_ptr(),
             audio_outputs: audio_outputs.as_mut_ptr(),
             audio_inputs_count: audio_inputs.len() as u32,
