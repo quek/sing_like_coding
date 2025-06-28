@@ -1,4 +1,7 @@
-use clap_sys::id::clap_id;
+use clap_sys::{
+    fixedpoint::{clap_beattime, clap_sectime},
+    id::clap_id,
+};
 
 use crate::dsp::linear_to_db;
 
@@ -11,10 +14,22 @@ pub const MAX_PORTS: usize = 8;
 pub struct ProcessData {
     pub nframes: usize,
     pub play_p: u8,
+    pub loop_p: u8,
     pub bpm: f64,
     pub lpb: u16,
     pub sample_rate: f64,
     pub steady_time: i64,
+
+    // clap_event_transport
+    pub song_pos_beats: clap_beattime,
+    pub song_pos_seconds: clap_sectime,
+    pub loop_start_beats: clap_beattime,
+    pub loop_end_beats: clap_beattime,
+    pub loop_start_seconds: clap_sectime,
+    pub loop_end_seconds: clap_sectime,
+    pub bar_start: clap_beattime,
+    pub bar_number: i32,
+
     pub nevents_input: usize,
     pub events_input: [Event; MAX_EVENTS],
     pub nevents_output: usize,
@@ -54,10 +69,19 @@ impl ProcessData {
         Self {
             nframes: MAX_FRAMES,
             play_p: 0,
+            loop_p: 0,
             bpm: 120.0,
             lpb: 4,
             sample_rate: 48000.0,
             steady_time: 0,
+            song_pos_beats: 0,
+            song_pos_seconds: 0,
+            loop_start_beats: 0,
+            loop_end_beats: 0,
+            loop_start_seconds: 0,
+            loop_end_seconds: 0,
+            bar_start: 0,
+            bar_number: 0,
             nevents_input: 0,
             events_input: [Event {
                 kind: EventKind::NoteOn,

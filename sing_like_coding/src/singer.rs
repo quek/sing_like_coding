@@ -25,7 +25,10 @@ use crate::{
 };
 
 use anyhow::Result;
-use clap_sys::id::clap_id;
+use clap_sys::{
+    fixedpoint::{clap_beattime, clap_sectime},
+    id::clap_id,
+};
 use common::{
     event::Event,
     module::{AudioInput, Module, ModuleId, ModuleIndex},
@@ -251,12 +254,29 @@ impl Singer {
                 let mut context = self.process_track_contexts[track_index].lock().unwrap();
                 for module_index in 0..context.plugins.len() {
                     let process_data = context.plugins[module_index].process_data_mut();
+                    let song_state = self.song_state();
                     process_data.nframes = nframes;
-                    process_data.play_p = if self.song_state().play_p { 1 } else { 0 };
+                    process_data.play_p = if song_state.play_p { 1 } else { 0 };
+                    process_data.loop_p = if song_state.loop_p { 1 } else { 0 };
                     process_data.bpm = self.song.bpm;
                     process_data.lpb = self.song.lpb;
                     process_data.sample_rate = self.song.sample_rate;
                     process_data.steady_time = self.steady_time;
+                    process_data.song_pos_beats = song_state.line_play as clap_beattime;
+                    process_data.song_pos_seconds = (process_data.song_pos_beats as f64
+                        * (60.0 / process_data.bpm))
+                        as clap_sectime;
+                    process_data.loop_start_beats = song_state.loop_start as i64;
+                    process_data.loop_end_beats = song_state.loop_end as i64;
+                    process_data.loop_start_seconds = (process_data.loop_start_beats as f64
+                        * (60.0 / process_data.bpm))
+                        as clap_sectime;
+                    process_data.loop_end_seconds = (process_data.loop_end_beats as f64
+                        * (60.0 / process_data.bpm))
+                        as clap_sectime;
+                    process_data.bar_number =
+                        (process_data.song_pos_beats / self.song.lpb as i64) as i32;
+                    process_data.bar_start = process_data.bar_number as i64 * self.song.lpb as i64;
                     process_data.prepare();
                 }
 

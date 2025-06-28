@@ -13,7 +13,9 @@ use clap_sys::{
     entry::clap_plugin_entry,
     events::{
         clap_event_header, clap_event_transport, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_TRANSPORT,
-        CLAP_TRANSPORT_HAS_TEMPO, CLAP_TRANSPORT_IS_PLAYING,
+        CLAP_TRANSPORT_HAS_BEATS_TIMELINE, CLAP_TRANSPORT_HAS_SECONDS_TIMELINE,
+        CLAP_TRANSPORT_HAS_TEMPO, CLAP_TRANSPORT_HAS_TIME_SIGNATURE, CLAP_TRANSPORT_IS_LOOP_ACTIVE,
+        CLAP_TRANSPORT_IS_PLAYING,
     },
     ext::{
         audio_ports::{
@@ -650,32 +652,39 @@ impl Plugin {
             buffer_keeps.push(out_buffer);
         }
 
-        let transport = if context.play_p != 0 {
-            Some(clap_event_transport {
-                header: clap_event_header {
-                    size: size_of::<clap_event_transport>() as u32,
-                    time: 0,
-                    space_id: CLAP_CORE_EVENT_SPACE_ID,
-                    type_: CLAP_EVENT_TRANSPORT,
-                    flags: 0,
-                },
-                flags: CLAP_TRANSPORT_HAS_TEMPO | CLAP_TRANSPORT_IS_PLAYING,
-                song_pos_beats: 0,
-                song_pos_seconds: 0,
-                tempo: context.bpm,
-                tempo_inc: 0.0,
-                loop_start_beats: 0,
-                loop_end_beats: 0,
-                loop_start_seconds: 0,
-                loop_end_seconds: 0,
-                bar_start: 0,
-                bar_number: 0,
-                tsig_num: 4,
-                tsig_denom: 4,
-            })
-        } else {
-            None
-        };
+        let mut transport_flags = CLAP_TRANSPORT_HAS_TEMPO
+            | CLAP_TRANSPORT_HAS_BEATS_TIMELINE
+            | CLAP_TRANSPORT_HAS_SECONDS_TIMELINE
+            | CLAP_TRANSPORT_HAS_TIME_SIGNATURE;
+        if context.play_p != 0 {
+            transport_flags |= CLAP_TRANSPORT_IS_PLAYING;
+        }
+        if context.loop_p != 0 {
+            transport_flags |= CLAP_TRANSPORT_IS_LOOP_ACTIVE;
+        }
+        let transport = Some(clap_event_transport {
+            header: clap_event_header {
+                size: size_of::<clap_event_transport>() as u32,
+                time: 0,
+                space_id: CLAP_CORE_EVENT_SPACE_ID,
+                type_: CLAP_EVENT_TRANSPORT,
+                flags: 0,
+            },
+            flags: transport_flags,
+            song_pos_beats: context.song_pos_beats,
+            song_pos_seconds: context.song_pos_seconds,
+            tempo: context.bpm,
+            tempo_inc: 0.0,
+            loop_start_beats: context.loop_start_beats,
+            loop_end_beats: context.loop_end_beats,
+            loop_start_seconds: context.loop_start_seconds,
+            loop_end_seconds: context.loop_end_seconds,
+            bar_start: context.bar_start,
+            bar_number: context.bar_number,
+            tsig_num: 4,
+            tsig_denom: 4,
+        });
+        dbg!(&transport);
 
         let samples_per_delay =
             (context.sample_rate * 60.0) / (context.bpm * context.lpb as f64 * 256.0);
