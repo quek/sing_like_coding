@@ -61,97 +61,78 @@ impl Track {
         if !context.play_p {
             return;
         }
-        let position_offset = context.line_offset * 0x100;
-        let ranges = if context.play_position.start < context.play_position.end {
-            vec![
-                context
-                    .play_position
-                    .start
-                    .saturating_add_signed(position_offset)
-                    ..context
-                        .play_position
-                        .end
-                        .saturating_add_signed(position_offset),
-            ]
+        if context.play_position.start < context.play_position.end {
+            self.compute_midi_range(context, context.play_position.clone());
         } else {
-            vec![
-                context
-                    .play_position
-                    .start
-                    .saturating_add_signed(position_offset)
-                    ..context
-                        .loop_range
-                        .end
-                        .saturating_add_signed(position_offset),
-                context
-                    .loop_range
-                    .start
-                    .saturating_add_signed(position_offset)
-                    ..context
-                        .play_position
-                        .end
-                        .saturating_add_signed(position_offset),
-            ]
+            self.compute_midi_range(context, context.play_position.start..context.loop_range.end);
+            self.compute_midi_range(context, context.loop_range.start..context.play_position.end);
         };
-        for range in ranges {
-            let line_start = range.start / 0x100;
-            let line_end = range.end / 0x100;
-            for line in line_start..=line_end {
-                for (lane_index, lane) in self.lanes.iter().enumerate() {
-                    if let Some((line, item)) = lane.items.get_key_value(&line) {
-                        let time = *line * 0x100 + item.delay() as usize;
-                        match item {
-                            LaneItem::Note(note) => {
-                                if range.contains(&time) {
-                                    let delay = time - range.start;
-                                    if let Some(Some(key)) = context.on_keys.get(lane_index).take()
-                                    {
-                                        context.event_list_input.push(Event::NoteOff(*key, delay));
+    }
+
+    pub fn compute_midi_range(&self, context: &mut ProcessTrackContext, r: Range<usize>) {
+        let range = r.start.saturating_add_signed(context.line_offset * 0x100)
+            ..r.end.saturating_add_signed(context.line_offset * 0x100);
+        if range.is_empty() {
+            return;
+        }
+        let line_start = range.start / 0x100;
+        let line_end = range.end / 0x100;
+        for line in line_start..=line_end {
+            let mut events = vec![];
+            for (lane_index, lane) in self.lanes.iter().enumerate() {
+                if let Some((line, item)) = lane.items.get_key_value(&line) {
+                    let time = *line * 0x100 + item.delay() as usize;
+                    match item {
+                        LaneItem::Note(note) => {
+                            if range.contains(&time) {
+                                let delay = time - range.start;
+                                if let Some(Some(key)) = context.on_keys.get(lane_index).take() {
+                                    events.push(Event::NoteOff(*key, delay));
+                                }
+                                if !note.off {
+                                    events.push(Event::NoteOn(note.key, note.velocity, delay));
+                                    if context.on_keys.len() <= lane_index {
+                                        context.on_keys.resize_with(lane_index + 1, || None);
                                     }
-                                    if !note.off {
-                                        context.event_list_input.push(Event::NoteOn(
-                                            note.key,
-                                            note.velocity,
-                                            delay,
-                                        ));
-                                        if context.on_keys.len() <= lane_index {
-                                            context.on_keys.resize_with(lane_index + 1, || None);
-                                        }
-                                        context.on_keys[lane_index] = Some(note.key);
-                                    }
+                                    context.on_keys[lane_index] = Some(note.key);
                                 }
                             }
-                            LaneItem::Point(point) => {
-                                if range.contains(&time) {
-                                    let delay = time - range.start;
-                                    let (module_index, param_id) =
-                                        self.automation_params[point.automation_params_index];
-                                    context.event_list_input.push(Event::ParamValue(
-                                        module_index,
-                                        param_id,
-                                        point.value as f64 / 255.0,
-                                        delay,
-                                    ))
-                                }
+                        }
+                        LaneItem::Point(point) => {
+                            if range.contains(&time) {
+                                let delay = time - range.start;
+                                let (module_index, param_id) =
+                                    self.automation_params[point.automation_params_index];
+                                events.push(Event::ParamValue(
+                                    module_index,
+                                    param_id,
+                                    point.value as f64 / 255.0,
+                                    delay,
+                                ))
                             }
-                            LaneItem::Label(_) => {
-                                // 何もしなくていいよね
+                        }
+                        LaneItem::Label(_) => {
+                            // 何もしなくていいよね
+                        }
+                        LaneItem::Call(label) => {
+                            if let Some(line_label) = self.label_find(label) {
+                                context.line_offset_stack.push(context.line_offset);
+                                context.line_offset = line_label as isize - *line as isize;
+                                self.compute_midi_range(context, r.clone());
+                                return;
                             }
-                            LaneItem::Call(label) => {
-                                if let Some(line_label) = self.label_find(label) {
-                                    context.line_offset_stack.push(context.line_offset);
-                                    context.line_offset = line_label as isize - *line as isize;
-                                }
-                            }
-                            LaneItem::Ret => {
-                                if let Some(line_offset) = context.line_offset_stack.pop() {
-                                    context.line_offset = line_offset;
-                                }
+                        }
+                        LaneItem::Ret => {
+                            if let Some(line_offset) = context.line_offset_stack.pop() {
+                                context.line_offset = line_offset;
+                                self.compute_midi_range(context, r.clone());
+                                return;
                             }
                         }
                     }
                 }
             }
+            context.event_list_input.append(&mut events);
         }
     }
 
