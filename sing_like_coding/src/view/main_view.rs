@@ -59,6 +59,7 @@ impl MainView {
             ((Modifier::CS, Key::T), UiCommand::LaneAdd),
             ((Modifier::C, Key::Z), UiCommand::Undo),
             ((Modifier::CS, Key::Z), UiCommand::Redo),
+            ((Modifier::None, Key::Period), UiCommand::Repeat),
         ];
         let shortcut_map_track = [
             (
@@ -275,7 +276,7 @@ impl MainView {
                 UiCommand::Lane(LaneCommand::SelectMode),
             ),
             (
-                (Modifier::None, Key::Period),
+                (Modifier::None, Key::N),
                 UiCommand::Lane(LaneCommand::LaneItemUpdate(0, 0, 0, true, 0)),
             ),
             (

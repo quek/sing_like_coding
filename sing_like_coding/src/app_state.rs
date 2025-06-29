@@ -39,9 +39,10 @@ use crate::{
     },
 };
 
+#[derive(Clone)]
 pub enum UiCommand {
     Command,
-    Digit(i32),
+    Digit(i64),
     EvalWindowOpen,
     FocusedPartNext,
     FocusedPartPrev,
@@ -56,6 +57,7 @@ pub enum UiCommand {
     PlayToggle,
     RecToggle,
     Redo,
+    Repeat,
     SongSave,
     Track(TrackCommand),
     TrackAdd,
@@ -66,8 +68,10 @@ pub enum UiCommand {
     TrackSolo(Option<usize>, Option<bool>),
     TrackVolume(usize, f32),
     Undo,
+    Nop,
 }
 
+#[derive(Clone)]
 pub enum TrackCommand {
     Copy,
     CursorLeft,
@@ -81,6 +85,7 @@ pub enum TrackCommand {
     Rename,
 }
 
+#[derive(Clone)]
 pub enum LaneCommand {
     AutomationParamSelect,
     Copy,
@@ -99,6 +104,7 @@ pub enum LaneCommand {
     SelectClear,
 }
 
+#[derive(Clone)]
 pub enum ModuleCommand {
     CursorUp,
     CursorDown,
@@ -109,6 +115,7 @@ pub enum ModuleCommand {
     Sidechain,
 }
 
+#[derive(Clone)]
 pub enum MixerCommand {
     CursorLeft,
     CursorRight,
@@ -257,7 +264,7 @@ pub struct AppState<'a> {
     pub confirm_exit_popup_focus_request_p: bool,
     pub now: Instant,
     pub elapsed: f32,
-    digit: Option<i32>,
+    digit: Option<i64>,
     pub eval_window_open_p: bool,
     pub focused_part: FocusedPart,
     pub follow_p: bool,
@@ -283,6 +290,7 @@ pub struct AppState<'a> {
     receiver_communicator_to_main_thread: Receiver<PluginToMain>,
     _song_state_shmem: Shmem,
     pub song_state: &'a SongState,
+    ui_command_last: UiCommand,
     callbacks_plugin_to_main: VecDeque<Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>>>,
     pub gui_context: Option<eframe::egui::Context>,
 
@@ -346,6 +354,7 @@ impl<'a> AppState<'a> {
             receiver_communicator_to_main_thread,
             _song_state_shmem: song_state_shmem,
             song_state,
+            ui_command_last: UiCommand::Nop,
             callbacks_plugin_to_main: Default::default(),
             gui_context: None,
 
@@ -690,9 +699,10 @@ impl<'a> AppState<'a> {
     }
 
     pub fn run_ui_command(&mut self, command: &UiCommand) -> Result<()> {
+        let command = command.clone();
         let digit = self.digit.clone();
         let track_index_last = self.cursor_track.track;
-        match command {
+        match &command {
             UiCommand::Command => {
                 self.route = Route::Command;
             }
@@ -746,7 +756,7 @@ impl<'a> AppState<'a> {
             }
             UiCommand::Redo => self.redo()?,
             UiCommand::SongSave => self.song_save()?,
-            UiCommand::Track(command) => self.run_track_command(command)?,
+            UiCommand::Track(command) => self.run_track_command(&command)?,
             UiCommand::TrackAdd => {
                 TrackAdd {}.call(self)?;
             }
@@ -781,7 +791,10 @@ impl<'a> AppState<'a> {
             }
             UiCommand::Lane(LaneCommand::Copy) => self.lane_items_copy()?,
             UiCommand::Lane(LaneCommand::Cut) => self.late_items_cut()?,
-            UiCommand::Lane(LaneCommand::Paste) => self.lane_items_paste()?,
+            UiCommand::Lane(LaneCommand::Paste) => {
+                self.lane_items_paste()?;
+                self.ui_command_last = command;
+            }
             UiCommand::Lane(LaneCommand::CursorUp) => self.cursor_up(),
             UiCommand::Lane(LaneCommand::CursorDown) => self.cursor_down(),
             UiCommand::Lane(LaneCommand::CursorLeft) => self.cursor_left(),
@@ -795,7 +808,12 @@ impl<'a> AppState<'a> {
                 )]))?;
             }
             UiCommand::Lane(LaneCommand::LaneItemMove(lane_delta, line_delta)) => {
-                self.lane_items_move(*lane_delta, *line_delta)?;
+                let digit = self.digit.unwrap_or(1);
+                let lane_delta = *lane_delta * digit;
+                let line_delta = *line_delta * digit;
+                self.lane_items_move(lane_delta, line_delta)?;
+                self.ui_command_last =
+                    UiCommand::Lane(LaneCommand::LaneItemMove(lane_delta, line_delta));
             }
             UiCommand::Lane(LaneCommand::LaneItemUpdate(
                 key_delta,
@@ -811,6 +829,11 @@ impl<'a> AppState<'a> {
                     *off,
                     *value_delta,
                 )?;
+                self.ui_command_last = command;
+            }
+            UiCommand::Repeat => {
+                let command = &self.ui_command_last.clone();
+                self.run_ui_command(&command)?;
             }
             UiCommand::Lane(LaneCommand::SelectMode) => {
                 self.select_p = !self.select_p;
@@ -902,6 +925,7 @@ impl<'a> AppState<'a> {
                     ))?;
                 }
             }
+            UiCommand::Nop => {}
         }
         if self.digit == digit {
             self.digit = None;
@@ -1214,8 +1238,10 @@ impl<'a> AppState<'a> {
         let mut commands = vec![];
         let mut clipboard = Clipboard::new().unwrap();
         if let Ok(text) = clipboard.get_text() {
-            let mut cursor = self.cursor_track.clone();
             if let Ok(itemss) = serde_json::from_str::<Vec<Vec<Option<LaneItem>>>>(&text) {
+                let mut cursor = self.cursor_track.clone();
+                let mut line_next = cursor.line;
+
                 for items in itemss.into_iter() {
                     for item in items.into_iter() {
                         if let Some(item) = item {
@@ -1225,9 +1251,12 @@ impl<'a> AppState<'a> {
                         }
                         cursor = cursor.down(&self.song);
                     }
+                    line_next = cursor.line;
                     cursor = cursor.right(&self.song);
                     cursor.line = self.cursor_track.line;
                 }
+
+                self.cursor_track.line = line_next;
             }
         }
 
