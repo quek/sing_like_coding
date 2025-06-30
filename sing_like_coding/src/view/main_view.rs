@@ -267,6 +267,38 @@ impl MainView {
                 (Modifier::None, Key::ArrowRight),
                 UiCommand::Lane(LaneCommand::CursorRight),
             ),
+            (
+                (Modifier::S, Key::J),
+                UiCommand::Lane(LaneCommand::CursorDownItem),
+            ),
+            (
+                (Modifier::S, Key::ArrowDown),
+                UiCommand::Lane(LaneCommand::CursorDownItem),
+            ),
+            (
+                (Modifier::S, Key::K),
+                UiCommand::Lane(LaneCommand::CursorUpItem),
+            ),
+            (
+                (Modifier::S, Key::ArrowUp),
+                UiCommand::Lane(LaneCommand::CursorUpItem),
+            ),
+            (
+                (Modifier::S, Key::H),
+                UiCommand::Lane(LaneCommand::CursorLeftItem),
+            ),
+            (
+                (Modifier::S, Key::ArrowLeft),
+                UiCommand::Lane(LaneCommand::CursorLeftItem),
+            ),
+            (
+                (Modifier::S, Key::L),
+                UiCommand::Lane(LaneCommand::CursorRightItem),
+            ),
+            (
+                (Modifier::S, Key::ArrowRight),
+                UiCommand::Lane(LaneCommand::CursorRightItem),
+            ),
             ((Modifier::C, Key::C), UiCommand::Lane(LaneCommand::Copy)),
             ((Modifier::C, Key::X), UiCommand::Lane(LaneCommand::Cut)),
             ((Modifier::C, Key::V), UiCommand::Lane(LaneCommand::Paste)),
@@ -769,7 +801,12 @@ impl MainView {
                             bg_color = Color32::LIGHT_BLUE;
                         }
                     }
-                };
+                } else if line % 0x10 == 0 {
+                    bg_color = Color32::from_rgb(0x10, 0x10, 0x10);
+                } else if line % 4 == 0 {
+                    bg_color = Color32::from_rgb(0x08, 0x08, 0x08);
+                }
+
                 let text = match state.song.tracks[track_index].lanes[lane_index].item(line) {
                     Some(LaneItem::Note(note)) if note.off => {
                         format!("{:<3}    {:02X}", note.note_name(), note.delay)

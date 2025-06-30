@@ -300,6 +300,10 @@ impl Singer {
                     }
                     self.song_state_mut().song_dirty_p = true;
                 }
+
+                if self.all_notef_off_p {
+                    context.event_list_input.push(Event::NoteAllOff);
+                }
             }
         }
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +6,7 @@ use super::lane_item::LaneItem;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lane {
-    pub items: HashMap<usize, LaneItem>,
+    pub items: BTreeMap<usize, LaneItem>,
 }
 
 impl Lane {

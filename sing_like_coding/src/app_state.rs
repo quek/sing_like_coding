@@ -29,7 +29,7 @@ use crate::{
     config::Config,
     eval::Eval,
     midi_device::MidiDevice,
-    model::{lane_item::LaneItem, note::Note, song::Song, track::Track},
+    model::{lane::Lane, lane_item::LaneItem, note::Note, song::Song, track::Track},
     singer::{AudioToMain, MainToAudio},
     song_state::SongState,
     util::midi_tick_to_line_delay,
@@ -94,6 +94,10 @@ pub enum LaneCommand {
     CursorLeft,
     CursorRight,
     CursorUp,
+    CursorDownItem,
+    CursorLeftItem,
+    CursorRightItem,
+    CursorUpItem,
     Go,
     Dup,
     LaneItemDelete,
@@ -402,9 +406,48 @@ impl<'a> AppState<'a> {
         }
     }
 
+    pub fn cursor_up_item(&mut self) {
+        if let Some(lane) = self.lane_at_cursor() {
+            let delta = self.digit.unwrap_or(1);
+            let keys: Vec<_> = lane.items.keys().copied().collect();
+            if keys.is_empty() {
+                return;
+            }
+            let pos = match keys.binary_search(&self.cursor_track.line) {
+                Ok(i) => i,
+                Err(i) => i,
+            };
+            let new_pos = pos.saturating_sub(delta as usize);
+            dbg!(pos, new_pos);
+            self.cursor_track.line = keys[new_pos];
+        }
+    }
+
     pub fn cursor_down(&mut self) {
         for _ in 0..self.digit.unwrap_or(1) {
             self.cursor_track = self.cursor_track.down(&self.song);
+        }
+    }
+
+    pub fn cursor_down_item(&mut self) {
+        if let Some(lane) = self.lane_at_cursor() {
+            let delta = self.digit.unwrap_or(1);
+            let keys: Vec<_> = lane.items.keys().copied().collect();
+            if keys.is_empty() {
+                return;
+            }
+            let pos = match keys.binary_search(&self.cursor_track.line) {
+                Ok(i) => i,
+                Err(i) => {
+                    if i > 0 {
+                        i - 1
+                    } else {
+                        0
+                    }
+                }
+            };
+            let new_pos = (pos.saturating_add_signed(delta as isize)).min(keys.len() - 1);
+            self.cursor_track.line = keys[new_pos];
         }
     }
 
@@ -422,7 +465,19 @@ impl<'a> AppState<'a> {
         }
     }
 
+    pub fn cursor_left_item(&mut self) {
+        for _ in 0..self.digit.unwrap_or(1) {
+            self.cursor_track = self.cursor_track.left(&self.song);
+        }
+    }
+
     pub fn cursor_right(&mut self) {
+        for _ in 0..self.digit.unwrap_or(1) {
+            self.cursor_track = self.cursor_track.right(&self.song);
+        }
+    }
+
+    pub fn cursor_right_item(&mut self) {
         for _ in 0..self.digit.unwrap_or(1) {
             self.cursor_track = self.cursor_track.right(&self.song);
         }
@@ -455,6 +510,17 @@ impl<'a> AppState<'a> {
             Some(LaneItem::Ret),
         )]))?;
         Ok(())
+    }
+
+    fn lane_at_cursor(&self) -> Option<&Lane> {
+        self.song
+            .tracks
+            .get(self.cursor_track.track)
+            .and_then(|x| x.lanes.get(self.cursor_track.lane))
+    }
+
+    fn lane_item_at_cursor(&self) -> Option<&LaneItem> {
+        self.song.lane_item(&self.cursor_track)
     }
 
     fn loop_range(&mut self) -> Result<()> {
@@ -799,6 +865,10 @@ impl<'a> AppState<'a> {
             UiCommand::Lane(LaneCommand::CursorDown) => self.cursor_down(),
             UiCommand::Lane(LaneCommand::CursorLeft) => self.cursor_left(),
             UiCommand::Lane(LaneCommand::CursorRight) => self.cursor_right(),
+            UiCommand::Lane(LaneCommand::CursorUpItem) => self.cursor_up_item(),
+            UiCommand::Lane(LaneCommand::CursorDownItem) => self.cursor_down_item(),
+            UiCommand::Lane(LaneCommand::CursorLeftItem) => self.cursor_left_item(),
+            UiCommand::Lane(LaneCommand::CursorRightItem) => self.cursor_right_item(),
             UiCommand::Lane(LaneCommand::Go) => self.cursor_go(),
             UiCommand::Lane(LaneCommand::Dup) => self.lane_items_dup()?,
             UiCommand::Lane(LaneCommand::LaneItemDelete) => {
