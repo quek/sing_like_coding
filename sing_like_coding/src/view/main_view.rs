@@ -60,7 +60,7 @@ impl MainView {
             ((Modifier::C, Key::Z), UiCommand::Undo),
             ((Modifier::CS, Key::Z), UiCommand::Redo),
             ((Modifier::None, Key::Period), UiCommand::Repeat),
-            ((Modifier::None, Key::M), UiCommand::LabelToggle),
+            ((Modifier::None, Key::Comma), UiCommand::LabelToggle),
         ];
         let shortcut_map_track = [
             (
@@ -428,9 +428,6 @@ impl MainView {
         state: &mut AppState,
         device: &mut Option<Device>,
     ) -> Result<()> {
-        if state.song_change_p {
-            self.song_change_did();
-        }
         // hovered の判定が1フレーム遅れるので。
         self.dropped_files = std::mem::take(&mut self.dropped_files_pre);
         self.dropped_files_pre = gui_context.input(|i| i.raw.dropped_files.clone());
@@ -584,6 +581,13 @@ impl MainView {
         //     )
         // );
 
+        if state.song_change_p {
+            self.height_line = 0.0;
+            self.height_mixer = 0.0;
+            self.height_modules = 0.0;
+            self.height_track_header = 0.0;
+        }
+
         line_range
     }
 
@@ -647,13 +651,6 @@ impl MainView {
         }
 
         Ok(())
-    }
-
-    fn song_change_did(&mut self) {
-        self.height_line = 0.0;
-        self.height_mixer = 0.0;
-        self.height_modules = 0.0;
-        self.height_track_header = 0.0;
     }
 
     fn stereo_peak_level_state(&mut self, track_index: usize) -> &mut StereoPeakLevelState {
