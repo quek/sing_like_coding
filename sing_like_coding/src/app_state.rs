@@ -466,8 +466,33 @@ impl<'a> AppState<'a> {
     }
 
     pub fn cursor_left_item(&mut self) {
-        for _ in 0..self.digit.unwrap_or(1) {
-            self.cursor_track = self.cursor_track.left(&self.song);
+        let mut delta = self.digit.unwrap_or(1);
+        let line = self.cursor_track.line;
+        let mut step = 0;
+
+        for track_index in (0..=self.cursor_track.track).rev() {
+            let lane_limit = if track_index == self.cursor_track.track {
+                self.cursor_track.lane
+            } else {
+                self.song.tracks[track_index].lanes.len()
+            };
+
+            for lane_index in (0..lane_limit).rev() {
+                if step > 0 {
+                    if self.song.tracks[track_index].lanes[lane_index]
+                        .items
+                        .contains_key(&line)
+                    {
+                        delta -= 1;
+                        self.cursor_track.track = track_index;
+                        self.cursor_track.lane = lane_index;
+                        if delta == 0 {
+                            return;
+                        }
+                    }
+                }
+                step = 1;
+            }
         }
     }
 
@@ -478,8 +503,26 @@ impl<'a> AppState<'a> {
     }
 
     pub fn cursor_right_item(&mut self) {
-        for _ in 0..self.digit.unwrap_or(1) {
-            self.cursor_track = self.cursor_track.right(&self.song);
+        let mut delta = self.digit.unwrap_or(1);
+        let mut lane_start = self.cursor_track.lane;
+        let line = self.cursor_track.line;
+        let mut step = 0;
+        for track_index in self.cursor_track.track..self.song.tracks.len() {
+            for lane_index in lane_start..self.song.tracks[track_index].lanes.len() {
+                if self.song.tracks[track_index].lanes[lane_index]
+                    .items
+                    .contains_key(&line)
+                {
+                    delta -= step;
+                    self.cursor_track.track = track_index;
+                    self.cursor_track.lane = lane_index;
+                    if delta == 0 {
+                        return;
+                    }
+                }
+                step = 1;
+            }
+            lane_start = 0;
         }
     }
 
@@ -517,10 +560,6 @@ impl<'a> AppState<'a> {
             .tracks
             .get(self.cursor_track.track)
             .and_then(|x| x.lanes.get(self.cursor_track.lane))
-    }
-
-    fn lane_item_at_cursor(&self) -> Option<&LaneItem> {
-        self.song.lane_item(&self.cursor_track)
     }
 
     fn loop_range(&mut self) -> Result<()> {
