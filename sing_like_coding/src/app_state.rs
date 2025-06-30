@@ -47,6 +47,7 @@ pub enum UiCommand {
     FocusedPartNext,
     FocusedPartPrev,
     Follow,
+    LabelToggle,
     Lane(LaneCommand),
     LaneAdd,
     Loop,
@@ -274,6 +275,7 @@ pub struct AppState<'a> {
     pub follow_p: bool,
     pub cursor_track: CursorTrack,
     pub cursor_module: CursorModule,
+    pub label_p: bool,
     pub lane_item_last: LaneItem,
     midi_device_input: Option<MidiDevice>,
     pub rename_buffer: String,
@@ -284,6 +286,7 @@ pub struct AppState<'a> {
     pub selection_track_min: Option<CursorTrack>,
     pub selection_track_max: Option<CursorTrack>,
     pub song: Song,
+    pub song_change_p: bool,
     song_next: Option<Song>,
     song_apply_callbacks: VecDeque<Box<dyn Fn(&mut AppState) -> Result<()>>>,
     pub song_dirty_p: bool,
@@ -338,6 +341,7 @@ impl<'a> AppState<'a> {
                 line: 0,
             },
             cursor_module: CursorModule { index: 0 },
+            label_p: false,
             lane_item_last: LaneItem::default(),
             midi_device_input: None,
             rename_buffer: Default::default(),
@@ -348,6 +352,7 @@ impl<'a> AppState<'a> {
             selection_track_min: Default::default(),
             selection_track_max: Default::default(),
             song: song.clone(),
+            song_change_p: true,
             song_next: Some(song),
             song_apply_callbacks: Default::default(),
             song_dirty_p: false,
@@ -888,6 +893,9 @@ impl<'a> AppState<'a> {
                 self.send_to_audio(MainToAudio::TrackVolume(*track_index, *volume))?;
             }
             UiCommand::Undo => self.undo()?,
+            UiCommand::LabelToggle => {
+                self.label_p = !self.label_p;
+            }
             UiCommand::LaneAdd => {
                 self.send_to_audio(MainToAudio::LaneAdd(self.cursor_track.track))?;
             }
@@ -1077,12 +1085,14 @@ impl<'a> AppState<'a> {
     }
 
     pub fn song_next_apply(&mut self) -> Result<()> {
+        self.song_change_p = false;
         // TODO song_state も同じようにしないとカーソルがちらつく
         if self.song_state.song_dirty_p {
             self.send_to_audio(MainToAudio::Song)?;
         }
         if let Some(song) = self.song_next.take() {
             self.song = song;
+            self.song_change_p = true;
             self.compute_track_offsets();
             self.cursor_track.track = self
                 .cursor_track

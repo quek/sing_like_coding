@@ -60,6 +60,7 @@ impl MainView {
             ((Modifier::C, Key::Z), UiCommand::Undo),
             ((Modifier::CS, Key::Z), UiCommand::Redo),
             ((Modifier::None, Key::Period), UiCommand::Repeat),
+            ((Modifier::None, Key::M), UiCommand::LabelToggle),
         ];
         let shortcut_map_track = [
             (
@@ -414,10 +415,10 @@ impl MainView {
             shortcut_map_module,
             shortcut_map_mixer,
             stereo_peak_level_states: vec![],
-            height_line: 1.0,
-            height_mixer: 1.0,
-            height_modules: 1.0,
-            height_track_header: 1.0,
+            height_line: 0.0,
+            height_mixer: 0.0,
+            height_modules: 0.0,
+            height_track_header: 0.0,
         }
     }
 
@@ -427,6 +428,9 @@ impl MainView {
         state: &mut AppState,
         device: &mut Option<Device>,
     ) -> Result<()> {
+        if state.song_change_p {
+            self.song_change_did();
+        }
         // hovered の判定が1フレーム遅れるので。
         self.dropped_files = std::mem::take(&mut self.dropped_files_pre);
         self.dropped_files_pre = gui_context.input(|i| i.raw.dropped_files.clone());
@@ -517,22 +521,28 @@ impl MainView {
             if state.song_state.play_p && state.follow_p {
                 state.cursor_track.line = state.song_state.line_play
             }
+
             let line_range = self.compute_line_range(ui, state);
 
             with_font_mono(ui, |ui| {
                 ui.horizontal(|ui| -> anyhow::Result<()> {
-                    self.view_ruler(state, ui, &line_range)?;
+                    if state.label_p {
+                        self.view_lable(ui, state, line_range.len())?;
+                    } else {
+                        self.view_ruler(state, ui, &line_range)?;
 
-                    let (track_range, mut lane_start) = self.compute_visible_lane_range(state, ui);
-                    for track_index in track_range {
-                        self.view_track(
-                            state,
-                            ui,
-                            track_index,
-                            lane_start.take(),
-                            &line_range,
-                            &mut commands,
-                        )?;
+                        let (track_range, mut lane_start) =
+                            self.compute_visible_lane_range(state, ui);
+                        for track_index in track_range {
+                            self.view_track(
+                                state,
+                                ui,
+                                track_index,
+                                lane_start.take(),
+                                &line_range,
+                                &mut commands,
+                            )?;
+                        }
                     }
 
                     Ok(())
@@ -554,7 +564,7 @@ impl MainView {
             - self.height_modules
             - self.height_mixer;
 
-        let available_rows = (available_height / self.height_line).floor() as usize;
+        let available_rows = (available_height / self.height_line.max(5.0)).floor() as usize;
 
         let center_offset = available_rows / 2;
         let line_start = state.cursor_track.line.saturating_sub(center_offset);
@@ -573,11 +583,6 @@ impl MainView {
         //         line_range
         //     )
         // );
-
-        self.height_track_header = 0.0;
-        self.height_modules = 0.0;
-        self.height_mixer = 0.0;
-        self.height_line = 0.0;
 
         line_range
     }
@@ -642,6 +647,13 @@ impl MainView {
         }
 
         Ok(())
+    }
+
+    fn song_change_did(&mut self) {
+        self.height_line = 0.0;
+        self.height_mixer = 0.0;
+        self.height_modules = 0.0;
+        self.height_track_header = 0.0;
     }
 
     fn stereo_peak_level_state(&mut self, track_index: usize) -> &mut StereoPeakLevelState {
@@ -1084,6 +1096,38 @@ impl MainView {
 
             Ok(())
         });
+        Ok(())
+    }
+
+    fn view_lable(&mut self, ui: &mut Ui, state: &AppState, nlines: usize) -> Result<()> {
+        let mut lines = state
+            .song
+            .tracks
+            .iter()
+            .flat_map(|track| {
+                track
+                    .lanes
+                    .iter()
+                    .flat_map(|lane| lane.items.keys().collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        lines.sort();
+        lines.dedup();
+        for line in lines.iter().take(nlines) {
+            ui.horizontal(|ui| {
+                for track in state.song.tracks.iter() {
+                    for lane in track.lanes.iter() {
+                        if let Some(lane_item) = lane.items.get(line) {
+                            ui.label(format!("{:?}", lane_item));
+                        } else {
+                            ui.label(format!("--"));
+                        }
+                    }
+                }
+            });
+        }
+
         Ok(())
     }
 }
