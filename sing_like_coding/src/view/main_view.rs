@@ -701,104 +701,110 @@ impl MainView {
         ui: &mut Ui,
         track_index: usize,
         commands: &mut Vec<UiCommand>,
-    ) -> anyhow::Result<()> {
-        let track = &state.song.tracks[track_index];
-        let peak_level_state = self.stereo_peak_level_state(track_index);
-        peak_level_state.update(&state.song_state.tracks[track_index].peaks, state.elapsed);
-        for x in [&peak_level_state.left, &peak_level_state.right] {
-            LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
-        }
-
-        ui.horizontal(|ui| -> anyhow::Result<()> {
-            let mut pan = track.pan;
-            let knob = ui.add(Knob { value: &mut pan });
-            if knob.dragged() {
-                commands.push(UiCommand::TrackPan(track_index, pan));
-            } else if knob.double_clicked() {
-                commands.push(UiCommand::TrackPan(track_index, 0.5));
+    ) -> Result<()> {
+        let inner = ui.vertical(|ui| -> anyhow::Result<()> {
+            let track = &state.song.tracks[track_index];
+            let peak_level_state = self.stereo_peak_level_state(track_index);
+            peak_level_state.update(&state.song_state.tracks[track_index].peaks, state.elapsed);
+            for x in [&peak_level_state.left, &peak_level_state.right] {
+                LabelBuilder::new(ui, format!("{:.2}dB", x.hold_db)).build();
             }
 
-            ui.vertical(|ui| -> anyhow::Result<()> {
-                let width = 18.0;
+            ui.horizontal(|ui| -> anyhow::Result<()> {
+                let mut pan = track.pan;
+                let knob = ui.add(Knob { value: &mut pan });
+                if knob.dragged() {
+                    commands.push(UiCommand::TrackPan(track_index, pan));
+                } else if knob.double_clicked() {
+                    commands.push(UiCommand::TrackPan(track_index, 0.5));
+                }
 
-                with_font_mono(ui, |ui| {
-                    let mut solo = track.solo;
-                    if ui
-                        .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut solo, "S"))
-                        .clicked()
-                    {
-                        commands.push(UiCommand::TrackSolo(Some(track_index), Some(solo)));
-                    }
+                ui.vertical(|ui| -> anyhow::Result<()> {
+                    let width = 18.0;
 
-                    let mut mute = track.mute;
-                    if ui
-                        .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut mute, "M"))
-                        .clicked()
-                    {
-                        commands.push(UiCommand::TrackMute(Some(track_index), Some(mute)));
-                    }
+                    with_font_mono(ui, |ui| {
+                        let mut solo = track.solo;
+                        if ui
+                            .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut solo, "S"))
+                            .clicked()
+                        {
+                            commands.push(UiCommand::TrackSolo(Some(track_index), Some(solo)));
+                        }
+
+                        let mut mute = track.mute;
+                        if ui
+                            .add_sized([width, 0.0], |ui: &mut Ui| ui.toggle_value(&mut mute, "M"))
+                            .clicked()
+                        {
+                            commands.push(UiCommand::TrackMute(Some(track_index), Some(mute)));
+                        }
+                    });
+
+                    Ok(())
                 });
+                Ok(())
+            });
+
+            let mut rec = state.song_state.tracks[track_index].rec_p;
+            if ui.toggle_value(&mut rec, "REC").clicked() {
+                if rec {
+                    commands.push(UiCommand::TrackRecOn(track_index));
+                } else {
+                    commands.push(UiCommand::TrackRecOff(track_index));
+                }
+            }
+
+            ui.horizontal(|ui| -> anyhow::Result<()> {
+                let height = 160.0;
+
+                ui.add(StereoPeakMeter {
+                    peak_level_state,
+                    min_db: DB_MIN,
+                    max_db: DB_MAX,
+                    show_scale: true,
+                    height,
+                });
+
+                let mut db_value = db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
+                let fader = ui.add(DbSlider {
+                    db_value: &mut db_value,
+                    min_db: DB_MIN,
+                    max_db: DB_MAX,
+                    height,
+                    bg_color: if state.focused_part == FocusedPart::Mixer
+                        && track_index == state.cursor_track.track
+                    {
+                        state.color_cursor()
+                    } else {
+                        Color32::BLACK
+                    },
+                });
+                if fader.dragged() {
+                    commands.push(UiCommand::TrackVolume(
+                        track_index,
+                        db_to_norm(db_value, DB_MIN, DB_MAX),
+                    ));
+                } else if fader.double_clicked() {
+                    commands.push(UiCommand::TrackVolume(
+                        track_index,
+                        db_to_norm(0.0, DB_MIN, DB_MAX),
+                    ));
+                }
 
                 Ok(())
             });
+
+            LabelBuilder::new(
+                ui,
+                format!("{:.2}dB", db_from_norm(track.volume, DB_MIN, DB_MAX)),
+            )
+            .build();
+
             Ok(())
         });
-
-        let mut rec = state.song_state.tracks[track_index].rec_p;
-        if ui.toggle_value(&mut rec, "REC").clicked() {
-            if rec {
-                commands.push(UiCommand::TrackRecOn(track_index));
-            } else {
-                commands.push(UiCommand::TrackRecOff(track_index));
-            }
+        if self.height_mixer == 0.0 {
+            self.height_mixer = inner.response.rect.height();
         }
-
-        ui.horizontal(|ui| -> anyhow::Result<()> {
-            let height = 160.0;
-
-            ui.add(StereoPeakMeter {
-                peak_level_state,
-                min_db: DB_MIN,
-                max_db: DB_MAX,
-                show_scale: true,
-                height,
-            });
-
-            let mut db_value = db_from_norm(track.volume as f32, DB_MIN, DB_MAX);
-            let fader = ui.add(DbSlider {
-                db_value: &mut db_value,
-                min_db: DB_MIN,
-                max_db: DB_MAX,
-                height,
-                bg_color: if state.focused_part == FocusedPart::Mixer
-                    && track_index == state.cursor_track.track
-                {
-                    state.color_cursor()
-                } else {
-                    Color32::BLACK
-                },
-            });
-            if fader.dragged() {
-                commands.push(UiCommand::TrackVolume(
-                    track_index,
-                    db_to_norm(db_value, DB_MIN, DB_MAX),
-                ));
-            } else if fader.double_clicked() {
-                commands.push(UiCommand::TrackVolume(
-                    track_index,
-                    db_to_norm(0.0, DB_MIN, DB_MAX),
-                ));
-            }
-
-            Ok(())
-        });
-
-        LabelBuilder::new(
-            ui,
-            format!("{:.2}dB", db_from_norm(track.volume, DB_MIN, DB_MAX)),
-        )
-        .build();
-
         Ok(())
     }
 
@@ -953,36 +959,42 @@ impl MainView {
     }
 
     fn view_modules(
-        &self,
+        &mut self,
         state: &mut AppState,
         ui: &mut Ui,
         track_index: usize,
-    ) -> anyhow::Result<()> {
-        for module_index in 0..state.song.tracks[track_index].modules.len() {
-            self.view_module(state, ui, track_index, module_index)?;
-        }
-
-        let color = if state.cursor_track.track == track_index
-            && state.cursor_module.index == state.song.tracks[track_index].modules.len()
-            && state.focused_part == FocusedPart::Module
-        {
-            state.color_cursor()
-        } else {
-            Color32::BLACK
-        };
-
-        if LabelBuilder::new(ui, "+")
-            .bg_color(color)
-            .size([DEFAULT_TRACK_WIDTH, 0.0])
-            .build()
-            .clicked()
-        {
-            state.route = Route::PluginSelect;
-            if state.cursor_track.track != track_index {
-                state.cursor_track.track = track_index;
-                state.cursor_track.lane = 0;
+    ) -> Result<()> {
+        let inner = ui.vertical(|ui| -> anyhow::Result<()> {
+            for module_index in 0..state.song.tracks[track_index].modules.len() {
+                self.view_module(state, ui, track_index, module_index)?;
             }
-        }
+
+            let color = if state.cursor_track.track == track_index
+                && state.cursor_module.index == state.song.tracks[track_index].modules.len()
+                && state.focused_part == FocusedPart::Module
+            {
+                state.color_cursor()
+            } else {
+                Color32::BLACK
+            };
+
+            if LabelBuilder::new(ui, "+")
+                .bg_color(color)
+                .size([DEFAULT_TRACK_WIDTH, 0.0])
+                .build()
+                .clicked()
+            {
+                state.route = Route::PluginSelect;
+                if state.cursor_track.track != track_index {
+                    state.cursor_track.track = track_index;
+                    state.cursor_track.lane = 0;
+                }
+            }
+            Ok(())
+        });
+
+        self.height_modules = inner.response.rect.height().max(self.height_modules);
+
         Ok(())
     }
 
@@ -1051,18 +1063,8 @@ impl MainView {
                 self.view_lanes(state, ui, track_index, lane_start, line_range)
                     .unwrap();
             });
-
-            let inner = ui.vertical(|ui| -> anyhow::Result<()> {
-                self.view_mixer(state, ui, track_index, &mut commands)
-            });
-            if self.height_mixer == 0.0 {
-                self.height_mixer = inner.response.rect.height();
-            }
-
-            let inner = ui
-                .vertical(|ui| -> anyhow::Result<()> { self.view_modules(state, ui, track_index) });
-            self.height_modules = inner.response.rect.height().max(self.height_modules);
-
+            self.view_mixer(state, ui, track_index, &mut commands)?;
+            self.view_modules(state, ui, track_index)?;
             Ok(())
         });
         Ok(())
@@ -1117,6 +1119,7 @@ impl MainView {
         track_range: Range<usize>,
         lane_start: usize,
     ) -> Result<()> {
+        let mut commands = vec![];
         let mut lines = state
             .song
             .tracks
@@ -1166,19 +1169,29 @@ impl MainView {
                             {
                                 ui.vertical(|ui| -> Result<()> {
                                     for line in lines.iter().take(nlines) {
+                                        let line_item = state.song.tracks[track_index].lanes
+                                            [lane_index]
+                                            .items
+                                            .get(line);
+                                        let color = match line_item {
+                                            Some(LaneItem::Label(_)) => Color32::WHITE,
+                                            _ => Color32::DARK_GRAY,
+                                        };
                                         let text = self.lane_item_name(
                                             state,
                                             track_index,
                                             lane_index,
                                             *line,
                                         );
-                                        LabelBuilder::new(ui, text).build();
+                                        LabelBuilder::new(ui, text).color(color).build();
                                     }
                                     Ok(())
                                 });
                             }
                             Ok(())
                         });
+                        self.view_mixer(state, ui, track_index, &mut commands)?;
+                        self.view_modules(state, ui, track_index)?;
                         Ok(())
                     });
                 }
@@ -1186,6 +1199,10 @@ impl MainView {
             });
             Ok(())
         });
+
+        for command in commands {
+            state.run_ui_command(&command)?;
+        }
 
         Ok(())
     }
