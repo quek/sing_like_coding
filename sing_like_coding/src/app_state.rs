@@ -476,24 +476,22 @@ impl<'a> AppState<'a> {
         let mut step = 0;
 
         for track_index in (0..=self.cursor_track.track).rev() {
-            let lane_limit = if track_index == self.cursor_track.track {
-                self.cursor_track.lane
+            let lane_end = if track_index == self.cursor_track.track {
+                self.cursor_track.lane + 1
             } else {
                 self.song.tracks[track_index].lanes.len()
             };
 
-            for lane_index in (0..lane_limit).rev() {
-                if step > 0 {
-                    if self.song.tracks[track_index].lanes[lane_index]
-                        .items
-                        .contains_key(&line)
-                    {
-                        delta -= 1;
-                        self.cursor_track.track = track_index;
-                        self.cursor_track.lane = lane_index;
-                        if delta == 0 {
-                            return;
-                        }
+            for lane_index in (0..lane_end).rev() {
+                if self.song.tracks[track_index].lanes[lane_index]
+                    .items
+                    .contains_key(&line)
+                {
+                    delta -= step;
+                    self.cursor_track.track = track_index;
+                    self.cursor_track.lane = lane_index;
+                    if delta == 0 {
+                        return;
                     }
                 }
                 step = 1;
