@@ -621,6 +621,45 @@ impl MainView {
         (track_range, lane_start)
     }
 
+    fn lane_item_name(
+        &self,
+        state: &AppState,
+        track_index: usize,
+        lane_index: usize,
+        line: usize,
+    ) -> String {
+        match state.song.tracks[track_index].lanes[lane_index].item(line) {
+            Some(LaneItem::Note(note)) if note.off => {
+                format!("{:<3}    {:02X}", note.note_name(), note.delay)
+            }
+            Some(LaneItem::Note(note)) => format!(
+                "{:<3} {:02X} {:02X}",
+                note.note_name(),
+                note.velocity as i32,
+                note.delay
+            ),
+            Some(LaneItem::Point(point)) => {
+                let param = state.song.tracks[track_index]
+                    .automation_params
+                    .get(point.automation_params_index)
+                    .map(|(module_index, param_id)| {
+                        // 8桁あるけど表示スペースがないので下2桁だけ表示
+                        format!("{:x}{:X}", module_index, param_id % 0x100)
+                    })
+                    // point を他のトラックに移動した場合など
+                    .unwrap_or("---".to_string());
+                format!("{} {:02X} {:02X}", param, point.value, point.delay)
+            }
+            Some(LaneItem::Label(label)) => format!("'{:<8}", label),
+
+            Some(LaneItem::Call(label)) => format!("^{:<8}", label),
+
+            Some(LaneItem::Ret) => "^        ".to_string(),
+
+            None => "         ".to_string(),
+        }
+    }
+
     fn process_shortcut(
         &mut self,
         gui_context: &eframe::egui::Context,
@@ -811,36 +850,7 @@ impl MainView {
                     bg_color = Color32::from_rgb(0x08, 0x08, 0x08);
                 }
 
-                let text = match state.song.tracks[track_index].lanes[lane_index].item(line) {
-                    Some(LaneItem::Note(note)) if note.off => {
-                        format!("{:<3}    {:02X}", note.note_name(), note.delay)
-                    }
-                    Some(LaneItem::Note(note)) => format!(
-                        "{:<3} {:02X} {:02X}",
-                        note.note_name(),
-                        note.velocity as i32,
-                        note.delay
-                    ),
-                    Some(LaneItem::Point(point)) => {
-                        let param = state.song.tracks[track_index]
-                            .automation_params
-                            .get(point.automation_params_index)
-                            .map(|(module_index, param_id)| {
-                                // 8桁あるけど表示スペースがないので下2桁だけ表示
-                                format!("{:x}{:X}", module_index, param_id % 0x100)
-                            })
-                            // point を他のトラックに移動した場合など
-                            .unwrap_or("---".to_string());
-                        format!("{} {:02X} {:02X}", param, point.value, point.delay)
-                    }
-                    Some(LaneItem::Label(label)) => format!("'{:<8}", label),
-
-                    Some(LaneItem::Call(label)) => format!("^{:<8}", label),
-
-                    Some(LaneItem::Ret) => "^        ".to_string(),
-
-                    None => "         ".to_string(),
-                };
+                let text = self.lane_item_name(state, track_index, lane_index, line);
 
                 if self.height_line == 0.0 {
                     let height_before = ui.available_height();
@@ -1155,15 +1165,13 @@ impl MainView {
                             for lane_index in lane_start..state.song.tracks[track_index].lanes.len()
                             {
                                 ui.vertical(|ui| -> Result<()> {
-                                    let lane = &state.song.tracks[track_index].lanes[lane_index];
                                     for line in lines.iter().take(nlines) {
-                                        let text = if let Some(LaneItem::Label(label)) =
-                                            lane.items.get(line)
-                                        {
-                                            format!("{:<9}", label)
-                                        } else {
-                                            "         ".to_string()
-                                        };
+                                        let text = self.lane_item_name(
+                                            state,
+                                            track_index,
+                                            lane_index,
+                                            *line,
+                                        );
                                         LabelBuilder::new(ui, text).build();
                                     }
                                     Ok(())
