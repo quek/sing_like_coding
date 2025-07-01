@@ -523,19 +523,18 @@ impl MainView {
 
             with_font_mono(ui, |ui| {
                 ui.horizontal(|ui| -> anyhow::Result<()> {
+                    let (track_range, lane_start) = self.compute_visible_lane_range(state, ui);
                     if state.label_p {
-                        self.view_lable(ui, state, line_range.len())?;
+                        self.view_lable(ui, state, line_range.len(), track_range, lane_start)?;
                     } else {
                         self.view_ruler(state, ui, &line_range)?;
 
-                        let (track_range, mut lane_start) =
-                            self.compute_visible_lane_range(state, ui);
                         for track_index in track_range {
                             self.view_track(
                                 state,
                                 ui,
                                 track_index,
-                                lane_start.take(),
+                                lane_start,
                                 &line_range,
                                 &mut commands,
                             )?;
@@ -591,11 +590,7 @@ impl MainView {
         line_range
     }
 
-    fn compute_visible_lane_range(
-        &self,
-        state: &AppState,
-        ui: &Ui,
-    ) -> (Range<usize>, Option<usize>) {
+    fn compute_visible_lane_range(&self, state: &AppState, ui: &Ui) -> (Range<usize>, usize) {
         let available_width = ui.available_width();
         let flatten_lane_index = state
             .track_lane_to_flatten_lane_index_map
@@ -620,8 +615,7 @@ impl MainView {
             .get(flatten_lane_index_end)
             .unwrap_or(&state.song.tracks.len());
         let track_range = visiblef_track_start..visiblef_track_end;
-        let lane_start =
-            Some(state.flatten_lane_index_to_track_lane_vec[flatten_lane_index_start].1);
+        let lane_start = state.flatten_lane_index_to_track_lane_vec[flatten_lane_index_start].1;
 
         (track_range, lane_start)
     }
@@ -902,12 +896,11 @@ impl MainView {
         state: &mut AppState,
         ui: &mut Ui,
         track_index: usize,
-        lane_start: Option<usize>,
+        lane_start: usize,
         line_range: &Range<usize>,
     ) -> anyhow::Result<()> {
         ui.horizontal(|ui| -> anyhow::Result<()> {
-            for lane_index in (lane_start.unwrap_or(0))..state.song.tracks[track_index].lanes.len()
-            {
+            for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
                 self.view_lane(state, ui, track_index, lane_index, line_range)?;
             }
             Ok(())
@@ -1036,45 +1029,13 @@ impl MainView {
         state: &mut AppState,
         ui: &mut Ui,
         track_index: usize,
-        lane_start: Option<usize>,
+        lane_start: usize,
         line_range: &Range<usize>,
         mut commands: &mut Vec<UiCommand>,
     ) -> anyhow::Result<()> {
         ui.vertical(|ui| -> anyhow::Result<()> {
             with_font_mono(ui, |ui| {
-                let height_before_track_header = ui.available_height();
-                if state.rename_track_index == Some(track_index) {
-                    {
-                        let id = ui.make_persistent_id("track_rename_textedit");
-                        let edit = TextEdit::singleline(&mut state.rename_buffer).id(id);
-                        let response = ui.add_sized([DEFAULT_TRACK_WIDTH, 0.0], edit);
-                        if state.rename_request_focus_p {
-                            state.rename_request_focus_p = false;
-                            response.request_focus();
-                            select_all_text(ui, id, &state.rename_buffer);
-                        }
-                        if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                            state.track_rename().unwrap();
-                        }
-                    }
-                } else {
-                    let (color, bg_color) = if state.cursor_track.track == track_index
-                        && state.focused_part == FocusedPart::Track
-                    {
-                        (Color32::LIGHT_GRAY, state.color_cursor())
-                    } else {
-                        (Color32::GRAY, Color32::BLACK)
-                    };
-                    LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
-                        .color(color)
-                        .bg_color(bg_color)
-                        .build();
-                }
-                let height_after_track_header = ui.available_height();
-                if self.height_track_header == 0.0 {
-                    self.height_track_header =
-                        height_before_track_header - height_after_track_header;
-                }
+                self.view_track_head(state, ui, track_index).unwrap();
 
                 self.view_lanes(state, ui, track_index, lane_start, line_range)
                     .unwrap();
@@ -1096,7 +1057,55 @@ impl MainView {
         Ok(())
     }
 
-    fn view_lable(&mut self, ui: &mut Ui, state: &AppState, nlines: usize) -> Result<()> {
+    fn view_track_head(
+        &mut self,
+        state: &mut AppState,
+        ui: &mut Ui,
+        track_index: usize,
+    ) -> Result<()> {
+        let height_before_track_header = ui.available_height();
+        if state.rename_track_index == Some(track_index) {
+            {
+                let id = ui.make_persistent_id("track_rename_textedit");
+                let edit = TextEdit::singleline(&mut state.rename_buffer).id(id);
+                let response = ui.add_sized([DEFAULT_TRACK_WIDTH, 0.0], edit);
+                if state.rename_request_focus_p {
+                    state.rename_request_focus_p = false;
+                    response.request_focus();
+                    select_all_text(ui, id, &state.rename_buffer);
+                }
+                if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                    state.track_rename().unwrap();
+                }
+            }
+        } else {
+            let (color, bg_color) = if state.cursor_track.track == track_index
+                && state.focused_part == FocusedPart::Track
+            {
+                (Color32::LIGHT_GRAY, state.color_cursor())
+            } else {
+                (Color32::GRAY, Color32::BLACK)
+            };
+            LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
+                .color(color)
+                .bg_color(bg_color)
+                .build();
+        }
+        let height_after_track_header = ui.available_height();
+        if self.height_track_header == 0.0 {
+            self.height_track_header = height_before_track_header - height_after_track_header;
+        }
+        Ok(())
+    }
+
+    fn view_lable(
+        &mut self,
+        ui: &mut Ui,
+        state: &mut AppState,
+        nlines: usize,
+        track_range: Range<usize>,
+        _lane_start: usize,
+    ) -> Result<()> {
         let mut lines = state
             .song
             .tracks
@@ -1116,26 +1125,39 @@ impl MainView {
                     })
                     .collect::<Vec<_>>()
             })
+            .cloned()
             .collect::<Vec<_>>();
         lines.sort();
         lines.dedup();
 
-        ui.vertical(|ui| {
-            for line in lines.iter().take(nlines) {
-                ui.horizontal(|ui| {
-                    LabelBuilder::new(ui, format!("{:02X}", line)).build();
-                    for track in state.song.tracks.iter() {
-                        for lane in track.lanes.iter() {
-                            let text = if let Some(LaneItem::Label(label)) = lane.items.get(line) {
-                                format!("{:<9}", label)
-                            } else {
-                                "         ".to_string()
-                            };
-                            LabelBuilder::new(ui, text).build();
-                        }
+        with_font_mono(ui, |ui| -> Result<()> {
+            ui.vertical(|ui| -> Result<()> {
+                ui.horizontal(|ui| -> Result<()> {
+                    ui.label("  ");
+                    for track_index in track_range {
+                        self.view_track_head(state, ui, track_index)?;
                     }
+                    Ok(())
                 });
-            }
+                for line in lines.iter().take(nlines) {
+                    ui.horizontal(|ui| {
+                        LabelBuilder::new(ui, format!("{:02X}", line)).build();
+                        for track in state.song.tracks.iter() {
+                            for lane in track.lanes.iter() {
+                                let text =
+                                    if let Some(LaneItem::Label(label)) = lane.items.get(line) {
+                                        format!("{:<9}", label)
+                                    } else {
+                                        "         ".to_string()
+                                    };
+                                LabelBuilder::new(ui, text).build();
+                            }
+                        }
+                    });
+                }
+                Ok(())
+            });
+            Ok(())
         });
 
         Ok(())

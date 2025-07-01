@@ -11,7 +11,7 @@ pub fn font_reset(ui: &mut Ui) {
     ui.style_mut().override_font_id = None;
 }
 
-pub fn with_font_mono<F: FnOnce(&mut Ui)>(ui: &mut Ui, f: F) {
+pub fn with_font_mono<R, F: FnOnce(&mut Ui) -> R>(ui: &mut Ui, f: F) {
     font_mono(ui);
     f(ui);
     font_reset(ui);
