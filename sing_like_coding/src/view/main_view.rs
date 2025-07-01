@@ -523,9 +523,9 @@ impl MainView {
 
             with_font_mono(ui, |ui| {
                 ui.horizontal(|ui| -> anyhow::Result<()> {
-                    let (track_range, lane_start) = self.compute_visible_lane_range(state, ui);
+                    let (track_range, mut lane_start) = self.compute_visible_lane_range(state, ui);
                     if state.label_p {
-                        self.view_lable(ui, state, line_range.len(), track_range, lane_start)?;
+                        self.view_label(ui, state, line_range.len(), track_range, lane_start)?;
                     } else {
                         self.view_ruler(state, ui, &line_range)?;
 
@@ -538,6 +538,7 @@ impl MainView {
                                 &line_range,
                                 &mut commands,
                             )?;
+                            lane_start = 0;
                         }
                     }
 
@@ -1098,13 +1099,13 @@ impl MainView {
         Ok(())
     }
 
-    fn view_lable(
+    fn view_label(
         &mut self,
         ui: &mut Ui,
         state: &mut AppState,
         nlines: usize,
         track_range: Range<usize>,
-        _lane_start: usize,
+        lane_start: usize,
     ) -> Result<()> {
         let mut lines = state
             .song
@@ -1131,28 +1132,46 @@ impl MainView {
         lines.dedup();
 
         with_font_mono(ui, |ui| -> Result<()> {
-            ui.vertical(|ui| -> Result<()> {
-                ui.horizontal(|ui| -> Result<()> {
-                    ui.label("  ");
-                    for track_index in track_range {
-                        self.view_track_head(state, ui, track_index)?;
+            ui.horizontal(|ui| -> Result<()> {
+                ui.vertical(|ui| -> Result<()> {
+                    ui.label(" ");
+                    for line in lines.iter().take(nlines) {
+                        let text = play_position_text2(*line, state.song.lpb);
+                        LabelBuilder::new(ui, text).build();
                     }
                     Ok(())
                 });
-                for line in lines.iter().take(nlines) {
-                    ui.horizontal(|ui| {
+                ui.vertical(|ui| -> Result<()> {
+                    ui.label(" ");
+                    for line in lines.iter().take(nlines) {
                         LabelBuilder::new(ui, format!("{:02X}", line)).build();
-                        for track in state.song.tracks.iter() {
-                            for lane in track.lanes.iter() {
-                                let text =
-                                    if let Some(LaneItem::Label(label)) = lane.items.get(line) {
-                                        format!("{:<9}", label)
-                                    } else {
-                                        "         ".to_string()
-                                    };
-                                LabelBuilder::new(ui, text).build();
+                    }
+                    Ok(())
+                });
+                for track_index in track_range {
+                    ui.vertical(|ui| -> Result<()> {
+                        self.view_track_head(state, ui, track_index)?;
+                        ui.horizontal(|ui| -> Result<()> {
+                            for lane_index in lane_start..state.song.tracks[track_index].lanes.len()
+                            {
+                                ui.vertical(|ui| -> Result<()> {
+                                    let lane = &state.song.tracks[track_index].lanes[lane_index];
+                                    for line in lines.iter().take(nlines) {
+                                        let text = if let Some(LaneItem::Label(label)) =
+                                            lane.items.get(line)
+                                        {
+                                            format!("{:<9}", label)
+                                        } else {
+                                            "         ".to_string()
+                                        };
+                                        LabelBuilder::new(ui, text).build();
+                                    }
+                                    Ok(())
+                                });
                             }
-                        }
+                            Ok(())
+                        });
+                        Ok(())
                     });
                 }
                 Ok(())
