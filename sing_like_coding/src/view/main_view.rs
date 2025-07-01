@@ -1105,25 +1105,38 @@ impl MainView {
                 track
                     .lanes
                     .iter()
-                    .flat_map(|lane| lane.items.keys().collect::<Vec<_>>())
+                    .flat_map(|lane| {
+                        lane.items
+                            .iter()
+                            .filter_map(|(line, lane_item)| match lane_item {
+                                LaneItem::Label(_label) => Some(line),
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>()
+                    })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
         lines.sort();
         lines.dedup();
-        for line in lines.iter().take(nlines) {
-            ui.horizontal(|ui| {
-                for track in state.song.tracks.iter() {
-                    for lane in track.lanes.iter() {
-                        if let Some(lane_item) = lane.items.get(line) {
-                            ui.label(format!("{:?}", lane_item));
-                        } else {
-                            ui.label(format!("--"));
+
+        ui.vertical(|ui| {
+            for line in lines.iter().take(nlines) {
+                ui.horizontal(|ui| {
+                    LabelBuilder::new(ui, format!("{:02X}", line)).build();
+                    for track in state.song.tracks.iter() {
+                        for lane in track.lanes.iter() {
+                            let text = if let Some(LaneItem::Label(label)) = lane.items.get(line) {
+                                format!("{:<9}", label)
+                            } else {
+                                "         ".to_string()
+                            };
+                            LabelBuilder::new(ui, text).build();
                         }
                     }
-                }
-            });
-        }
+                });
+            }
+        });
 
         Ok(())
     }
