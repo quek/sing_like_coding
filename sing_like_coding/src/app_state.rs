@@ -464,6 +464,17 @@ impl<'a> AppState<'a> {
         }
     }
 
+    fn cursor_in_selection(&mut self) -> bool {
+        if self.select_p {
+            self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))
+                .unwrap();
+        }
+        if let (Some(min), Some(max)) = (&self.selection_track_min, &self.selection_track_max) {
+            return *min <= self.cursor_track && self.cursor_track <= *max;
+        }
+        false
+    }
+
     pub fn cursor_left(&mut self) {
         for _ in 0..self.digit.unwrap_or(1) {
             self.cursor_track = self.cursor_track.left(&self.song);
@@ -916,12 +927,7 @@ impl<'a> AppState<'a> {
             UiCommand::Lane(LaneCommand::CursorRightItem) => self.cursor_right_item(),
             UiCommand::Lane(LaneCommand::Go) => self.cursor_go(),
             UiCommand::Lane(LaneCommand::Dup) => self.lane_items_dup()?,
-            UiCommand::Lane(LaneCommand::LaneItemDelete) => {
-                self.send_to_audio(MainToAudio::LaneItem(vec![(
-                    self.cursor_track.clone(),
-                    None,
-                )]))?;
-            }
+            UiCommand::Lane(LaneCommand::LaneItemDelete) => self.lane_items_delete()?,
             UiCommand::Lane(LaneCommand::LaneItemMove(lane_delta, line_delta)) => {
                 let digit = self.digit.unwrap_or(1);
                 let lane_delta = *lane_delta * digit;
@@ -1279,11 +1285,30 @@ impl<'a> AppState<'a> {
         self.lane_items_copy_or_cut(false)
     }
 
+    fn lane_items_delete(&mut self) -> Result<()> {
+        let mut lane_items = vec![];
+        if self.cursor_in_selection() {
+            let itemss = self.lane_items_selected_cloned();
+            for items in itemss.into_iter() {
+                for item in items.into_iter() {
+                    if let Some((cursor, _)) = item {
+                        lane_items.push((cursor, None));
+                    }
+                }
+            }
+        } else if self.song.lane_item(&self.cursor_track).is_some() {
+            lane_items.push((self.cursor_track.clone(), None));
+        }
+
+        self.send_to_audio(MainToAudio::LaneItem(lane_items))?;
+        Ok(())
+    }
+
     fn lane_items_dup(&mut self) -> Result<()> {
         if self.select_p {
             self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
         }
-        let mut commands = vec![];
+        let mut lane_items = vec![];
         let itemss = self.lane_items_selected_cloned();
         if let (Some(min), Some(max)) =
             (&mut self.selection_track_min, &mut self.selection_track_max)
@@ -1293,9 +1318,9 @@ impl<'a> AppState<'a> {
             for items in itemss.into_iter() {
                 for item in items.into_iter() {
                     if let Some((_, item)) = item {
-                        commands.push((cursor, Some(item)));
+                        lane_items.push((cursor, Some(item)));
                     } else {
-                        commands.push((cursor, None));
+                        lane_items.push((cursor, None));
                     }
                     cursor = cursor.down(&self.song);
                 }
@@ -1308,10 +1333,10 @@ impl<'a> AppState<'a> {
             max.line += line_delta;
         } else if let Some(item) = self.song.lane_item(&self.cursor_track) {
             self.cursor_track.line += 1;
-            commands.push((self.cursor_track.clone(), Some(item.clone())));
+            lane_items.push((self.cursor_track.clone(), Some(item.clone())));
         }
 
-        self.send_to_audio(MainToAudio::LaneItem(commands))?;
+        self.send_to_audio(MainToAudio::LaneItem(lane_items))?;
         Ok(())
     }
 
