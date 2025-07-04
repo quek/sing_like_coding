@@ -589,12 +589,13 @@ impl<'a> AppState<'a> {
                 x -= 1;
             }
         }
+
         let index = match self.labeled_lines.binary_search(&self.cursor_track.line) {
-            Ok(i) => i.saturating_add_signed(y),
-            Err(i) => i.saturating_add_signed(y),
-        };
-        let index = index.clamp(0, self.labeled_lines.len() - 1);
-        self.cursor_track.line = self.labeled_lines[index];
+            Ok(i) => i as isize + y,
+            Err(i) => i as isize + y,
+        }
+        .rem_euclid(self.labeled_lines.len() as isize);
+        self.cursor_track.line = self.labeled_lines[index as usize];
     }
 
     fn lane_at_cursor(&self) -> Option<&Lane> {
