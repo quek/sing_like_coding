@@ -1467,7 +1467,7 @@ impl<'a> AppState<'a> {
         value_delta: i16,
     ) -> Result<()> {
         let mut commands = vec![];
-        if self.selection_track_min.is_some() {
+        if self.cursor_in_selection() {
             let itemss = self.lane_items_selected_cloned();
             for (cursor, mut lane_item) in itemss.into_iter().flatten().filter_map(|x| x) {
                 match &mut lane_item {
