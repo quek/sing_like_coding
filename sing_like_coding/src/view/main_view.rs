@@ -37,6 +37,7 @@ pub struct MainView {
     shortcut_map_common: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_track: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_lane: HashMap<(Modifier, Key), UiCommand>,
+    shortcut_map_label: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_module: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_mixer: HashMap<(Modifier, Key), UiCommand>,
     stereo_peak_level_states: Vec<StereoPeakLevelState>,
@@ -326,6 +327,13 @@ impl MainView {
             ),
         ];
 
+        let shortcut_map_label = [
+            ((Modifier::None, Key::H), UiCommand::LabelCursor(-1, 0)),
+            ((Modifier::None, Key::J), UiCommand::LabelCursor(0, 1)),
+            ((Modifier::None, Key::K), UiCommand::LabelCursor(0, -1)),
+            ((Modifier::None, Key::L), UiCommand::LabelCursor(1, 0)),
+        ];
+
         let shortcut_map_module = [
             (
                 (Modifier::None, Key::K),
@@ -402,6 +410,7 @@ impl MainView {
         let shortcut_map_common: HashMap<_, _> = shortcut_map_common.into_iter().collect();
         let shortcut_map_track: HashMap<_, _> = shortcut_map_track.into_iter().collect();
         let shortcut_map_lane: HashMap<_, _> = shortcut_map_lane.into_iter().collect();
+        let shortcut_map_label: HashMap<_, _> = shortcut_map_label.into_iter().collect();
         let shortcut_map_module: HashMap<_, _> = shortcut_map_module.into_iter().collect();
         let shortcut_map_mixer: HashMap<_, _> = shortcut_map_mixer.into_iter().collect();
 
@@ -412,6 +421,7 @@ impl MainView {
             shortcut_map_common,
             shortcut_map_track,
             shortcut_map_lane,
+            shortcut_map_label,
             shortcut_map_module,
             shortcut_map_mixer,
             stereo_peak_level_states: vec![],
@@ -673,7 +683,13 @@ impl MainView {
         if let Some(key) = shortcut_key(gui_context) {
             let map = match state.focused_part {
                 crate::app_state::FocusedPart::Track => &self.shortcut_map_track,
-                crate::app_state::FocusedPart::Lane => &self.shortcut_map_lane,
+                crate::app_state::FocusedPart::Lane => {
+                    if state.label_p {
+                        &self.shortcut_map_label
+                    } else {
+                        &self.shortcut_map_lane
+                    }
+                }
                 crate::app_state::FocusedPart::Module => &self.shortcut_map_module,
                 crate::app_state::FocusedPart::Mixer => &self.shortcut_map_mixer,
             };
@@ -1120,35 +1136,12 @@ impl MainView {
         lane_start: usize,
     ) -> Result<()> {
         let mut commands = vec![];
-        let mut lines = state
-            .song
-            .tracks
-            .iter()
-            .flat_map(|track| {
-                track
-                    .lanes
-                    .iter()
-                    .flat_map(|lane| {
-                        lane.items
-                            .iter()
-                            .filter_map(|(line, lane_item)| match lane_item {
-                                LaneItem::Label(_label) => Some(line),
-                                _ => None,
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        lines.sort();
-        lines.dedup();
 
         with_font_mono(ui, |ui| -> Result<()> {
             ui.horizontal(|ui| -> Result<()> {
                 ui.vertical(|ui| -> Result<()> {
                     ui.label(" ");
-                    for line in lines.iter().take(nlines) {
+                    for line in state.labeled_lines.iter().take(nlines) {
                         let text = play_position_text2(*line, state.song.lpb);
                         LabelBuilder::new(ui, text).build();
                     }
@@ -1156,7 +1149,7 @@ impl MainView {
                 });
                 ui.vertical(|ui| -> Result<()> {
                     ui.label(" ");
-                    for line in lines.iter().take(nlines) {
+                    for line in state.labeled_lines.iter().take(nlines) {
                         LabelBuilder::new(ui, format!("{:02X}", line)).build();
                     }
                     Ok(())
@@ -1168,7 +1161,7 @@ impl MainView {
                             for lane_index in lane_start..state.song.tracks[track_index].lanes.len()
                             {
                                 ui.vertical(|ui| -> Result<()> {
-                                    for line in lines.iter().take(nlines) {
+                                    for line in state.labeled_lines.iter().take(nlines) {
                                         let line_item = state.song.tracks[track_index].lanes
                                             [lane_index]
                                             .items

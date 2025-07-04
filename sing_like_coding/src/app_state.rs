@@ -48,6 +48,7 @@ pub enum UiCommand {
     FocusedPartPrev,
     Follow,
     LabelToggle,
+    LabelCursor(isize, isize),
     Lane(LaneCommand),
     LaneAdd,
     Loop,
@@ -276,6 +277,7 @@ pub struct AppState<'a> {
     pub cursor_track: CursorTrack,
     pub cursor_module: CursorModule,
     pub label_p: bool,
+    pub labeled_lines: Vec<usize>,
     pub lane_item_last: LaneItem,
     midi_device_input: Option<MidiDevice>,
     pub rename_buffer: String,
@@ -342,6 +344,7 @@ impl<'a> AppState<'a> {
             },
             cursor_module: CursorModule { index: 0 },
             label_p: false,
+            labeled_lines: vec![],
             lane_item_last: LaneItem::default(),
             midi_device_input: None,
             rename_buffer: Default::default(),
@@ -567,6 +570,27 @@ impl<'a> AppState<'a> {
             Some(LaneItem::Ret),
         )]))?;
         Ok(())
+    }
+
+    fn label_cursor(&mut self, x: isize, y: isize) {
+        let digit = self.digit.unwrap_or(1);
+        let mut x = x * digit as isize;
+        let y = y * digit as isize;
+        while x != 0 {
+            if x < 0 {
+                self.cursor_track = self.cursor_track.left(&self.song);
+                x += 1;
+            } else if 0 < x {
+                self.cursor_track = self.cursor_track.right(&self.song);
+                x -= 1;
+            }
+        }
+        let index = match self.labeled_lines.binary_search(&self.cursor_track.line) {
+            Ok(i) => i.saturating_add_signed(y),
+            Err(i) => i.saturating_add_signed(y),
+        };
+        let index = index.clamp(0, self.labeled_lines.len());
+        self.cursor_track.line = self.labeled_lines[index];
     }
 
     fn lane_at_cursor(&self) -> Option<&Lane> {
@@ -905,6 +929,9 @@ impl<'a> AppState<'a> {
             UiCommand::LabelToggle => {
                 self.label_p = !self.label_p;
             }
+            UiCommand::LabelCursor(x, y) => {
+                self.label_cursor(*x, *y);
+            }
             UiCommand::LaneAdd => {
                 self.send_to_audio(MainToAudio::LaneAdd(self.cursor_track.track))?;
             }
@@ -1131,6 +1158,30 @@ impl<'a> AppState<'a> {
                 max.track = track;
                 max.lane = max.lane.min(self.song.tracks[track].lanes.len() - 1);
             }
+
+            self.labeled_lines = self
+                .song
+                .tracks
+                .iter()
+                .flat_map(|track| {
+                    track
+                        .lanes
+                        .iter()
+                        .flat_map(|lane| {
+                            lane.items
+                                .iter()
+                                .filter_map(|(line, lane_item)| match lane_item {
+                                    LaneItem::Label(_label) => Some(line),
+                                    _ => None,
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            self.labeled_lines.sort();
+            self.labeled_lines.dedup();
 
             while let Some(callback) = self.song_apply_callbacks.pop_front() {
                 callback(self)?;
