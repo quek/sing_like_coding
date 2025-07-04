@@ -47,14 +47,18 @@ pub enum UiCommand {
     FocusedPartNext,
     FocusedPartPrev,
     Follow,
-    LabelToggle,
-    LabelCursor(isize, isize),
     Lane(LaneCommand),
     LaneAdd,
     Loop,
     LoopRange,
     Mixer(MixerCommand),
     Module(ModuleCommand),
+    PatternToggle,
+    PatternCursor(isize, isize),
+    PatternCopy,
+    PatternCut,
+    PatternDup,
+    PatternPaste,
     PlayCursor,
     PlayToggle,
     RecToggle,
@@ -276,10 +280,10 @@ pub struct AppState<'a> {
     pub follow_p: bool,
     pub cursor_track: CursorTrack,
     pub cursor_module: CursorModule,
-    pub label_p: bool,
     pub labeled_lines: Vec<usize>,
     pub lane_item_last: LaneItem,
     midi_device_input: Option<MidiDevice>,
+    pub pattern_p: bool,
     pub rename_buffer: String,
     pub rename_request_focus_p: bool,
     pub rename_track_index: Option<usize>,
@@ -343,10 +347,10 @@ impl<'a> AppState<'a> {
                 line: 0,
             },
             cursor_module: CursorModule { index: 0 },
-            label_p: false,
             labeled_lines: vec![],
             lane_item_last: LaneItem::default(),
             midi_device_input: None,
+            pattern_p: false,
             rename_buffer: Default::default(),
             rename_track_index: None,
             rename_request_focus_p: false,
@@ -572,7 +576,7 @@ impl<'a> AppState<'a> {
         Ok(())
     }
 
-    fn label_cursor(&mut self, x: isize, y: isize) {
+    fn pattern_cursor(&mut self, x: isize, y: isize) {
         let digit = self.digit.unwrap_or(1);
         let mut x = x * digit as isize;
         let y = y * digit as isize;
@@ -589,7 +593,7 @@ impl<'a> AppState<'a> {
             Ok(i) => i.saturating_add_signed(y),
             Err(i) => i.saturating_add_signed(y),
         };
-        let index = index.clamp(0, self.labeled_lines.len());
+        let index = index.clamp(0, self.labeled_lines.len() - 1);
         self.cursor_track.line = self.labeled_lines[index];
     }
 
@@ -926,12 +930,6 @@ impl<'a> AppState<'a> {
                 self.send_to_audio(MainToAudio::TrackVolume(*track_index, *volume))?;
             }
             UiCommand::Undo => self.undo()?,
-            UiCommand::LabelToggle => {
-                self.label_p = !self.label_p;
-            }
-            UiCommand::LabelCursor(x, y) => {
-                self.label_cursor(*x, *y);
-            }
             UiCommand::LaneAdd => {
                 self.send_to_audio(MainToAudio::LaneAdd(self.cursor_track.track))?;
             }
@@ -978,6 +976,24 @@ impl<'a> AppState<'a> {
                     *value_delta,
                 )?;
                 self.ui_command_last = command;
+            }
+            UiCommand::PatternToggle => {
+                self.pattern_p = !self.pattern_p;
+            }
+            UiCommand::PatternCursor(x, y) => {
+                self.pattern_cursor(*x, *y);
+            }
+            UiCommand::PatternCopy => {
+                // TODO
+            }
+            UiCommand::PatternCut => {
+                // TODO
+            }
+            UiCommand::PatternDup => {
+                // TODO
+            }
+            UiCommand::PatternPaste => {
+                // TODO
             }
             UiCommand::Repeat => {
                 let command = &self.ui_command_last.clone();

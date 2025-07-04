@@ -37,7 +37,7 @@ pub struct MainView {
     shortcut_map_common: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_track: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_lane: HashMap<(Modifier, Key), UiCommand>,
-    shortcut_map_label: HashMap<(Modifier, Key), UiCommand>,
+    shortcut_map_pattern: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_module: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_mixer: HashMap<(Modifier, Key), UiCommand>,
     stereo_peak_level_states: Vec<StereoPeakLevelState>,
@@ -61,7 +61,7 @@ impl MainView {
             ((Modifier::C, Key::Z), UiCommand::Undo),
             ((Modifier::CS, Key::Z), UiCommand::Redo),
             ((Modifier::None, Key::Period), UiCommand::Repeat),
-            ((Modifier::None, Key::Comma), UiCommand::LabelToggle),
+            ((Modifier::None, Key::Comma), UiCommand::PatternToggle),
         ];
         let shortcut_map_track = [
             (
@@ -327,11 +327,15 @@ impl MainView {
             ),
         ];
 
-        let shortcut_map_label = [
-            ((Modifier::None, Key::H), UiCommand::LabelCursor(-1, 0)),
-            ((Modifier::None, Key::J), UiCommand::LabelCursor(0, 1)),
-            ((Modifier::None, Key::K), UiCommand::LabelCursor(0, -1)),
-            ((Modifier::None, Key::L), UiCommand::LabelCursor(1, 0)),
+        let shortcut_map_pattern = [
+            ((Modifier::None, Key::H), UiCommand::PatternCursor(-1, 0)),
+            ((Modifier::None, Key::J), UiCommand::PatternCursor(0, 1)),
+            ((Modifier::None, Key::K), UiCommand::PatternCursor(0, -1)),
+            ((Modifier::None, Key::L), UiCommand::PatternCursor(1, 0)),
+            ((Modifier::C, Key::C), UiCommand::PatternCopy),
+            ((Modifier::None, Key::D), UiCommand::PatternDup),
+            ((Modifier::C, Key::V), UiCommand::PatternPaste),
+            ((Modifier::C, Key::X), UiCommand::PatternCut),
         ];
 
         let shortcut_map_module = [
@@ -410,7 +414,7 @@ impl MainView {
         let shortcut_map_common: HashMap<_, _> = shortcut_map_common.into_iter().collect();
         let shortcut_map_track: HashMap<_, _> = shortcut_map_track.into_iter().collect();
         let shortcut_map_lane: HashMap<_, _> = shortcut_map_lane.into_iter().collect();
-        let shortcut_map_label: HashMap<_, _> = shortcut_map_label.into_iter().collect();
+        let shortcut_map_pattern: HashMap<_, _> = shortcut_map_pattern.into_iter().collect();
         let shortcut_map_module: HashMap<_, _> = shortcut_map_module.into_iter().collect();
         let shortcut_map_mixer: HashMap<_, _> = shortcut_map_mixer.into_iter().collect();
 
@@ -421,7 +425,7 @@ impl MainView {
             shortcut_map_common,
             shortcut_map_track,
             shortcut_map_lane,
-            shortcut_map_label,
+            shortcut_map_pattern,
             shortcut_map_module,
             shortcut_map_mixer,
             stereo_peak_level_states: vec![],
@@ -534,8 +538,8 @@ impl MainView {
             with_font_mono(ui, |ui| {
                 ui.horizontal(|ui| -> anyhow::Result<()> {
                     let (track_range, mut lane_start) = self.compute_visible_lane_range(state, ui);
-                    if state.label_p {
-                        self.view_label(ui, state, line_range.len(), track_range, lane_start)?;
+                    if state.pattern_p {
+                        self.view_pattern(ui, state, line_range.len(), track_range, lane_start)?;
                     } else {
                         self.view_ruler(state, ui, &line_range)?;
 
@@ -631,6 +635,48 @@ impl MainView {
         (track_range, lane_start)
     }
 
+    fn lane_item_bg_color(
+        &self,
+        state: &AppState,
+        track_index: usize,
+        lane_index: usize,
+        line: usize,
+    ) -> Color32 {
+        let mut bg_color = Color32::BLACK;
+        if state.cursor_track.track == track_index
+            && state.cursor_track.lane == lane_index
+            && state.cursor_track.line == line
+            && state.focused_part == FocusedPart::Lane
+        {
+            bg_color = state.color_cursor();
+        } else if line == state.song_state.line_play {
+            bg_color = Color32::DARK_GREEN;
+        } else if let Some(min) = &state.selection_track_min {
+            if let (min, Some(max)) = if state.select_p {
+                (
+                    min.min_merge(&state.cursor_track),
+                    Some(min.max_merge(&state.cursor_track)),
+                )
+            } else {
+                (min.clone(), state.selection_track_max.clone())
+            } {
+                let current = CursorTrack {
+                    track: track_index,
+                    lane: lane_index,
+                    line,
+                };
+                if min <= current && current <= max {
+                    bg_color = Color32::from_rgb(0x40, 0x40, 0xE0);
+                }
+            }
+        } else if line % 0x10 == 0 {
+            bg_color = Color32::from_rgb(0x10, 0x10, 0x10);
+        } else if line % 4 == 0 {
+            bg_color = Color32::from_rgb(0x08, 0x08, 0x08);
+        }
+        bg_color
+    }
+
     fn lane_item_name(
         &self,
         state: &AppState,
@@ -684,8 +730,8 @@ impl MainView {
             let map = match state.focused_part {
                 crate::app_state::FocusedPart::Track => &self.shortcut_map_track,
                 crate::app_state::FocusedPart::Lane => {
-                    if state.label_p {
-                        &self.shortcut_map_label
+                    if state.pattern_p {
+                        &self.shortcut_map_pattern
                     } else {
                         &self.shortcut_map_lane
                     }
@@ -839,38 +885,7 @@ impl MainView {
                 } else {
                     Color32::GRAY
                 };
-                let mut bg_color = Color32::BLACK;
-                if state.cursor_track.track == track_index
-                    && state.cursor_track.lane == lane_index
-                    && state.cursor_track.line == line
-                    && state.focused_part == FocusedPart::Lane
-                {
-                    bg_color = state.color_cursor();
-                } else if line == state.song_state.line_play {
-                    bg_color = Color32::DARK_GREEN;
-                } else if let Some(min) = &state.selection_track_min {
-                    if let (min, Some(max)) = if state.select_p {
-                        (
-                            min.min_merge(&state.cursor_track),
-                            Some(min.max_merge(&state.cursor_track)),
-                        )
-                    } else {
-                        (min.clone(), state.selection_track_max.clone())
-                    } {
-                        let current = CursorTrack {
-                            track: track_index,
-                            lane: lane_index,
-                            line,
-                        };
-                        if min <= current && current <= max {
-                            bg_color = Color32::from_rgb(0x40, 0x40, 0xE0);
-                        }
-                    }
-                } else if line % 0x10 == 0 {
-                    bg_color = Color32::from_rgb(0x10, 0x10, 0x10);
-                } else if line % 4 == 0 {
-                    bg_color = Color32::from_rgb(0x08, 0x08, 0x08);
-                }
+                let bg_color = self.lane_item_bg_color(state, track_index, lane_index, line);
 
                 let text = self.lane_item_name(state, track_index, lane_index, line);
 
@@ -1127,7 +1142,7 @@ impl MainView {
         Ok(())
     }
 
-    fn view_label(
+    fn view_pattern(
         &mut self,
         ui: &mut Ui,
         state: &mut AppState,
@@ -1170,13 +1185,22 @@ impl MainView {
                                             Some(LaneItem::Label(_)) => Color32::WHITE,
                                             _ => Color32::DARK_GRAY,
                                         };
+                                        let bg_color = self.lane_item_bg_color(
+                                            state,
+                                            track_index,
+                                            lane_index,
+                                            *line,
+                                        );
                                         let text = self.lane_item_name(
                                             state,
                                             track_index,
                                             lane_index,
                                             *line,
                                         );
-                                        LabelBuilder::new(ui, text).color(color).build();
+                                        LabelBuilder::new(ui, text)
+                                            .color(color)
+                                            .bg_color(bg_color)
+                                            .build();
                                     }
                                     Ok(())
                                 });
