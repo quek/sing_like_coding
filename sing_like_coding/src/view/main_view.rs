@@ -847,7 +847,7 @@ impl MainView {
                             line,
                         };
                         if min <= current && current <= max {
-                            bg_color = Color32::LIGHT_BLUE;
+                            bg_color = Color32::from_rgb(0x40, 0x40, 0xE0);
                         }
                     }
                 } else if line % 0x10 == 0 {

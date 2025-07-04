@@ -1226,11 +1226,12 @@ impl<'a> AppState<'a> {
     }
 
     fn lane_items_copy_or_cut(&mut self, copy_p: bool) -> Result<()> {
-        if self.select_p {
-            self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
-        }
         let mut commands = vec![];
-        if let (Some(min), Some(max)) = (&self.selection_track_min, &self.selection_track_max) {
+        if let (true, Some(min), Some(max)) = (
+            self.cursor_in_selection(),
+            &self.selection_track_min,
+            &self.selection_track_max,
+        ) {
             let mut itemss = vec![];
             for track_index in min.track..=max.track {
                 if let Some(track) = self.song.tracks.get(track_index) {
@@ -1305,14 +1306,14 @@ impl<'a> AppState<'a> {
     }
 
     fn lane_items_dup(&mut self) -> Result<()> {
-        if self.select_p {
-            self.run_ui_command(&UiCommand::Lane(LaneCommand::SelectMode))?;
-        }
         let mut lane_items = vec![];
         let itemss = self.lane_items_selected_cloned();
-        if let (Some(min), Some(max)) =
-            (&mut self.selection_track_min, &mut self.selection_track_max)
-        {
+
+        if let (true, Some(min), Some(max)) = (
+            self.cursor_in_selection(),
+            &mut self.selection_track_min,
+            &mut self.selection_track_max,
+        ) {
             self.cursor_track.line = max.line + 1;
             let mut cursor = self.cursor_track.clone();
             for items in itemss.into_iter() {
@@ -1342,7 +1343,7 @@ impl<'a> AppState<'a> {
 
     fn lane_items_move(&mut self, lane_delta: i64, line_delta: i64) -> Result<()> {
         let mut commands = vec![];
-        if self.selection_track_min.is_some() {
+        if self.cursor_in_selection() {
             let itemss = self.lane_items_selected_cloned();
             for (cursor, _) in itemss.clone().into_iter().flatten().filter_map(|x| x) {
                 commands.push((cursor, None));
