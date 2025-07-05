@@ -830,6 +830,7 @@ impl<'a> AppState<'a> {
         let mut commands = vec![];
         let (min, max) = self.pattern_range();
         let pattern = self.pattern_min_max_cloned(&min, &max);
+        dbg!(&pattern);
         self.pattern_insert(pattern, &mut commands);
         self.send_to_audio(MainToAudio::LaneItem(commands))?;
         Ok(())
@@ -844,7 +845,7 @@ impl<'a> AppState<'a> {
         let min = CursorTrack {
             track: 0,
             lane: 0,
-            line: self.cursor_track.line,
+            line: self.cursor_track.line + nlines,
         };
         let max = self.cursor_track_max();
         self.lane_items_move_line(&min, &max, nlines as isize, commands);
@@ -1651,7 +1652,7 @@ impl<'a> AppState<'a> {
             }
             line_next = cursor.line;
             cursor = cursor.right(&self.song);
-            cursor.line = self.cursor_track.line;
+            cursor.line = at.line;
         }
 
         line_next
