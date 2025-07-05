@@ -1191,12 +1191,19 @@ impl MainView {
                                             lane_index,
                                             *line,
                                         );
-                                        let text = self.lane_item_name(
-                                            state,
-                                            track_index,
-                                            lane_index,
-                                            *line,
-                                        );
+                                        let text = if track_index == 0
+                                            && lane_index == 0
+                                            && state.labeled_lines.last() == Some(line)
+                                        {
+                                            "(end)    ".to_string()
+                                        } else {
+                                            self.lane_item_name(
+                                                state,
+                                                track_index,
+                                                lane_index,
+                                                *line,
+                                            )
+                                        };
                                         LabelBuilder::new(ui, text)
                                             .color(color)
                                             .bg_color(bg_color)
@@ -1236,5 +1243,5 @@ fn play_position_text1(line: usize, lpb: u16) -> String {
 fn play_position_text2(line: usize, lpb: u16) -> String {
     let lpb = lpb as usize;
     let bar = lpb * 4;
-    format!("{:03X}.{:X}", line / bar + 1, line % bar / lpb + 1)
+    format!("{:03}.{:X}", line / bar + 1, line % bar / lpb + 1)
 }
