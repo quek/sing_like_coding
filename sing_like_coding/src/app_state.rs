@@ -547,6 +547,14 @@ impl<'a> AppState<'a> {
         }
     }
 
+    fn cursor_track_max(&self) -> CursorTrack {
+        CursorTrack {
+            track: self.song.tracks.len(),
+            lane: self.song.tracks.last().unwrap().lanes.len(),
+            line: *self.labeled_lines.last().unwrap(),
+        }
+    }
+
     pub fn eval(&mut self, buffer: &str) -> Result<()> {
         Eval::eval(buffer, self)?;
         Ok(())
@@ -585,6 +593,30 @@ impl<'a> AppState<'a> {
 
     fn lane_item(&self) -> Option<&LaneItem> {
         self.song.lane_item(&self.cursor_track)
+    }
+
+    fn lane_items_move_line(
+        &self,
+        min: &CursorTrack,
+        max: &CursorTrack,
+        delta: isize,
+        commands: &mut Vec<(CursorTrack, Option<LaneItem>)>,
+    ) {
+        let lane_itemss = self.lane_items_min_max_cloned(min, max);
+        for items in lane_itemss {
+            for item in items {
+                if let Some((cursor, item)) = item {
+                    commands.push((cursor, None));
+                    commands.push((
+                        CursorTrack {
+                            line: cursor.line.saturating_add_signed(delta),
+                            ..cursor
+                        },
+                        Some(item),
+                    ));
+                }
+            }
+        }
     }
 
     fn loop_range(&mut self) -> Result<()> {
@@ -817,28 +849,9 @@ impl<'a> AppState<'a> {
                     lane: 0,
                     line: self.cursor_track.line,
                 };
-                let max = CursorTrack {
-                    track: self.song.tracks.len(),
-                    lane: self.song.tracks.last().unwrap().lanes.len(),
-                    line: *self.labeled_lines.last().unwrap(),
-                };
-                let itemss_shift = self.lane_items_min_max_cloned(&min, &max);
-                for items in itemss_shift {
-                    for item in items {
-                        if let Some((cursor, item)) = item {
-                            commands.push((cursor, None));
-                            commands.push((
-                                CursorTrack {
-                                    line: cursor.line + nlines,
-                                    ..cursor
-                                },
-                                Some(item),
-                            ));
-                        }
-                    }
-                }
-                let (mut cs, _) = self.lane_items_paste_at(itemss_paste, &min);
-                commands.append(&mut cs);
+                let max = self.cursor_track_max();
+                self.lane_items_move_line(&min, &max, nlines as isize, &mut commands);
+                self.lane_items_paste_at(itemss_paste, &min, &mut commands);
             }
         }
         self.send_to_audio(MainToAudio::LaneItem(commands))?;
@@ -1549,8 +1562,7 @@ impl<'a> AppState<'a> {
         let mut clipboard = Clipboard::new().unwrap();
         if let Ok(text) = clipboard.get_text() {
             if let Ok(itemss) = serde_json::from_str::<Vec<Vec<Option<LaneItem>>>>(&text) {
-                let (mut cs, line_next) = self.lane_items_paste_at(itemss, &self.cursor_track);
-                commands.append(&mut cs);
+                let line_next = self.lane_items_paste_at(itemss, &self.cursor_track, &mut commands);
                 self.cursor_track.line = line_next;
             }
         }
@@ -1563,8 +1575,8 @@ impl<'a> AppState<'a> {
         &self,
         itemss: Vec<Vec<Option<LaneItem>>>,
         at: &CursorTrack,
-    ) -> (Vec<(CursorTrack, Option<LaneItem>)>, usize) {
-        let mut commands = vec![];
+        commands: &mut Vec<(CursorTrack, Option<LaneItem>)>,
+    ) -> usize {
         let mut cursor = at.clone();
         let mut line_next = cursor.line;
 
@@ -1582,11 +1594,11 @@ impl<'a> AppState<'a> {
             cursor.line = self.cursor_track.line;
         }
 
-        (commands, line_next)
+        line_next
     }
 
     fn lane_items_min_max_cloned(
-        &mut self,
+        &self,
         min: &CursorTrack,
         max: &CursorTrack,
     ) -> Vec<Vec<Option<(CursorTrack, LaneItem)>>> {
