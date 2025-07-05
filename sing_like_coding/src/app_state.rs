@@ -591,10 +591,6 @@ impl<'a> AppState<'a> {
             .and_then(|x| x.lanes.get(self.cursor_track.lane))
     }
 
-    fn lane_item(&self) -> Option<&LaneItem> {
-        self.song.lane_item(&self.cursor_track)
-    }
-
     fn lane_items_move_line(
         &self,
         min: &CursorTrack,
@@ -788,50 +784,19 @@ impl<'a> AppState<'a> {
         copy_p: bool,
         commands: &mut Vec<(CursorTrack, Option<LaneItem>)>,
     ) -> Result<()> {
-        if let Some(LaneItem::Label(_)) = self.lane_item() {
-            let line = self.cursor_track.line;
-            let min = CursorTrack {
-                track: 0,
-                lane: 0,
-                line,
-            };
-            let track = self.song.tracks.len() - 1;
-            let line = {
-                let index = match self.labeled_lines.binary_search(&line) {
-                    Ok(i) => i,
-                    Err(i) => i,
-                };
-                let index = index + 1;
-                let line = self.labeled_lines[index];
-                line - 1
-            };
-            let max = CursorTrack {
-                track,
-                lane: self.song.tracks[track].lanes.len() - 1,
-                line,
-            };
-            self.lane_items_copy_or_cut_min_max(copy_p, &min, &max, commands)?;
-        }
+        let (min, max) = self.pattern_range();
+        self.lane_items_copy_or_cut_min_max(copy_p, &min, &max, commands)?;
         Ok(())
     }
 
     fn pattern_cut(&mut self) -> Result<()> {
         let mut commands = vec![];
+        let (min, max) = self.pattern_range();
+        let delta = min.line as isize - max.line as isize - 1;
         self.pattern_copy_or_cut(false, &mut commands)?;
-        let line_start = self.cursor_track.line;
-        let line_end = {
-            let index = match self.labeled_lines.binary_search(&line_start) {
-                Ok(i) => i,
-                Err(i) => i,
-            };
-            let index = index + 1;
-            self.labeled_lines[index]
-        };
-        let delta = line_start as isize - line_end as isize;
         let min = CursorTrack {
-            track: 0,
-            lane: 0,
-            line: line_end,
+            line: max.line + 1,
+            ..max
         };
         let max = self.cursor_track_max();
         self.lane_items_move_line(&min, &max, delta, &mut commands);
@@ -862,27 +827,97 @@ impl<'a> AppState<'a> {
     }
 
     fn pattern_dup(&mut self) -> Result<()> {
+        let mut commands = vec![];
+        let (min, max) = self.pattern_range();
+        let pattern = self.pattern_min_max_cloned(&min, &max);
+        self.pattern_insert(pattern, &mut commands);
+        self.send_to_audio(MainToAudio::LaneItem(commands))?;
         Ok(())
+    }
+
+    fn pattern_insert(
+        &self,
+        pattern: Vec<Vec<Option<LaneItem>>>,
+        commands: &mut Vec<(CursorTrack, Option<LaneItem>)>,
+    ) {
+        let nlines = pattern[0].len();
+        let min = CursorTrack {
+            track: 0,
+            lane: 0,
+            line: self.cursor_track.line,
+        };
+        let max = self.cursor_track_max();
+        self.lane_items_move_line(&min, &max, nlines as isize, commands);
+        self.lane_items_paste_at(pattern, &min, commands);
+    }
+
+    fn pattern_min_max_cloned(
+        &self,
+        min: &CursorTrack,
+        max: &CursorTrack,
+    ) -> Vec<Vec<Option<LaneItem>>> {
+        let mut pattern = vec![];
+        for track_index in min.track..=max.track {
+            if let Some(track) = self.song.tracks.get(track_index) {
+                let lane_start = if track_index == min.track {
+                    min.lane
+                } else {
+                    0
+                };
+                let lane_end = if track_index == max.track {
+                    max.lane
+                } else {
+                    track.lanes.len()
+                };
+                for lane_index in lane_start..=lane_end {
+                    if let Some(lane) = track.lanes.get(lane_index) {
+                        let mut items = vec![];
+                        for line in min.line..=max.line {
+                            items.push(lane.item(line).cloned());
+                        }
+                        pattern.push(items);
+                    }
+                }
+            }
+        }
+        pattern
     }
 
     fn pattern_paste(&mut self) -> Result<()> {
         let mut commands = vec![];
         let mut clipboard = Clipboard::new().unwrap();
         if let Ok(text) = clipboard.get_text() {
-            if let Ok(itemss_paste) = serde_json::from_str::<Vec<Vec<Option<LaneItem>>>>(&text) {
-                let nlines = itemss_paste[0].len();
-                let min = CursorTrack {
-                    track: 0,
-                    lane: 0,
-                    line: self.cursor_track.line,
-                };
-                let max = self.cursor_track_max();
-                self.lane_items_move_line(&min, &max, nlines as isize, &mut commands);
-                self.lane_items_paste_at(itemss_paste, &min, &mut commands);
+            if let Ok(pattern) = serde_json::from_str::<Vec<Vec<Option<LaneItem>>>>(&text) {
+                self.pattern_insert(pattern, &mut commands);
             }
         }
         self.send_to_audio(MainToAudio::LaneItem(commands))?;
         Ok(())
+    }
+
+    fn pattern_range(&self) -> (CursorTrack, CursorTrack) {
+        let line = self.cursor_track.line;
+        let min = CursorTrack {
+            track: 0,
+            lane: 0,
+            line,
+        };
+        let track = self.song.tracks.len() - 1;
+        let line = {
+            let index = match self.labeled_lines.binary_search(&line) {
+                Ok(i) => i,
+                Err(i) => i,
+            };
+            let index = index + 1;
+            let line = self.labeled_lines[index];
+            line - 1
+        };
+        let max = CursorTrack {
+            track,
+            lane: self.song.tracks[track].lanes.len() - 1,
+            line,
+        };
+        (min, max)
     }
 
     pub fn play(&mut self) -> Result<()> {
@@ -1446,7 +1481,7 @@ impl<'a> AppState<'a> {
         min: &CursorTrack,
         max: &CursorTrack,
         commands: &mut Vec<(CursorTrack, Option<LaneItem>)>,
-    ) -> Result<()> {
+    ) -> Result<Vec<Vec<Option<LaneItem>>>> {
         let mut itemss = vec![];
         for track_index in min.track..=max.track {
             if let Some(track) = self.song.tracks.get(track_index) {
@@ -1464,7 +1499,7 @@ impl<'a> AppState<'a> {
                     if let Some(lane) = track.lanes.get(lane_index) {
                         let mut items = vec![];
                         for line in min.line..=max.line {
-                            items.push(lane.item(line).clone());
+                            items.push(lane.item(line).cloned());
                             if !copy_p {
                                 commands.push((
                                     CursorTrack {
@@ -1484,7 +1519,7 @@ impl<'a> AppState<'a> {
         let json = serde_json::to_string_pretty(&itemss)?;
         let mut clipboard = Clipboard::new().unwrap();
         clipboard.set_text(&json)?;
-        Ok(())
+        Ok(itemss)
     }
 
     fn late_items_cut(&mut self) -> Result<()> {
