@@ -34,6 +34,7 @@ pub struct MainView {
     bpm: Option<f64>,
     dropped_files: Vec<DroppedFile>,
     dropped_files_pre: Vec<DroppedFile>,
+    line_play: usize,
     shortcut_map_common: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_track: HashMap<(Modifier, Key), UiCommand>,
     shortcut_map_lane: HashMap<(Modifier, Key), UiCommand>,
@@ -422,6 +423,7 @@ impl MainView {
             bpm: None,
             dropped_files: Default::default(),
             dropped_files_pre: Default::default(),
+            line_play: 0,
             shortcut_map_common,
             shortcut_map_track,
             shortcut_map_lane,
@@ -442,6 +444,8 @@ impl MainView {
         state: &mut AppState,
         device: &mut Option<Device>,
     ) -> Result<()> {
+        // 途中で変わると表示がちらつくので
+        self.line_play = state.song_state.line_play;
         // hovered の判定が1フレーム遅れるので。
         self.dropped_files = std::mem::take(&mut self.dropped_files_pre);
         self.dropped_files_pre = gui_context.input(|i| i.raw.dropped_files.clone());
@@ -499,7 +503,7 @@ impl MainView {
 
                 ui.label(format!(
                     "{}",
-                    play_position_text1(state.song_state.line_play, state.song.lpb)
+                    play_position_text1(self.line_play, state.song.lpb)
                 ));
 
                 let mut loop_p = state.song_state.loop_p;
@@ -530,7 +534,7 @@ impl MainView {
 
         CentralPanel::default().show(gui_context, |ui: &mut Ui| -> anyhow::Result<()> {
             if state.song_state.play_p && state.follow_p {
-                state.cursor_track.line = state.song_state.line_play
+                state.cursor_track.line = self.line_play
             }
 
             let line_range = self.compute_line_range(ui, state);
@@ -649,7 +653,7 @@ impl MainView {
             && state.focused_part == FocusedPart::Lane
         {
             bg_color = state.color_cursor();
-        } else if line == state.song_state.line_play {
+        } else if line == self.line_play {
             bg_color = Color32::DARK_GREEN;
         } else if let Some(min) = &state.selection_track_min {
             if let (min, Some(max)) = if state.select_p {
@@ -1039,7 +1043,7 @@ impl MainView {
             ui.vertical(|ui| {
                 ui.label(" ");
                 for line in line_range.clone() {
-                    let color = if line == state.song_state.line_play {
+                    let color = if line == self.line_play {
                         Color32::DARK_GREEN
                     } else if (state.song_state.loop_start..state.song_state.loop_end)
                         .contains(&(line * 0x100))
@@ -1060,7 +1064,7 @@ impl MainView {
             ui.vertical(|ui| {
                 ui.label(" ");
                 for line in line_range.clone() {
-                    let color = if line == state.song_state.line_play {
+                    let color = if line == self.line_play {
                         Color32::DARK_GREEN
                     } else if (state.song_state.loop_start..state.song_state.loop_end)
                         .contains(&(line * 0x100))
