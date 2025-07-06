@@ -90,6 +90,12 @@ impl Track {
                                     events.push(Event::NoteOff(*key, delay));
                                 }
                                 if !note.off {
+                                    for on_key in context.on_keys.iter_mut() {
+                                        if *on_key == Some(note.key) {
+                                            events.push(Event::NoteOff(note.key, delay));
+                                            on_key.take();
+                                        }
+                                    }
                                     events.push(Event::NoteOn(note.key, note.velocity, delay));
                                     if context.on_keys.len() <= lane_index {
                                         context.on_keys.resize_with(lane_index + 1, || None);
