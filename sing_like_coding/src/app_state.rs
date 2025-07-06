@@ -43,6 +43,7 @@ use crate::{
 pub enum UiCommand {
     Command,
     Digit(i64),
+    Digit4Times,
     EvalWindowOpen,
     FocusedPartNext,
     FocusedPartPrev,
@@ -1018,6 +1019,13 @@ impl<'a> AppState<'a> {
                     self.digit = Some(x * 10 + digit);
                 } else {
                     self.digit = Some(*digit);
+                }
+            }
+            UiCommand::Digit4Times => {
+                if let Some(x) = self.digit {
+                    self.digit = Some(x * 4);
+                } else {
+                    self.digit = Some(4);
                 }
             }
             UiCommand::EvalWindowOpen => {

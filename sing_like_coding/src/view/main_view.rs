@@ -98,7 +98,7 @@ impl MainView {
             ),
         ];
         let shortcut_map_lane = [
-            ((Modifier::None, Key::Minus), UiCommand::Digit(-1)),
+            ((Modifier::None, Key::U), UiCommand::Digit4Times),
             ((Modifier::None, Key::Num0), UiCommand::Digit(0)),
             ((Modifier::None, Key::Num1), UiCommand::Digit(1)),
             ((Modifier::None, Key::Num2), UiCommand::Digit(2)),
