@@ -831,7 +831,6 @@ impl<'a> AppState<'a> {
         let mut commands = vec![];
         let (min, max) = self.pattern_range();
         let pattern = self.pattern_min_max_cloned(&min, &max);
-        dbg!(&pattern);
         self.pattern_insert(pattern, &mut commands);
         self.send_to_audio(MainToAudio::LaneItem(commands))?;
         Ok(())
@@ -1147,6 +1146,15 @@ impl<'a> AppState<'a> {
             }
             UiCommand::PatternToggle => {
                 self.pattern_p = !self.pattern_p;
+                if self.pattern_p {
+                    let index = self
+                        .labeled_lines
+                        .binary_search(&self.cursor_track.line)
+                        .unwrap_or_else(|i| i.saturating_sub(1));
+                    if let Some(line) = self.labeled_lines.get(index) {
+                        self.cursor_track.line = *line;
+                    }
+                }
             }
             UiCommand::PatternCursor(x, y) => {
                 self.pattern_cursor(*x, *y);
