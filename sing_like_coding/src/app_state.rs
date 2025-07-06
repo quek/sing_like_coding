@@ -1563,8 +1563,11 @@ impl<'a> AppState<'a> {
             &mut self.selection_track_min,
             &mut self.selection_track_max,
         ) {
-            self.cursor_track.line = max.line + 1;
-            let mut cursor = self.cursor_track.clone();
+            let mut cursor = CursorTrack {
+                track: min.track,
+                lane: min.lane,
+                line: max.line + 1,
+            };
             for items in itemss.into_iter() {
                 for item in items.into_iter() {
                     if let Some((_, item)) = item {
@@ -1575,12 +1578,12 @@ impl<'a> AppState<'a> {
                     cursor = cursor.down(&self.song);
                 }
                 cursor = cursor.right(&self.song);
-                cursor.line = self.cursor_track.line;
+                cursor.line = max.line + 1;
             }
-
             let line_delta = max.line - min.line + 1;
             min.line += line_delta;
             max.line += line_delta;
+            self.cursor_track.line += line_delta;
         } else if let Some(item) = self.song.lane_item(&self.cursor_track) {
             self.cursor_track.line += 1;
             lane_items.push((self.cursor_track.clone(), Some(item.clone())));
