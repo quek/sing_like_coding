@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Range};
+use std::{collections::HashMap, ops::Range, path::PathBuf};
 
 use anyhow::Result;
 use common::{
@@ -467,7 +467,11 @@ impl MainView {
                 let song_name = format!(
                     "{}{}",
                     if state.song_dirty_p { "*" } else { "" },
-                    &state.song.name
+                    PathBuf::from(state.song_state.song_file_get().unwrap_or("".to_string()))
+                        .file_name()
+                        .map(|x| x.to_str())
+                        .flatten()
+                        .unwrap_or("--")
                 );
                 ui.heading(song_name);
 
