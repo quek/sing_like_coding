@@ -1077,7 +1077,7 @@ impl MainView {
                     } else {
                         Color32::BLACK
                     };
-                    LabelBuilder::new(ui, format!("{:02X}", line))
+                    LabelBuilder::new(ui, format!("{:03X}", line))
                         .bg_color(color)
                         .build();
                 }
