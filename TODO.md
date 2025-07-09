@@ -1,5 +1,6 @@
 # TODO
 
+- Pattern view で lane ごとの編集
 - Undo LaneItem 以外
 - singer, plugin の process での前処理は構造が変わったときにやっておく
 - PDC
