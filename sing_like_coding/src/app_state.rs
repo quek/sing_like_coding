@@ -599,12 +599,14 @@ impl<'a> AppState<'a> {
         delta: isize,
         commands: &mut Vec<(CursorTrack, Option<LaneItem>)>,
     ) {
+        let mut delete: Vec<(CursorTrack, Option<LaneItem>)> = vec![];
+        let mut add: Vec<(CursorTrack, Option<LaneItem>)> = vec![];
         let lane_itemss = self.lane_items_min_max_cloned(min, max);
         for items in lane_itemss {
             for item in items {
                 if let Some((cursor, item)) = item {
-                    commands.push((cursor, None));
-                    commands.push((
+                    delete.push((cursor, None));
+                    add.push((
                         CursorTrack {
                             line: cursor.line.saturating_add_signed(delta),
                             ..cursor
@@ -614,6 +616,8 @@ impl<'a> AppState<'a> {
                 }
             }
         }
+        commands.append(&mut delete);
+        commands.append(&mut add);
     }
 
     fn loop_range(&mut self) -> Result<()> {
@@ -845,7 +849,7 @@ impl<'a> AppState<'a> {
         let min = CursorTrack {
             track: 0,
             lane: 0,
-            line: self.cursor_track.line + nlines,
+            line: self.cursor_track.line,
         };
         let max = self.cursor_track_max();
         self.lane_items_move_line(&min, &max, nlines as isize, commands);
@@ -1420,13 +1424,13 @@ impl<'a> AppState<'a> {
             for module_index in 0..modules_len {
                 let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
                     if track_index + 1 == tracks_len && module_index + 1 == modules_len {
-                        callback_p = true;
                         Box::new(|state, _| state.song_save_file())
                     } else {
                         Box::new(|_, _| Ok(()))
                     };
                 let module = &self.song.tracks[track_index].modules[module_index];
                 self.send_to_plugin(MainToPlugin::StateSave(module.id), callback)?;
+                callback_p = true;
             }
         }
         if !callback_p {
