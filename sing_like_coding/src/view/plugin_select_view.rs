@@ -37,10 +37,13 @@ impl PluginSelectView {
                         .map(|x| x.clone())
                         .collect::<Vec<_>>()
                 }
-                if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                if !self.quried_items.is_empty()
+                    && response.lost_focus()
+                    && ui.input(|i| i.key_pressed(Key::Enter))
+                {
                     return Ok(ReturnState::Selected(self.quried_items[0].clone()));
                 }
-                if self.focus_p {
+                if self.focus_p || self.quried_items.is_empty() {
                     self.focus_p = false;
                     gui_context.memory_mut(|x| x.request_focus(response.id));
                 }
