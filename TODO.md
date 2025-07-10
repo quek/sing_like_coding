@@ -1,6 +1,8 @@
 # TODO
 
+- 分割表示
 - Pattern view で lane ごとの編集
+  paste したとき上書きなのか挿入なのかなど、もうちょっと詰めてから
 - Undo LaneItem 以外
 - singer, plugin の process での前処理は構造が変わったときにやっておく
 - PDC

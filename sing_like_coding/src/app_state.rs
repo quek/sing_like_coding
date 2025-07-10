@@ -142,6 +142,10 @@ pub struct CursorTrack {
 }
 
 impl CursorTrack {
+    pub fn first_p(&self) -> bool {
+        self.track == 0 && self.lane == 0
+    }
+
     pub fn min_merge(&self, other: &Self) -> Self {
         let (track, lane) = if (self.track, self.lane) <= (other.track, other.lane) {
             (self.track, self.lane)
@@ -549,10 +553,17 @@ impl<'a> AppState<'a> {
     }
 
     fn cursor_track_max(&self) -> CursorTrack {
-        CursorTrack {
-            track: self.song.tracks.len(),
-            lane: self.song.tracks.last().unwrap().lanes.len(),
-            line: *self.labeled_lines.last().unwrap(),
+        if self.cursor_track.first_p() {
+            CursorTrack {
+                track: self.song.tracks.len(),
+                lane: self.song.tracks.last().unwrap().lanes.len(),
+                line: *self.labeled_lines.last().unwrap(),
+            }
+        } else {
+            CursorTrack {
+                line: *self.labeled_lines.last().unwrap(),
+                ..self.cursor_track
+            }
         }
     }
 
@@ -846,14 +857,30 @@ impl<'a> AppState<'a> {
         commands: &mut Vec<(CursorTrack, Option<LaneItem>)>,
     ) {
         let nlines = pattern[0].len();
-        let min = CursorTrack {
-            track: 0,
-            lane: 0,
-            line: self.cursor_track.line,
-        };
-        let max = self.cursor_track_max();
-        self.lane_items_move_line(&min, &max, nlines as isize, commands);
-        self.lane_items_paste_at(pattern, &min, commands);
+        if self.cursor_track.first_p() {
+            let min = CursorTrack {
+                track: 0,
+                lane: 0,
+                line: self.cursor_track.line,
+            };
+            let max = self.cursor_track_max();
+            self.lane_items_move_line(&min, &max, nlines as isize, commands);
+            self.lane_items_paste_at(pattern, &min, commands);
+        } else {
+            let mut cursor = self.cursor_track.clone();
+            for items in pattern.into_iter() {
+                for item in items.into_iter() {
+                    if let Some(item) = item {
+                        commands.push((cursor, Some(item)));
+                    } else {
+                        commands.push((cursor, None));
+                    }
+                    cursor = cursor.down(&self.song);
+                }
+                cursor = cursor.right(&self.song);
+                cursor.line = self.cursor_track.line;
+            }
+        }
     }
 
     fn pattern_min_max_cloned(
@@ -901,28 +928,44 @@ impl<'a> AppState<'a> {
     }
 
     fn pattern_range(&self) -> (CursorTrack, CursorTrack) {
-        let line = self.cursor_track.line;
-        let min = CursorTrack {
-            track: 0,
-            lane: 0,
-            line,
-        };
-        let track = self.song.tracks.len() - 1;
-        let line = {
-            let index = match self.labeled_lines.binary_search(&line) {
-                Ok(i) => i,
-                Err(i) => i,
+        if self.cursor_track.first_p() {
+            let line = self.cursor_track.line;
+            let min = CursorTrack {
+                track: 0,
+                lane: 0,
+                line,
             };
-            let index = index + 1;
-            let line = self.labeled_lines[index];
-            line - 1
-        };
-        let max = CursorTrack {
-            track,
-            lane: self.song.tracks[track].lanes.len() - 1,
-            line,
-        };
-        (min, max)
+            let track = self.song.tracks.len() - 1;
+            let line = {
+                let index = match self.labeled_lines.binary_search(&line) {
+                    Ok(i) => i,
+                    Err(i) => i,
+                };
+                let index = index + 1;
+                let line = self.labeled_lines[index];
+                line - 1
+            };
+            let max = CursorTrack {
+                track,
+                lane: self.song.tracks[track].lanes.len() - 1,
+                line,
+            };
+            (min, max)
+        } else {
+            let min = self.cursor_track.clone();
+            let line_max = {
+                let index = match self.labeled_lines.binary_search(&min.line) {
+                    Ok(i) => i,
+                    Err(i) => i,
+                };
+                self.labeled_lines[index + 1].saturating_sub(1)
+            };
+            let max = CursorTrack {
+                line: line_max,
+                ..self.cursor_track
+            };
+            (min, max)
+        }
     }
 
     pub fn play(&mut self) -> Result<()> {
