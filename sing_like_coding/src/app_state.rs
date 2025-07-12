@@ -813,7 +813,7 @@ impl<'a> AppState<'a> {
         self.pattern_copy_or_cut(false, &mut commands)?;
         let min = CursorTrack {
             line: max.line + 1,
-            ..max
+            ..min
         };
         let max = self.cursor_track_max();
         self.lane_items_move_line(&min, &max, delta, &mut commands);

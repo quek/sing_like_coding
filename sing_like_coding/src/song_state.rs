@@ -30,7 +30,7 @@ impl SongState {
         self.song_file[0] = 0;
         self.play_p = false;
         self.line_play = 0;
-        self.loop_p = true;
+        self.loop_p = false;
         self.loop_start = 0;
         self.loop_end = 0x100 * 0x20;
         self.process_elasped_avg = 0.0;
