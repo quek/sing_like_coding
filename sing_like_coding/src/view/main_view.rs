@@ -1158,6 +1158,7 @@ impl MainView {
         track_range: Range<usize>,
         lane_start: usize,
     ) -> Result<()> {
+        let mut lane_start = lane_start;
         let mut commands = vec![];
 
         with_font_mono(ui, |ui| -> Result<()> {
@@ -1220,6 +1221,7 @@ impl MainView {
                                     Ok(())
                                 });
                             }
+                            lane_start = 0;
                             Ok(())
                         });
                         self.view_mixer(state, ui, track_index, &mut commands)?;
