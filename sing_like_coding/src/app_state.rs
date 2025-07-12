@@ -448,7 +448,7 @@ impl<'a> AppState<'a> {
 
     pub fn cursor_down_item(&mut self) {
         if let Some(lane) = self.lane_at_cursor() {
-            let delta = self.digit.unwrap_or(1);
+            let mut delta = self.digit.unwrap_or(1);
             let keys: Vec<_> = lane.items.keys().copied().collect();
             if keys.is_empty() {
                 return;
@@ -459,6 +459,7 @@ impl<'a> AppState<'a> {
                     if i > 0 {
                         i - 1
                     } else {
+                        delta -= 1;
                         0
                     }
                 }

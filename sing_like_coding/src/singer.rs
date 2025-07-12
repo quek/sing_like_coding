@@ -157,16 +157,19 @@ impl Singer {
 
         let sec_per_frame = frames_count as f64 / self.song.sample_rate;
         let sec_per_delay = 60.0 / (self.song.bpm * self.song.lpb as f64 * 256.0);
-        self.play_position.end =
-            self.play_position.start + (sec_per_frame / sec_per_delay).round() as usize;
+        let delta = (sec_per_frame / sec_per_delay).round() as usize;
+        self.play_position.end = self.play_position.start + delta;
 
-        {
-            let song_state = self.song_state_mut();
-            if loop_p {
-                if self.play_position.end > song_state.loop_end {
-                    let overflow = self.play_position.end - song_state.loop_end;
-                    self.play_position.end = song_state.loop_start + overflow;
-                }
+        let song_state = self.song_state_mut();
+        if loop_p {
+            if self.play_position.start < song_state.loop_start
+                || song_state.loop_end <= self.play_position.start
+            {
+                self.play_position.start = song_state.loop_start;
+                self.play_position.end = self.play_position.start + delta;
+            } else if self.play_position.end > song_state.loop_end {
+                let overflow = self.play_position.end - song_state.loop_end;
+                self.play_position.end = song_state.loop_start + overflow;
             }
         }
     }
