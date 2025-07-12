@@ -357,7 +357,7 @@ impl MainView {
                 UiCommand::Module(ModuleCommand::CursorRight),
             ),
             (
-                (Modifier::None, Key::S),
+                (Modifier::None, Key::C),
                 UiCommand::Module(ModuleCommand::Sidechain),
             ),
             (
