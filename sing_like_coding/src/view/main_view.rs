@@ -52,8 +52,8 @@ impl MainView {
     pub fn new() -> Self {
         let shortcut_map_common = [
             ((Modifier::None, Key::M), UiCommand::TrackMute(None, None)),
+            ((Modifier::None, Key::F), UiCommand::Follow),
             ((Modifier::None, Key::P), UiCommand::Loop),
-            ((Modifier::S, Key::P), UiCommand::Follow),
             ((Modifier::C, Key::P), UiCommand::LoopRange),
             ((Modifier::None, Key::S), UiCommand::TrackSolo(None, None)),
             ((Modifier::C, Key::S), UiCommand::SongSave),
