@@ -982,19 +982,18 @@ impl<'a> AppState<'a> {
     }
 
     pub fn plugin_load(&mut self, description: &Description, gui_open_p: bool) -> Result<()> {
-        match self.send_to_audio(MainToAudio::PluginLoad(
-            self.cursor_track.track,
+        let track_index = self.cursor_track.track;
+        self.send_to_audio(MainToAudio::PluginLoad(
+            track_index,
             description.id.clone(),
             description.name.clone(),
-        ))? {
-            AudioToMain::PluginLoad(_id, song) => {
-                // TODO 残ってる
-                self.song = song;
-                let module_index = self.song.tracks[self.cursor_track.track].modules.len() - 1;
-                self.module_load((self.cursor_track.track, module_index), gui_open_p)?;
-            }
-            x => unreachable!("{:?}", x),
-        }
+        ))?;
+
+        self.song_apply_callbacks.push_back(Box::new(move |state| {
+            let module_index = state.song.tracks[track_index].modules.len() - 1;
+            state.module_load((track_index, module_index), gui_open_p)?;
+            Ok(())
+        }));
 
         Ok(())
     }

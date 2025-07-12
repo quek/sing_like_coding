@@ -31,7 +31,7 @@ use clap_sys::{
 };
 use common::{
     event::Event,
-    module::{AudioInput, Module, ModuleId, ModuleIndex},
+    module::{AudioInput, Module, ModuleIndex},
     plugin_ref::PluginRef,
     process_data::{EventKind, ProcessData},
     process_track_context::ProcessTrackContext,
@@ -82,7 +82,6 @@ pub enum MainToAudio {
 
 #[derive(Debug)]
 pub enum AudioToMain {
-    PluginLoad(ModuleId, Song),
     Song(Song),
     Ok,
 }
@@ -864,8 +863,7 @@ fn run_main_to_audio(
                 name,
                 audio_inputs,
             ));
-
-            Ok(AudioToMain::PluginLoad(id, singer.song.clone()))
+            Ok(AudioToMain::Song(singer.song.clone()))
         }
         MainToAudio::PluginDelete(module_index) => {
             singer.plugin_delete(module_index)?;

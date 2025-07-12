@@ -140,7 +140,7 @@ impl ProcessData {
 
     pub fn input_note_on(&mut self, key: i16, velocity: f64, channel: i16, delay: usize) {
         if self.nevents_input == MAX_EVENTS {
-            panic!();
+            panic!("{} {:?}", self.nevents_input, self.events_input);
         }
         self.events_input[self.nevents_input].kind = EventKind::NoteOn;
         self.events_input[self.nevents_input].key = key;
@@ -152,7 +152,7 @@ impl ProcessData {
 
     pub fn input_note_off(&mut self, key: i16, channel: i16, delay: usize) {
         if self.nevents_input == MAX_EVENTS {
-            panic!();
+            panic!("{} {:?}", self.nevents_input, self.events_input);
         }
         self.events_input[self.nevents_input].kind = EventKind::NoteOff;
         self.events_input[self.nevents_input].key = key;
