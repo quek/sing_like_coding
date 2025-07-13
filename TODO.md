@@ -1,5 +1,7 @@
 # TODO
 
+- undo したときにカーソル位置を戻す。
+  見切れているところ undo されるのわかりにくいから
 - module の追加、削除、順番変更時の module_index と automation_params_index の対応
 - 分割表示
 - Pattern view で lane ごとの編集

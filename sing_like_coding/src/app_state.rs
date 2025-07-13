@@ -109,7 +109,7 @@ pub enum LaneCommand {
     Dup,
     LaneItemDelete,
     LaneItemMove(i64, i64),
-    LaneItemUpdate(i16, i16, i16, bool, i16),
+    LaneItemUpdate(i16, i16, i16, Option<bool>, i16),
     Paste,
     SelectMode,
     SelectClear,
@@ -1791,7 +1791,7 @@ impl<'a> AppState<'a> {
         key_delta: i16,
         velocity_delta: i16,
         delay_delta: i16,
-        off: bool,
+        off: Option<bool>,
         value_delta: i16,
     ) -> Result<()> {
         let mut commands = vec![];
@@ -1825,7 +1825,7 @@ impl<'a> AppState<'a> {
                         note.key = (note.key + key_delta).clamp(0, 127);
                         note.velocity = (note.velocity + velocity_delta as f64).clamp(0.0, 127.0);
                         note.delay = (note.delay as i16 + delay_delta).clamp(0, 0xff) as u8;
-                        note.off = off;
+                        note.off = off.unwrap_or(note.off);
                     }
                     LaneItem::Point(point) => {
                         point.value = (point.value as i16 + value_delta).clamp(0, 0xff) as u8;
@@ -1835,7 +1835,7 @@ impl<'a> AppState<'a> {
                     LaneItem::Ret => {}
                 }
                 lane_item
-            } else if off {
+            } else if off == Some(true) {
                 LaneItem::Note(Note {
                     off: true,
                     ..Default::default()
