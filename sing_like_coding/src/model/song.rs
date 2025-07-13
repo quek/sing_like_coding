@@ -91,7 +91,6 @@ impl Song {
         let track = self.tracks.remove(track_index);
         self.tracks.insert(track_index_new, track);
 
-        let direction = delta.signum();
         let range = track_index.min(track_index_new)..(track_index.max(track_index_new) + 1);
 
         for track in self.tracks.iter_mut() {
@@ -101,7 +100,7 @@ impl Song {
                     if *src_index == track_index {
                         *src_index = track_index_new;
                     } else if range.contains(src_index) {
-                        *src_index = src_index.saturating_add_signed(direction);
+                        *src_index = src_index.saturating_add_signed(delta.signum() * -1);
                     }
                 }
             }
