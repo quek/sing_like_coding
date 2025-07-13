@@ -285,6 +285,7 @@ pub struct AppState<'a> {
     pub follow_p: bool,
     pub cursor_track: CursorTrack,
     pub cursor_module: CursorModule,
+    pub info: String,
     pub labeled_lines: Vec<usize>,
     pub lane_item_last: LaneItem,
     midi_device_input: Option<MidiDevice>,
@@ -352,6 +353,7 @@ impl<'a> AppState<'a> {
                 line: 0,
             },
             cursor_module: CursorModule { index: 0 },
+            info: Default::default(),
             labeled_lines: vec![],
             lane_item_last: LaneItem::default(),
             midi_device_input: None,
@@ -1438,10 +1440,9 @@ impl<'a> AppState<'a> {
             .set_directory(song_directory())
             .pick_file()
         {
-            self.send_to_audio(MainToAudio::SongOpen(
-                path.to_str().map(|s| s.to_string()).unwrap(),
-            ))?;
-            self.song_apply_callbacks.push_back(Box::new(|state| {
+            let path = path.to_str().map(|s| s.to_string()).unwrap();
+            self.send_to_audio(MainToAudio::SongOpen(path.clone()))?;
+            self.song_apply_callbacks.push_back(Box::new(move |state| {
                 state.cursor_track = Default::default();
                 state.cursor_module = Default::default();
                 state.select_p = false;
@@ -1453,6 +1454,7 @@ impl<'a> AppState<'a> {
                     }
                 }
                 state.song_dirty_p = false;
+                state.info = format!("Opened {}.", path);
                 Ok(())
             }));
         }
@@ -1910,6 +1912,7 @@ impl<'a> AppState<'a> {
         let json = serde_json::to_string_pretty(&self.song).unwrap();
         file.write_all(json.as_bytes()).unwrap();
         self.song_dirty_p = false;
+        self.info = format!("Saved {}.", song_file.display());
         Ok(())
     }
 

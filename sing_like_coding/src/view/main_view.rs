@@ -577,6 +577,10 @@ impl MainView {
             Ok(())
         });
 
+        TopBottomPanel::bottom("Bottom").show(gui_context, |ui| {
+            ui.label(&state.info);
+        });
+
         for command in commands {
             state.run_ui_command(&command)?;
         }
