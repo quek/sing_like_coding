@@ -437,7 +437,6 @@ impl<'a> AppState<'a> {
                 Err(i) => i,
             };
             let new_pos = pos.saturating_sub(delta as usize);
-            dbg!(pos, new_pos);
             self.cursor_track.line = keys[new_pos];
         }
     }
@@ -1515,6 +1514,20 @@ impl<'a> AppState<'a> {
         }
         self.route = Route::ParamSelect;
         Ok(())
+    }
+
+    pub fn in_play_labeled_range_p(&self, line: usize) -> bool {
+        let index = self
+            .labeled_lines
+            .binary_search(&self.song_state.line_play)
+            .unwrap_or_else(|i| i.saturating_add_signed(-1));
+        if line < self.labeled_lines[index] {
+            return false;
+        }
+        if index == self.labeled_lines.len() - 1 {
+            return true;
+        }
+        line < self.labeled_lines[index + 1]
     }
 
     fn lane_items_copy(&mut self) -> Result<()> {

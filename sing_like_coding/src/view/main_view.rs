@@ -668,7 +668,7 @@ impl MainView {
             && state.focused_part == FocusedPart::Lane
         {
             bg_color = state.color_cursor();
-        } else if line == self.line_play {
+        } else if line == self.line_play || state.pattern_p && state.in_play_labeled_range_p(line) {
             bg_color = Color32::DARK_GREEN;
         } else if let Some(min) = &state.selection_track_min {
             if let (min, Some(max)) = if state.select_p {
