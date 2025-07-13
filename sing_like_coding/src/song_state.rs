@@ -15,6 +15,7 @@ pub struct SongState {
     pub loop_p: bool,
     pub loop_start: usize,
     pub loop_end: usize,
+    pub ms_play: usize,
     pub process_elasped_avg: f64,
     pub cpu_usage: f64,
     pub tracks: [TrackState; MAX_TRACKS],
@@ -33,6 +34,7 @@ impl SongState {
         self.loop_p = false;
         self.loop_start = 0;
         self.loop_end = 0x100 * 0x20;
+        self.ms_play = 0;
         self.process_elasped_avg = 0.0;
         self.cpu_usage = 0.0;
         for track in self.tracks.iter_mut() {

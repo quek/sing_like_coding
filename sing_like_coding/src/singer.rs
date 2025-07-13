@@ -145,10 +145,13 @@ impl Singer {
         }
         self.play_position.start = self.play_position.end;
 
+        let sec_per_delay = 60.0 / (self.song.bpm * self.song.lpb as f64 * 256.0);
         {
             let song_state = self.song_state_mut();
             let line = (self.play_position.start / 0x100) as usize;
             song_state.line_play = line;
+            song_state.ms_play =
+                (self.play_position.start as f64 * sec_per_delay * 1000.0).round() as usize;
 
             if !song_state.play_p {
                 return;
@@ -156,7 +159,6 @@ impl Singer {
         }
 
         let sec_per_frame = frames_count as f64 / self.song.sample_rate;
-        let sec_per_delay = 60.0 / (self.song.bpm * self.song.lpb as f64 * 256.0);
         let delta = (sec_per_frame / sec_per_delay).round() as usize;
         self.play_position.end = self.play_position.start + delta;
 

@@ -510,6 +510,13 @@ impl MainView {
                     play_position_text1(self.line_play, state.song.lpb)
                 ));
 
+                ui.label(format!(
+                    "{}:{}:{:03}",
+                    state.song_state.ms_play / (1000 * 60),
+                    (state.song_state.ms_play / 1000) % 60,
+                    state.song_state.ms_play % 1000,
+                ));
+
                 let mut loop_p = state.song_state.loop_p;
                 if ui.toggle_value(&mut loop_p, "Loop").clicked() {
                     state.loop_toggle()?;
