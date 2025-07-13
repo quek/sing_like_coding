@@ -1,2 +1,3 @@
 [workspace]
+resolver = "3"
 members = ["common", "sing_like_coding", "sing_like_coding_plugin"]

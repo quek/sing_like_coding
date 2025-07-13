@@ -393,7 +393,11 @@ impl<'a> AppState<'a> {
         };
 
         if let Some(midi_device_input) = &this.config.midi_device_input {
-            this.midi_device_input = Some(MidiDevice::new(midi_device_input, sender_midi).unwrap());
+            match MidiDevice::new(midi_device_input, sender_midi) {
+                Ok(midi_device) => this.midi_device_input = Some(midi_device),
+
+                Err(e) => log::warn!("MidiDevice::new is failed. {}", e),
+            }
         }
 
         this
