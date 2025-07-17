@@ -6,7 +6,8 @@ use common::{
     protocol::MainToPlugin,
 };
 use eframe::egui::{
-    CentralPanel, Color32, DragValue, DroppedFile, Key, TextEdit, TopBottomPanel, Ui,
+    text::LayoutJob, CentralPanel, Color32, DragValue, DroppedFile, FontId, Key, Label, TextEdit,
+    TextFormat, TopBottomPanel, Ui,
 };
 
 use crate::{
@@ -552,23 +553,20 @@ impl MainView {
 
             with_font_mono(ui, |ui| {
                 ui.horizontal(|ui| -> anyhow::Result<()> {
-                    let (track_range, mut lane_start) = self.compute_visible_lane_range(state, ui);
+                    let (track_range, lane_start) = self.compute_visible_lane_range(state, ui);
                     if state.pattern_p {
                         self.view_pattern(ui, state, line_range.len(), track_range, lane_start)?;
                     } else {
                         self.view_ruler(state, ui, &line_range)?;
 
-                        for track_index in track_range {
-                            self.view_track(
-                                state,
-                                ui,
-                                track_index,
-                                lane_start,
-                                &line_range,
-                                &mut commands,
-                            )?;
-                            lane_start = 0;
-                        }
+                        self.view_tracks(
+                            state,
+                            ui,
+                            &track_range,
+                            lane_start,
+                            &line_range,
+                            &mut commands,
+                        )?;
                     }
 
                     Ok(())
@@ -592,7 +590,8 @@ impl MainView {
         let available_height = ui.available_height()
             - self.height_track_header
             - self.height_modules
-            - self.height_mixer;
+            - self.height_mixer
+            - 12.0; // status
 
         let available_rows = (available_height / self.height_line.max(5.0)).floor() as usize;
 
@@ -889,89 +888,61 @@ impl MainView {
         Ok(())
     }
 
-    fn view_lane(
+    fn view_lanes2(
         &mut self,
         state: &mut AppState,
         ui: &mut Ui,
-        track_index: usize,
-        lane_index: usize,
-        line_range: &Range<usize>,
-    ) -> anyhow::Result<()> {
-        let inner = ui.vertical(|ui| -> anyhow::Result<()> {
-            for line in line_range.clone() {
-                let color = if state.cursor_track.line == line {
-                    Color32::WHITE
-                } else {
-                    Color32::GRAY
-                };
-                let bg_color = self.lane_item_bg_color(state, track_index, lane_index, line);
-
-                let text = self.lane_item_name(state, track_index, lane_index, line);
-
-                if self.height_line == 0.0 {
-                    let height_before = ui.available_height();
-                    LabelBuilder::new(ui, text)
-                        .color(color)
-                        .bg_color(bg_color)
-                        .build();
-                    let height_after = ui.available_height();
-                    self.height_line = height_before - height_after;
-                } else {
-                    LabelBuilder::new(ui, text)
-                        .color(color)
-                        .bg_color(bg_color)
-                        .build();
-                }
-            }
-            Ok(())
-        });
-
-        if state.width_lane <= 1.0 {
-            state.width_lane = inner.response.rect.width();
-            state.compute_track_offsets();
-        }
-
-        if ui
-            .interact(
-                inner.response.rect,
-                ui.id().with(("lane", track_index, lane_index)),
-                eframe::egui::Sense::hover(),
-            )
-            .hovered()
-        {
-            for file in self.dropped_files.iter() {
-                if let Some(path) = &file.path {
-                    if path
-                        .extension()
-                        .and_then(|ext| ext.to_str())
-                        .map_or(false, |ext| {
-                            matches!(ext.to_lowercase().as_str(), "mid" | "midi")
-                        })
-                    {
-                        state.midi_file_read(track_index, lane_index, &path)?;
-                    }
-                }
-            }
-            self.dropped_files.clear();
-        }
-
-        Ok(())
-    }
-
-    fn view_lanes(
-        &mut self,
-        state: &mut AppState,
-        ui: &mut Ui,
-        track_index: usize,
+        track_range: &Range<usize>,
         lane_start: usize,
         line_range: &Range<usize>,
     ) -> anyhow::Result<()> {
-        ui.horizontal(|ui| -> anyhow::Result<()> {
-            for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
-                self.view_lane(state, ui, track_index, lane_index, line_range)?;
+        let mut lane_start = lane_start;
+        let font_id = FontId::monospace(12.0);
+
+        for line in line_range.clone() {
+            let mut job = LayoutJob::default();
+            for track_index in track_range.clone() {
+                for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
+                    job.append(
+                        " ",
+                        0.0,
+                        TextFormat {
+                            font_id: font_id.clone(),
+                            background: Color32::from_rgb(0x1b, 0x1b, 0x1b),
+                            ..Default::default()
+                        },
+                    );
+                    let text = self.lane_item_name(state, track_index, lane_index, line);
+                    let text = format!("{:<9}", text);
+                    let color = if state.cursor_track.line == line {
+                        Color32::WHITE
+                    } else {
+                        Color32::GRAY
+                    };
+                    let bg_color = self.lane_item_bg_color(state, track_index, lane_index, line);
+                    job.append(
+                        &text,
+                        0.0,
+                        TextFormat {
+                            font_id: font_id.clone(),
+                            color,
+                            background: bg_color,
+                            ..Default::default()
+                        },
+                    );
+                }
+                lane_start = 0;
             }
-            Ok(())
-        });
+            let label = Label::new(job).truncate();
+            if self.height_line == 0.0 {
+                let height_before = ui.available_height();
+                ui.add(label);
+                let height_after = ui.available_height();
+                self.height_line = height_before - height_after;
+            } else {
+                ui.add(label);
+            }
+        }
         Ok(())
     }
 
@@ -1097,26 +1068,70 @@ impl MainView {
         Ok(())
     }
 
-    fn view_track(
+    fn view_tracks(
         &mut self,
         state: &mut AppState,
         ui: &mut Ui,
-        track_index: usize,
+        track_range: &Range<usize>,
         lane_start: usize,
         line_range: &Range<usize>,
         mut commands: &mut Vec<UiCommand>,
     ) -> anyhow::Result<()> {
-        ui.vertical(|ui| -> anyhow::Result<()> {
-            with_font_mono(ui, |ui| {
-                self.view_track_head(state, ui, track_index).unwrap();
-
-                self.view_lanes(state, ui, track_index, lane_start, line_range)
-                    .unwrap();
+        let mut lane_start = lane_start;
+        let inner = ui.vertical(|ui| -> Result<()> {
+            self.view_track_head2(state, ui, track_range, lane_start)?;
+            self.view_lanes2(state, ui, track_range, lane_start, line_range)?;
+            let mut space = 6.0;
+            ui.horizontal(|ui| -> Result<()> {
+                for track_index in track_range.clone() {
+                    for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
+                        if lane_index == lane_start {
+                            ui.add_space(space);
+                            space = -2.0;
+                            ui.vertical(|ui| -> Result<()> {
+                                self.view_mixer(state, ui, track_index, &mut commands)?;
+                                self.view_modules(state, ui, track_index)?;
+                                Ok(())
+                            });
+                        } else {
+                            ui.add_space(state.width_lane);
+                        }
+                    }
+                    lane_start = 0;
+                }
+                Ok(())
             });
-            self.view_mixer(state, ui, track_index, &mut commands)?;
-            self.view_modules(state, ui, track_index)?;
             Ok(())
         });
+
+        if ui
+            .interact(
+                inner.response.rect,
+                ui.id().with("track"),
+                eframe::egui::Sense::hover(),
+            )
+            .hovered()
+        {
+            for file in self.dropped_files.iter() {
+                if let Some(path) = &file.path {
+                    if path
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map_or(false, |ext| {
+                            matches!(ext.to_lowercase().as_str(), "mid" | "midi")
+                        })
+                    {
+                        state.midi_file_read(
+                            state.cursor_track.track,
+                            state.cursor_track.lane,
+                            &path,
+                        )?;
+                    }
+                }
+            }
+            self.dropped_files.clear();
+        }
+
         Ok(())
     }
 
@@ -1154,6 +1169,62 @@ impl MainView {
                 .bg_color(bg_color)
                 .build();
         }
+        let height_after_track_header = ui.available_height();
+        if self.height_track_header == 0.0 {
+            self.height_track_header = height_before_track_header - height_after_track_header;
+        }
+        Ok(())
+    }
+
+    fn view_track_head2(
+        &mut self,
+        state: &mut AppState,
+        ui: &mut Ui,
+        track_range: &Range<usize>,
+        lane_start: usize,
+    ) -> Result<()> {
+        let height_before_track_header = ui.available_height();
+
+        let font_id = FontId::monospace(12.0);
+        let mut job = LayoutJob::default();
+        for track_index in track_range.clone() {
+            for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
+                job.append(
+                    " ",
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        background: Color32::from_rgb(0x1b, 0x1b, 0x1b),
+                        ..Default::default()
+                    },
+                );
+                let (color, bg_color) = if state.cursor_track.track == track_index
+                    && state.focused_part == FocusedPart::Track
+                {
+                    (Color32::LIGHT_GRAY, state.color_cursor())
+                } else {
+                    (Color32::GRAY, Color32::BLACK)
+                };
+                let text = if lane_index == lane_start {
+                    format!("{:<9}", state.song.tracks[track_index].name)
+                } else {
+                    format!("         ")
+                };
+                job.append(
+                    &text,
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        color,
+                        background: bg_color,
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+        let label = Label::new(job).truncate();
+        ui.add(label);
+
         let height_after_track_header = ui.available_height();
         if self.height_track_header == 0.0 {
             self.height_track_header = height_before_track_header - height_after_track_header;

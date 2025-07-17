@@ -3,7 +3,7 @@ use common::{
     module::AudioInput,
     protocol::{MainToPlugin, PluginToMain},
 };
-use eframe::egui::{ahash::HashMap, Key};
+use eframe::egui::{ahash::HashMap, Align2, Key, TextEdit, Window};
 
 use crate::{
     app_state::{AppState, UiCommand},
@@ -21,6 +21,7 @@ use super::{
     select_view::{self, SelectItem, SelectView},
     shortcut_key::{shortcut_key, Modifier},
     sidechain_select_view::{self, SidechainSelectView},
+    util::select_all_text,
 };
 
 #[derive(Debug)]
@@ -91,6 +92,9 @@ impl RootView {
 
         if state.eval_window_open_p {
             self.eval_window.view(gui_context, state)?;
+        }
+        if state.rename_track_index.is_some() {
+            self.view_rename_window(gui_context, state)?;
         }
 
         state.receive_from_communicator()?;
@@ -282,6 +286,36 @@ impl RootView {
                 state.route = Route::Track;
             }
         }
+        Ok(())
+    }
+
+    fn view_rename_window(
+        &mut self,
+        gui_context: &eframe::egui::Context,
+        state: &mut AppState,
+    ) -> Result<()> {
+        Window::new("Rename")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(gui_context, |ui| -> Result<()> {
+                let edit = TextEdit::singleline(&mut state.rename_buffer);
+                let response = ui.add(edit);
+                if state.rename_request_focus_p {
+                    state.rename_request_focus_p = false;
+                    gui_context.memory_mut(|x| {
+                        x.request_focus(response.id);
+                    });
+                    select_all_text(ui, response.id, &state.rename_buffer);
+                }
+                if ui.input(|i| i.key_pressed(Key::Enter)) {
+                    state.track_rename()?;
+                }
+                if ui.input(|i| i.key_pressed(Key::Escape)) {
+                    state.rename_track_index = None;
+                }
+                Ok(())
+            });
         Ok(())
     }
 }

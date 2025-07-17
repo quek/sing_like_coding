@@ -385,7 +385,7 @@ impl<'a> AppState<'a> {
 
             offset_tracks: vec![],
             offset_flatten_lanes: vec![],
-            width_lane: 1.0,
+            width_lane: 70.0,
             flatten_lane_index_max: 0,
             flatten_lane_index_to_track_index_vec: Default::default(),
             track_lane_to_flatten_lane_index_map: Default::default(),
