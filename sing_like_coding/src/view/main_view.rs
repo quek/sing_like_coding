@@ -6,10 +6,8 @@ use common::{
     protocol::MainToPlugin,
 };
 use eframe::egui::{
-    self,
-    text::{LayoutJob, TextWrapping},
-    CentralPanel, Color32, DragValue, DroppedFile, FontId, Key, Label, TextEdit, TextFormat,
-    TopBottomPanel, Ui,
+    self, text::LayoutJob, CentralPanel, Color32, DragValue, DroppedFile, FontId, Key, Label,
+    TextEdit, TextFormat, TopBottomPanel, Ui,
 };
 
 use crate::{
@@ -902,14 +900,7 @@ impl MainView {
         let font_id = FontId::monospace(12.0);
 
         for line in line_range.clone() {
-            let mut job = LayoutJob {
-                wrap: TextWrapping {
-                    max_rows: 1,
-                    overflow_character: None,
-                    ..Default::default()
-                },
-                ..Default::default()
-            };
+            let mut job = LayoutJob::default();
             for track_index in track_range.clone() {
                 for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
                     job.append(
@@ -942,7 +933,7 @@ impl MainView {
                 }
                 lane_start = 0;
             }
-            let label = Label::new(job);
+            let label = Label::new(job).truncate();
             if self.height_line == 0.0 {
                 let height_before = ui.available_height();
                 ui.add(label);
