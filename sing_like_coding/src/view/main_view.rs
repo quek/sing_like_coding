@@ -896,10 +896,9 @@ impl MainView {
         lane_start: usize,
         line_range: &Range<usize>,
     ) -> anyhow::Result<()> {
-        let mut lane_start = lane_start;
         let font_id = FontId::monospace(12.0);
-
         for line in line_range.clone() {
+            let mut lane_start = lane_start;
             let mut job = LayoutJob::default();
             for track_index in track_range.clone() {
                 for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
@@ -1077,12 +1076,12 @@ impl MainView {
         line_range: &Range<usize>,
         mut commands: &mut Vec<UiCommand>,
     ) -> anyhow::Result<()> {
-        let mut lane_start = lane_start;
         let inner = ui.vertical(|ui| -> Result<()> {
             self.view_track_head2(state, ui, track_range, lane_start)?;
             self.view_lines(state, ui, track_range, lane_start, line_range)?;
             let mut space = 6.0;
             ui.horizontal(|ui| -> Result<()> {
+                let mut lane_start = lane_start;
                 for track_index in track_range.clone() {
                     for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
                         if lane_index == lane_start {
@@ -1183,6 +1182,7 @@ impl MainView {
         track_range: &Range<usize>,
         lane_start: usize,
     ) -> Result<()> {
+        let mut lane_start = lane_start;
         let height_before_track_header = ui.available_height();
 
         let font_id = FontId::monospace(12.0);
@@ -1221,8 +1221,9 @@ impl MainView {
                     },
                 );
             }
+            lane_start = 0;
         }
-        let label = Label::new(job);
+        let label = Label::new(job).truncate();
         ui.add(label);
 
         let height_after_track_header = ui.available_height();
