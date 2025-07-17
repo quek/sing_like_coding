@@ -6,8 +6,10 @@ use common::{
     protocol::MainToPlugin,
 };
 use eframe::egui::{
-    text::LayoutJob, CentralPanel, Color32, DragValue, DroppedFile, FontId, Key, Label, TextEdit,
-    TextFormat, TopBottomPanel, Ui,
+    self,
+    text::{LayoutJob, TextWrapping},
+    CentralPanel, Color32, DragValue, DroppedFile, FontId, Key, Label, TextEdit, TextFormat,
+    TopBottomPanel, Ui,
 };
 
 use crate::{
@@ -441,7 +443,7 @@ impl MainView {
 
     pub fn view(
         &mut self,
-        gui_context: &eframe::egui::Context,
+        gui_context: &egui::Context,
         state: &mut AppState,
         device: &mut Option<Device>,
     ) -> Result<()> {
@@ -736,7 +738,7 @@ impl MainView {
 
     fn process_shortcut(
         &mut self,
-        gui_context: &eframe::egui::Context,
+        gui_context: &egui::Context,
         state: &mut AppState,
     ) -> Result<()> {
         let focused = gui_context.memory(|memory| memory.focused());
@@ -888,7 +890,7 @@ impl MainView {
         Ok(())
     }
 
-    fn view_lanes2(
+    fn view_lines(
         &mut self,
         state: &mut AppState,
         ui: &mut Ui,
@@ -900,7 +902,14 @@ impl MainView {
         let font_id = FontId::monospace(12.0);
 
         for line in line_range.clone() {
-            let mut job = LayoutJob::default();
+            let mut job = LayoutJob {
+                wrap: TextWrapping {
+                    max_rows: 1,
+                    overflow_character: None,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
             for track_index in track_range.clone() {
                 for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
                     job.append(
@@ -933,7 +942,7 @@ impl MainView {
                 }
                 lane_start = 0;
             }
-            let label = Label::new(job).truncate();
+            let label = Label::new(job);
             if self.height_line == 0.0 {
                 let height_before = ui.available_height();
                 ui.add(label);
@@ -1080,7 +1089,7 @@ impl MainView {
         let mut lane_start = lane_start;
         let inner = ui.vertical(|ui| -> Result<()> {
             self.view_track_head2(state, ui, track_range, lane_start)?;
-            self.view_lanes2(state, ui, track_range, lane_start, line_range)?;
+            self.view_lines(state, ui, track_range, lane_start, line_range)?;
             let mut space = 6.0;
             ui.horizontal(|ui| -> Result<()> {
                 for track_index in track_range.clone() {
@@ -1108,7 +1117,7 @@ impl MainView {
             .interact(
                 inner.response.rect,
                 ui.id().with("track"),
-                eframe::egui::Sense::hover(),
+                egui::Sense::hover(),
             )
             .hovered()
         {
@@ -1222,7 +1231,7 @@ impl MainView {
                 );
             }
         }
-        let label = Label::new(job).truncate();
+        let label = Label::new(job);
         ui.add(label);
 
         let height_after_track_header = ui.available_height();
