@@ -1,15 +1,11 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use eframe::egui::{
-    self,
-    text::{CCursor, CCursorRange},
-    Button, CentralPanel, Key, TextEdit, Ui,
-};
+use eframe::egui::{self, Button, CentralPanel, Key, TextEdit, Ui};
 
 use crate::{app_state::AppState, command::Command, commander::Commander};
 
-use super::root_view::Route;
+use super::{root_view::Route, util::select_all_text};
 
 pub struct CommandView {
     focus_p: bool,
@@ -52,13 +48,7 @@ impl CommandView {
                 gui_context.memory_mut(|x| {
                     x.request_focus(response.id);
                 });
-                if let Some(mut state) = TextEdit::load_state(ui.ctx(), response.id) {
-                    state.cursor.set_char_range(Some(CCursorRange {
-                        primary: CCursor::new(0),
-                        secondary: CCursor::new(self.buffer.chars().count()),
-                    }));
-                    state.store(ui.ctx(), response.id);
-                }
+                select_all_text(ui, response.id, &self.buffer);
             }
 
             let mut selected = None;

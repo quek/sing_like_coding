@@ -932,7 +932,7 @@ impl MainView {
                 }
                 lane_start = 0;
             }
-            let label = Label::new(job).truncate();
+            let label = Label::new(job).truncate().show_tooltip_when_elided(false);
             if self.height_line == 0.0 {
                 let height_before = ui.available_height();
                 ui.add(label);
@@ -972,7 +972,7 @@ impl MainView {
         label.context_menu(|ui: &mut Ui| {
             if ui.button("Delete").clicked() {
                 state.plugin_delete((track_index, module_index)).unwrap();
-                ui.close_menu();
+                ui.close();
             }
         });
         Ok(())
@@ -1223,7 +1223,7 @@ impl MainView {
             }
             lane_start = 0;
         }
-        let label = Label::new(job).truncate();
+        let label = Label::new(job).truncate().show_tooltip_when_elided(false);
         ui.add(label);
 
         let height_after_track_header = ui.available_height();
