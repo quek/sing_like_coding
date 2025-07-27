@@ -1480,21 +1480,26 @@ impl<'a> AppState<'a> {
 
     pub fn song_save(&mut self) -> Result<()> {
         let mut callback_p = false;
-        let tracks_len = self.song.tracks.len();
-        for track_index in 0..tracks_len {
-            let modules_len = self.song.tracks[track_index].modules.len();
-            for module_index in 0..modules_len {
-                let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
-                    if track_index + 1 == tracks_len && module_index + 1 == modules_len {
-                        Box::new(|state, _| state.song_save_file())
-                    } else {
-                        Box::new(|_, _| Ok(()))
-                    };
-                let module = &self.song.tracks[track_index].modules[module_index];
-                self.send_to_plugin(MainToPlugin::StateSave(module.id), callback)?;
-                callback_p = true;
-            }
+
+        let module_indexs = (0..self.song.tracks.len())
+            .flat_map(|track_index| {
+                (0..self.song.tracks[track_index].modules.len())
+                    .map(move |module_index| (track_index, module_index))
+            })
+            .collect::<Vec<_>>();
+        let modules_len = module_indexs.len();
+        for (index, module_index) in module_indexs.iter().enumerate() {
+            let callback: Box<dyn Fn(&mut AppState, PluginToMain) -> Result<()>> =
+                if index == modules_len - 1 {
+                    Box::new(|state, _| state.song_save_file())
+                } else {
+                    Box::new(|_, _| Ok(()))
+                };
+            let module = &self.song.tracks[module_index.0].modules[module_index.1];
+            self.send_to_plugin(MainToPlugin::StateSave(module.id), callback)?;
+            callback_p = true;
         }
+
         if !callback_p {
             self.song_save_file()?;
         }
