@@ -50,6 +50,7 @@ pub enum MainToAudio {
     LoopRange(Range<usize>),
     LaneAdd(usize),
     LaneItem(Vec<(CursorTrack, Option<LaneItem>)>),
+    ModuleRename(ModuleIndex, String),
     #[allow(dead_code)]
     NoteOn(usize, i16, i16, f64, usize),
     #[allow(dead_code)]
@@ -844,6 +845,12 @@ fn run_main_to_audio(
         MainToAudio::LaneItem(items) => {
             let undo = singer.lane_items_set(items)?;
             undo_history.add(undo, redo);
+            Ok(AudioToMain::Song(singer.song.clone()))
+        }
+        MainToAudio::ModuleRename(module_index, name) => {
+            if let Some(module) = singer.song.module_at_mut(module_index) {
+                module.name = name;
+            }
             Ok(AudioToMain::Song(singer.song.clone()))
         }
         MainToAudio::PluginLatency(id, latency) => {

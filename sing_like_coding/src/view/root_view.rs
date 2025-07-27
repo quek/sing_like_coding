@@ -93,7 +93,7 @@ impl RootView {
         if state.eval_window_open_p {
             self.eval_window.view(gui_context, state)?;
         }
-        if state.rename_track_index.is_some() {
+        if state.rename_target.is_some() {
             self.view_rename_window(gui_context, state)?;
         }
 
@@ -312,7 +312,7 @@ impl RootView {
                     state.track_rename()?;
                 }
                 if ui.input(|i| i.key_pressed(Key::Escape)) {
-                    state.rename_track_index = None;
+                    state.rename_target = None;
                 }
                 Ok(())
             });

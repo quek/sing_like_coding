@@ -123,6 +123,7 @@ pub enum ModuleCommand {
     CursorRight,
     Delete,
     Open,
+    Rename,
     Sidechain,
 }
 
@@ -273,6 +274,11 @@ pub enum FocusedPart {
     Mixer,
 }
 
+pub enum RenameTarget {
+    Track(usize),
+    Module(ModuleIndex),
+}
+
 pub struct AppState<'a> {
     pub config: Config,
     pub confirm_exit_popup_p: bool,
@@ -292,7 +298,7 @@ pub struct AppState<'a> {
     pub pattern_p: bool,
     pub rename_buffer: String,
     pub rename_request_focus_p: bool,
-    pub rename_track_index: Option<usize>,
+    pub rename_target: Option<RenameTarget>,
     pub route: Route,
     pub select_p: bool,
     pub selection_track_min: Option<CursorTrack>,
@@ -359,7 +365,7 @@ impl<'a> AppState<'a> {
             midi_device_input: None,
             pattern_p: false,
             rename_buffer: Default::default(),
-            rename_track_index: None,
+            rename_target: None,
             rename_request_focus_p: false,
             route: Route::Track,
             select_p: false,
@@ -1293,6 +1299,14 @@ impl<'a> AppState<'a> {
                     self.route = Route::PluginSelect;
                 }
             }
+            UiCommand::Module(ModuleCommand::Rename) => {
+                self.rename_target = Some(RenameTarget::Module((
+                    self.cursor_track.track,
+                    self.cursor_module.index,
+                )));
+                self.rename_buffer = self.song.tracks[self.cursor_track.track].name.clone();
+                self.rename_request_focus_p = true;
+            }
             UiCommand::Module(ModuleCommand::Sidechain) => {
                 if let Some(_module) = self.module_at_cursort() {
                     self.route = Route::SidechainSelect;
@@ -1900,7 +1914,7 @@ impl<'a> AppState<'a> {
             TrackCommand::MoveRight => self.track_move(1)?,
             TrackCommand::Paste => self.track_paste()?,
             TrackCommand::Rename => {
-                self.rename_track_index = Some(self.cursor_track.track);
+                self.rename_target = Some(RenameTarget::Track(self.cursor_track.track));
                 self.rename_buffer = self.song.tracks[self.cursor_track.track].name.clone();
                 self.rename_request_focus_p = true;
             }
@@ -2111,11 +2125,20 @@ impl<'a> AppState<'a> {
     }
 
     pub fn track_rename(&mut self) -> Result<()> {
-        if let Some(track_index) = self.rename_track_index.take() {
-            self.send_to_audio(MainToAudio::TrackRename(
-                track_index,
-                self.rename_buffer.clone(),
-            ))?;
+        match self.rename_target.take() {
+            Some(RenameTarget::Track(track_index)) => {
+                self.send_to_audio(MainToAudio::TrackRename(
+                    track_index,
+                    self.rename_buffer.clone(),
+                ))?;
+            }
+            Some(RenameTarget::Module(module_index)) => {
+                self.send_to_audio(MainToAudio::ModuleRename(
+                    module_index,
+                    self.rename_buffer.clone(),
+                ))?;
+            }
+            None => {}
         }
         Ok(())
     }
