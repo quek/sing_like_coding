@@ -243,6 +243,8 @@ impl Singer {
 
     pub fn process(&mut self, output: &mut [f32], nchannels: usize) -> Result<()> {
         let this_start = Instant::now();
+        let mut idle_p = self.song_state().tracks[0].peaks[0] <= DB_MIN
+            && self.song_state().tracks[0].peaks[1] <= DB_MIN;
 
         //log::debug!("AudioProcess process steady_time {}", self.steady_time);
         let nframes = output.len() / nchannels;
@@ -296,6 +298,7 @@ impl Singer {
                 context.prepare();
 
                 if !midi_buffer.is_empty() {
+                    idle_p = false;
                     if song_state.tracks[track_index].rec_p {
                         context.event_list_input.append(&mut midi_buffer.clone());
                         if song_state.rec_p {
@@ -307,6 +310,7 @@ impl Singer {
                 }
 
                 if self.all_notef_off_p {
+                    idle_p = false;
                     context.event_list_input.push(Event::NoteAllOff);
                 }
             }
@@ -317,210 +321,215 @@ impl Singer {
         // tracks process
         for track_index in 0..self.song.tracks.len() {
             let mut context = self.process_track_contexts[track_index].lock().unwrap();
-            self.song.tracks[track_index].compute_midi(&mut context);
-        }
-        // TODO topological_levels は必要な時だけ行う
-        let levels = topological_levels(&self.song)?;
-        for level in levels {
-            level
-                .into_par_iter()
-                .try_for_each(|(track_index, module_index)| {
-                    let track = &self.song.tracks[track_index];
-                    let mut context = self.process_track_contexts[track_index].lock().unwrap();
-                    track.process_module(
-                        track_index,
-                        &mut context,
-                        module_index,
-                        &self.process_track_contexts,
-                    )
-                })?;
+            idle_p &= !self.song.tracks[track_index].compute_midi(&mut context);
         }
 
-        // prepare mixing paramss
-        let mut data = self
-            .process_track_contexts
-            .iter_mut()
-            .map(|x| {
-                x.lock()
-                    .unwrap()
-                    .plugins
-                    .last_mut()
-                    .map(|plugin_ref: &mut PluginRef| {
-                        let pd = plugin_ref.process_data();
-                        let constant_mask = pd.constant_mask_out;
-                        (plugin_ref.ptr, constant_mask, pd.nports_in, pd.nports_out)
-                    })
-            })
-            .zip(self.song.tracks.iter().map(|track| {
-                if (track.pan - 0.5).abs() < 0.001 {
-                    (
-                        track.mute,
-                        track.solo,
-                        track.volume,
-                        track.volume,
-                        track.volume,
-                    )
-                } else {
-                    let normalized_pan = (track.pan - 0.5) * 2.0;
-                    let pan_angle = (normalized_pan + 1.0) * PI / 4.0;
-                    (
-                        track.mute,
-                        track.solo,
-                        track.volume * pan_angle.cos(),
-                        track.volume * pan_angle.sin(),
-                        track.volume,
-                    )
-                }
-            }))
-            .collect::<Vec<_>>();
-
-        let mut buffers = data
-            .iter()
-            .enumerate()
-            .map(|(track_index, x)| {
-                x.0.map(|x| {
-                    let process_data = unsafe { &mut *(x.0) };
-                    if track_index == 0 {
-                        &mut process_data.buffer_in
-                    } else {
-                        &mut process_data.buffer_out
-                    }
-                })
-            })
-            .collect::<Vec<_>>();
-
-        let main_gains = [data[0].1 .2, data[0].1 .3, data[0].1 .4];
-
-        // tracks pan pan volume
-        for ((buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)), buffer) in
-            data[1..].iter_mut().zip(buffers[1..].iter_mut())
-        {
-            if let (Some((process_data, constant_mask, _nports_in, nports_out)), Some(buffer)) =
-                (buffer_constant_mask, buffer)
-            {
-                let process_data = unsafe { &**process_data };
-                for port in 0..*nports_out {
-                    for channel in 0..process_data.nchannels_out[port] {
-                        let constp = (constant_mask[port] & (1 << channel)) != 0;
-                        let gain = if channel == 0 {
-                            *gain_ch0
-                        } else if channel == 1 {
-                            *gain_ch1
-                        } else {
-                            *gain_ch_restg
-                        };
-
-                        if constp {
-                            buffer[port][channel][0] *= gain;
-                        } else {
-                            for frame in 0..nframes {
-                                buffer[port][channel][frame] *= gain;
-                            }
-                        }
-                    }
-                }
+        if !idle_p {
+            // TODO topological_levels は必要な時だけ行う
+            let levels = topological_levels(&self.song)?;
+            for level in levels {
+                level
+                    .into_par_iter()
+                    .try_for_each(|(track_index, module_index)| {
+                        let track = &self.song.tracks[track_index];
+                        let mut context = self.process_track_contexts[track_index].lock().unwrap();
+                        track.process_module(
+                            track_index,
+                            &mut context,
+                            module_index,
+                            &self.process_track_contexts,
+                        )
+                    })?;
             }
-        }
 
-        // tracks mute solo -> main track
-        let mut dummy = ProcessData::new();
-        dummy.prepare();
-        let dummy_p = self.song.tracks[0].modules.is_empty();
+            // prepare mixing paramss
+            let mut data = self
+                .process_track_contexts
+                .iter_mut()
+                .map(|x| {
+                    x.lock()
+                        .unwrap()
+                        .plugins
+                        .last_mut()
+                        .map(|plugin_ref: &mut PluginRef| {
+                            let pd = plugin_ref.process_data();
+                            let constant_mask = pd.constant_mask_out;
+                            (plugin_ref.ptr, constant_mask, pd.nports_in, pd.nports_out)
+                        })
+                })
+                .zip(self.song.tracks.iter().map(|track| {
+                    if (track.pan - 0.5).abs() < 0.001 {
+                        (
+                            track.mute,
+                            track.solo,
+                            track.volume,
+                            track.volume,
+                            track.volume,
+                        )
+                    } else {
+                        let normalized_pan = (track.pan - 0.5) * 2.0;
+                        let pan_angle = (normalized_pan + 1.0) * PI / 4.0;
+                        (
+                            track.mute,
+                            track.solo,
+                            track.volume * pan_angle.cos(),
+                            track.volume * pan_angle.sin(),
+                            track.volume,
+                        )
+                    }
+                }))
+                .collect::<Vec<_>>();
 
-        let main_process_data = if dummy_p {
-            &mut dummy
-        } else {
-            let ptr = self.process_track_contexts[0]
-                .lock()
-                .unwrap()
-                .plugins
-                .last()
-                .unwrap()
-                .ptr;
-            let process_data = unsafe { &mut *(ptr) };
-            process_data
-        };
+            let mut buffers = data
+                .iter()
+                .enumerate()
+                .map(|(track_index, x)| {
+                    x.0.map(|x| {
+                        let process_data = unsafe { &mut *(x.0) };
+                        if track_index == 0 {
+                            &mut process_data.buffer_in
+                        } else {
+                            &mut process_data.buffer_out
+                        }
+                    })
+                })
+                .collect::<Vec<_>>();
 
-        let solo_any = self.song.tracks.iter().any(|t| t.solo);
-        for frame in 0..nframes {
-            for channel in 0..nchannels {
-                let value = data[1..]
-                    .iter()
-                    .zip(buffers[1..].iter())
-                    .map(|((buffer_constant_mask, (mute, solo, _, _, _)), buffer)| {
-                        if let (Some((process_data, constant_mask, _, _)), Some(buffer)) =
-                            (&buffer_constant_mask, buffer)
-                        {
-                            let process_data = unsafe { &**process_data };
-                            let channel = channel % process_data.nchannels_out[0];
-                            if *mute || (solo_any && !*solo) {
-                                0.0
+            let main_gains = [data[0].1 .2, data[0].1 .3, data[0].1 .4];
+
+            // tracks pan pan volume
+            for (
+                (buffer_constant_mask, (_mute, _solo, gain_ch0, gain_ch1, gain_ch_restg)),
+                buffer,
+            ) in data[1..].iter_mut().zip(buffers[1..].iter_mut())
+            {
+                if let (Some((process_data, constant_mask, _nports_in, nports_out)), Some(buffer)) =
+                    (buffer_constant_mask, buffer)
+                {
+                    let process_data = unsafe { &**process_data };
+                    for port in 0..*nports_out {
+                        for channel in 0..process_data.nchannels_out[port] {
+                            let constp = (constant_mask[port] & (1 << channel)) != 0;
+                            let gain = if channel == 0 {
+                                *gain_ch0
+                            } else if channel == 1 {
+                                *gain_ch1
                             } else {
-                                let constp = (constant_mask[0] & (1 << channel)) != 0;
-                                if constp {
-                                    buffer[0][channel][0]
-                                } else {
-                                    buffer[0][channel][frame]
+                                *gain_ch_restg
+                            };
+
+                            if constp {
+                                buffer[port][channel][0] *= gain;
+                            } else {
+                                for frame in 0..nframes {
+                                    buffer[port][channel][frame] *= gain;
                                 }
                             }
-                        } else {
-                            0.0
                         }
-                    })
-                    .sum();
-
-                if dummy_p {
-                    main_process_data.buffer_out[0][channel][frame] = value;
-                    main_process_data.constant_mask_out[0] = 0;
-                } else {
-                    main_process_data.buffer_in[0][channel][frame] = value;
-                    main_process_data.constant_mask_in[0] = 0;
+                    }
                 }
             }
-        }
 
-        // main track process
-        if !dummy_p {
-            for module_index in 0..self.song.tracks[0].modules.len() {
-                self.song.tracks[0].process_module(
-                    0,
-                    &mut self.process_track_contexts[0].lock().unwrap(),
-                    module_index,
-                    &self.process_track_contexts,
-                )?;
-            }
-        }
+            // tracks mute solo -> main track
+            let mut dummy = ProcessData::new();
+            dummy.prepare();
+            let dummy_p = self.song.tracks[0].modules.is_empty();
 
-        // main track pan volume -> audio device
-        let main_track = &self.song.tracks[0];
-        for frame in 0..nframes {
-            for channel in 0..nchannels {
-                // いまは solo はいらない
-                let value = if main_track.mute {
-                    0.0
-                } else {
-                    let gain = if channel == 0 {
-                        main_gains[0]
-                    } else if channel == 1 {
-                        main_gains[1]
+            let main_process_data = if dummy_p {
+                &mut dummy
+            } else {
+                let ptr = self.process_track_contexts[0]
+                    .lock()
+                    .unwrap()
+                    .plugins
+                    .last()
+                    .unwrap()
+                    .ptr;
+                let process_data = unsafe { &mut *(ptr) };
+                process_data
+            };
+
+            let solo_any = self.song.tracks.iter().any(|t| t.solo);
+            for frame in 0..nframes {
+                for channel in 0..nchannels {
+                    let value = data[1..]
+                        .iter()
+                        .zip(buffers[1..].iter())
+                        .map(|((buffer_constant_mask, (mute, solo, _, _, _)), buffer)| {
+                            if let (Some((process_data, constant_mask, _, _)), Some(buffer)) =
+                                (&buffer_constant_mask, buffer)
+                            {
+                                let process_data = unsafe { &**process_data };
+                                let channel = channel % process_data.nchannels_out[0];
+                                if *mute || (solo_any && !*solo) {
+                                    0.0
+                                } else {
+                                    let constp = (constant_mask[0] & (1 << channel)) != 0;
+                                    if constp {
+                                        buffer[0][channel][0]
+                                    } else {
+                                        buffer[0][channel][frame]
+                                    }
+                                }
+                            } else {
+                                0.0
+                            }
+                        })
+                        .sum();
+
+                    if dummy_p {
+                        main_process_data.buffer_out[0][channel][frame] = value;
+                        main_process_data.constant_mask_out[0] = 0;
                     } else {
-                        main_gains[2]
-                    };
-                    let constp = (main_process_data.constant_mask_out[0] & (1 << channel)) != 0;
-                    if constp {
-                        main_process_data.buffer_out[0][channel][0] *= gain;
-                        main_process_data.buffer_out[0][channel][0]
-                    } else {
-                        main_process_data.buffer_out[0][channel][frame] *= gain;
-                        main_process_data.buffer_out[0][channel][frame]
+                        main_process_data.buffer_in[0][channel][frame] = value;
+                        main_process_data.constant_mask_in[0] = 0;
                     }
-                };
-                output[nchannels * frame + channel] = value;
+                }
             }
-        }
 
-        self.song_state_mut().param_track_index = usize::MAX;
-        self.compute_song_state(main_process_data);
+            // main track process
+            if !dummy_p {
+                for module_index in 0..self.song.tracks[0].modules.len() {
+                    self.song.tracks[0].process_module(
+                        0,
+                        &mut self.process_track_contexts[0].lock().unwrap(),
+                        module_index,
+                        &self.process_track_contexts,
+                    )?;
+                }
+            }
+
+            // main track pan volume -> audio device
+            let main_track = &self.song.tracks[0];
+            for frame in 0..nframes {
+                for channel in 0..nchannels {
+                    // いまは solo はいらない
+                    let value = if main_track.mute {
+                        0.0
+                    } else {
+                        let gain = if channel == 0 {
+                            main_gains[0]
+                        } else if channel == 1 {
+                            main_gains[1]
+                        } else {
+                            main_gains[2]
+                        };
+                        let constp = (main_process_data.constant_mask_out[0] & (1 << channel)) != 0;
+                        if constp {
+                            main_process_data.buffer_out[0][channel][0] *= gain;
+                            main_process_data.buffer_out[0][channel][0]
+                        } else {
+                            main_process_data.buffer_out[0][channel][frame] *= gain;
+                            main_process_data.buffer_out[0][channel][frame]
+                        }
+                    };
+                    output[nchannels * frame + channel] = value;
+                }
+            }
+
+            self.song_state_mut().param_track_index = usize::MAX;
+            self.compute_song_state(main_process_data);
+        }
 
         self.steady_time += nframes as i64;
 

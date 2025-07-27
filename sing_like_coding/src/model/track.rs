@@ -57,24 +57,28 @@ impl Track {
         Ok(())
     }
 
-    pub fn compute_midi(&self, context: &mut ProcessTrackContext) {
+    pub fn compute_midi(&self, context: &mut ProcessTrackContext) -> bool {
         if !context.play_p {
-            return;
+            return false;
         }
         if context.play_position.start < context.play_position.end {
-            self.compute_midi_range(context, context.play_position.clone());
+            self.compute_midi_range(context, context.play_position.clone())
         } else {
-            self.compute_midi_range(context, context.play_position.start..context.loop_range.end);
-            self.compute_midi_range(context, context.loop_range.start..context.play_position.end);
-        };
+            self.compute_midi_range(context, context.play_position.start..context.loop_range.end)
+                || self.compute_midi_range(
+                    context,
+                    context.loop_range.start..context.play_position.end,
+                )
+        }
     }
 
-    pub fn compute_midi_range(&self, context: &mut ProcessTrackContext, r: Range<usize>) {
+    pub fn compute_midi_range(&self, context: &mut ProcessTrackContext, r: Range<usize>) -> bool {
         let range = r.start.saturating_add_signed(context.line_offset * 0x100)
             ..r.end.saturating_add_signed(context.line_offset * 0x100);
         if range.is_empty() {
-            return;
+            return false;
         }
+        let mut idle_p = true;
         let line_start = range.start / 0x100;
         let line_end = range.end / 0x100;
         for line in line_start..=line_end {
@@ -125,21 +129,23 @@ impl Track {
                                 context.line_offset_stack.push(context.line_offset);
                                 context.line_offset = line_label as isize - *line as isize;
                                 self.compute_midi_range(context, r.clone());
-                                return;
+                                return idle_p;
                             }
                         }
                         LaneItem::Ret => {
                             if let Some(line_offset) = context.line_offset_stack.pop() {
                                 context.line_offset = line_offset;
                                 self.compute_midi_range(context, r.clone());
-                                return;
+                                return idle_p;
                             }
                         }
                     }
                 }
             }
+            idle_p &= events.is_empty();
             context.event_list_input.append(&mut events);
         }
+        idle_p
     }
 
     pub fn events_append(
