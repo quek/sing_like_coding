@@ -199,7 +199,9 @@ impl ProcessData {
 
     pub fn output_param_value(&mut self, param_id: clap_id, value: f64, delay: usize) {
         if self.nevents_output == MAX_EVENTS {
-            panic!();
+            // Song::idle_p のとき
+            // panic!();
+            return;
         }
         self.events_output[self.nevents_output].kind = EventKind::ParamValue;
         self.events_output[self.nevents_output].param_id = param_id;
