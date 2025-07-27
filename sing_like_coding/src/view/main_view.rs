@@ -538,6 +538,7 @@ impl MainView {
                     }
                 }
 
+                ui.label(format!("{}frames", state.song_state.nframes));
                 ui.label(format!(
                     "{:.3}ms",
                     state.song_state.process_elasped_avg * 1000.0

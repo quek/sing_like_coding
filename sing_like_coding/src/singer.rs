@@ -101,8 +101,8 @@ pub struct Singer {
     shmems: Vec<Vec<Shmem>>,
     pub gui_context: Option<eframe::egui::Context>,
 
-    cpu_usages: Vec<f64>,
-    process_elaspeds: Vec<f64>,
+    process_count: usize,
+    process_elasped: f64,
     process_elasped_last: Instant,
 }
 
@@ -128,8 +128,8 @@ impl Singer {
             shmems: vec![],
             gui_context: None,
 
-            cpu_usages: vec![],
-            process_elaspeds: vec![],
+            process_count: 0,
+            process_elasped: 0.0,
             process_elasped_last: Instant::now(),
         };
         this.track_add();
@@ -533,19 +533,17 @@ impl Singer {
 
         self.steady_time += nframes as i64;
 
+        self.process_count += 1;
         let this_elapsed = this_start.elapsed();
-        let elasped = this_elapsed.as_secs_f64();
-        self.process_elaspeds.push(elasped);
-        self.cpu_usages
-            .push(elasped / (nframes as f64 / self.song.sample_rate));
-        if self.process_elasped_last.elapsed() >= Duration::from_secs(1) {
+        self.process_elasped += this_elapsed.as_secs_f64();
+        let last_elasped = self.process_elasped_last.elapsed();
+        if last_elasped >= Duration::from_secs(1) {
             let song_state = self.song_state_mut();
-            song_state.process_elasped_avg = self.process_elaspeds.iter().sum::<f64>()
-                / self.process_elaspeds.len().max(1) as f64;
-            song_state.cpu_usage =
-                self.cpu_usages.iter().sum::<f64>() / self.cpu_usages.len().max(1) as f64;
-            self.process_elaspeds.clear();
-            self.cpu_usages.clear();
+            song_state.process_elasped_avg = self.process_elasped / self.process_count as f64;
+            song_state.cpu_usage = self.process_elasped / last_elasped.as_secs_f64();
+            song_state.nframes = nframes;
+            self.process_count = 0;
+            self.process_elasped = 0.0;
             self.process_elasped_last = Instant::now();
         }
 

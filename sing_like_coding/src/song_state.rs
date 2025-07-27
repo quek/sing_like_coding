@@ -18,6 +18,7 @@ pub struct SongState {
     pub ms_play: usize,
     pub process_elasped_avg: f64,
     pub cpu_usage: f64,
+    pub nframes: usize,
     pub tracks: [TrackState; MAX_TRACKS],
     pub param_track_index: usize,
     pub param_module_index: usize,
@@ -37,6 +38,7 @@ impl SongState {
         self.ms_play = 0;
         self.process_elasped_avg = 0.0;
         self.cpu_usage = 0.0;
+        self.nframes = 1;
         for track in self.tracks.iter_mut() {
             for peak in track.peaks.iter_mut() {
                 *peak = DB_MIN;
