@@ -41,7 +41,10 @@ use clap_sys::{
     host::clap_host,
     id::clap_id,
     plugin::clap_plugin,
-    process::{clap_process, CLAP_PROCESS_ERROR},
+    process::{
+        clap_process, CLAP_PROCESS_CONTINUE, CLAP_PROCESS_CONTINUE_IF_NOT_QUIET,
+        CLAP_PROCESS_ERROR, CLAP_PROCESS_SLEEP, CLAP_PROCESS_TAIL,
+    },
     version::{clap_version_is_compatible, CLAP_VERSION},
 };
 use common::{
@@ -752,8 +755,19 @@ impl Plugin {
 
         let plugin = unsafe { &*self.plugin };
         let status = unsafe { plugin.process.unwrap()(plugin, &prc) };
-        if status == CLAP_PROCESS_ERROR {
-            panic!("process returns CLAP_PROCESS_ERROR");
+        match status {
+            CLAP_PROCESS_ERROR => panic!("process returns CLAP_PROCESS_ERROR"),
+            CLAP_PROCESS_CONTINUE => {}
+            CLAP_PROCESS_CONTINUE_IF_NOT_QUIET => {
+                dbg!(CLAP_PROCESS_CONTINUE_IF_NOT_QUIET);
+            }
+            CLAP_PROCESS_TAIL => {
+                dbg!(CLAP_PROCESS_TAIL);
+            }
+            CLAP_PROCESS_SLEEP => {
+                dbg!(CLAP_PROCESS_SLEEP);
+            }
+            _ => unreachable!("{}", status),
         }
 
         // 書き戻す
