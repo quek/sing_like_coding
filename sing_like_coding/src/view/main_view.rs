@@ -1072,6 +1072,38 @@ impl MainView {
         Ok(())
     }
 
+    fn view_mixer_and_modules(
+        &mut self,
+        state: &mut AppState,
+        ui: &mut Ui,
+        track_range: &Range<usize>,
+        lane_start: usize,
+        mut commands: &mut Vec<UiCommand>,
+    ) -> anyhow::Result<()> {
+        let mut space = 6.0;
+        ui.horizontal(|ui| -> Result<()> {
+            let mut lane_start = lane_start;
+            for track_index in track_range.clone() {
+                for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
+                    if lane_index == lane_start {
+                        ui.add_space(space);
+                        space = -2.0;
+                        ui.vertical(|ui| -> Result<()> {
+                            self.view_mixer(state, ui, track_index, &mut commands)?;
+                            self.view_modules(state, ui, track_index)?;
+                            Ok(())
+                        });
+                    } else {
+                        ui.add_space(state.width_lane);
+                    }
+                }
+                lane_start = 0;
+            }
+            Ok(())
+        });
+        Ok(())
+    }
+
     fn view_tracks(
         &mut self,
         state: &mut AppState,
@@ -1082,29 +1114,9 @@ impl MainView {
         mut commands: &mut Vec<UiCommand>,
     ) -> anyhow::Result<()> {
         let inner = ui.vertical(|ui| -> Result<()> {
-            self.view_track_head2(state, ui, track_range, lane_start)?;
+            self.view_track_head(state, ui, track_range, lane_start)?;
             self.view_lines(state, ui, track_range, lane_start, line_range)?;
-            let mut space = 6.0;
-            ui.horizontal(|ui| -> Result<()> {
-                let mut lane_start = lane_start;
-                for track_index in track_range.clone() {
-                    for lane_index in lane_start..state.song.tracks[track_index].lanes.len() {
-                        if lane_index == lane_start {
-                            ui.add_space(space);
-                            space = -2.0;
-                            ui.vertical(|ui| -> Result<()> {
-                                self.view_mixer(state, ui, track_index, &mut commands)?;
-                                self.view_modules(state, ui, track_index)?;
-                                Ok(())
-                            });
-                        } else {
-                            ui.add_space(state.width_lane);
-                        }
-                    }
-                    lane_start = 0;
-                }
-                Ok(())
-            });
+            self.view_mixer_and_modules(state, ui, track_range, lane_start, &mut commands)?;
             Ok(())
         });
 
@@ -1140,31 +1152,6 @@ impl MainView {
     }
 
     fn view_track_head(
-        &mut self,
-        state: &mut AppState,
-        ui: &mut Ui,
-        track_index: usize,
-    ) -> Result<()> {
-        let height_before_track_header = ui.available_height();
-        let (color, bg_color) = if state.cursor_track.track == track_index
-            && state.focused_part == FocusedPart::Track
-        {
-            (Color32::LIGHT_GRAY, state.color_cursor())
-        } else {
-            (Color32::GRAY, Color32::BLACK)
-        };
-        LabelBuilder::new(ui, format!("{:<9}", state.song.tracks[track_index].name))
-            .color(color)
-            .bg_color(bg_color)
-            .build();
-        let height_after_track_header = ui.available_height();
-        if self.height_track_header == 0.0 {
-            self.height_track_header = height_before_track_header - height_after_track_header;
-        }
-        Ok(())
-    }
-
-    fn view_track_head2(
         &mut self,
         state: &mut AppState,
         ui: &mut Ui,
@@ -1230,7 +1217,6 @@ impl MainView {
         track_range: Range<usize>,
         lane_start: usize,
     ) -> Result<()> {
-        let mut lane_start = lane_start;
         let mut commands = vec![];
 
         with_font_mono(ui, |ui| -> Result<()> {
@@ -1250,57 +1236,127 @@ impl MainView {
                     }
                     Ok(())
                 });
-                for track_index in track_range {
-                    ui.vertical(|ui| -> Result<()> {
-                        self.view_track_head(state, ui, track_index)?;
-                        ui.horizontal(|ui| -> Result<()> {
+
+                ui.vertical(|ui| -> Result<()> {
+                    self.view_track_head(state, ui, &track_range, lane_start)?;
+
+                    let font_id = FontId::monospace(12.0);
+                    for line in state.labeled_lines.iter().take(nlines) {
+                        let mut lane_start = lane_start;
+                        let mut job = LayoutJob::default();
+                        for track_index in track_range.clone() {
                             for lane_index in lane_start..state.song.tracks[track_index].lanes.len()
                             {
-                                ui.vertical(|ui| -> Result<()> {
-                                    for line in state.labeled_lines.iter().take(nlines) {
-                                        let line_item = state.song.tracks[track_index].lanes
-                                            [lane_index]
-                                            .items
-                                            .get(line);
-                                        let color = match line_item {
-                                            Some(LaneItem::Label(_)) => Color32::WHITE,
-                                            _ => Color32::DARK_GRAY,
-                                        };
-                                        let bg_color = self.lane_item_bg_color(
-                                            state,
-                                            track_index,
-                                            lane_index,
-                                            *line,
-                                        );
-                                        let text = if track_index == 0
-                                            && lane_index == 0
-                                            && state.labeled_lines.last() == Some(line)
-                                        {
-                                            "(end)    ".to_string()
-                                        } else {
-                                            self.lane_item_name(
-                                                state,
-                                                track_index,
-                                                lane_index,
-                                                *line,
-                                            )
-                                        };
-                                        LabelBuilder::new(ui, text)
-                                            .color(color)
-                                            .bg_color(bg_color)
-                                            .build();
-                                    }
-                                    Ok(())
-                                });
+                                job.append(
+                                    " ",
+                                    0.0,
+                                    TextFormat {
+                                        font_id: font_id.clone(),
+                                        background: Color32::from_rgb(0x1b, 0x1b, 0x1b),
+                                        ..Default::default()
+                                    },
+                                );
+                                let text = if track_index == 0
+                                    && lane_index == 0
+                                    && state.labeled_lines.last() == Some(line)
+                                {
+                                    "(end)    ".to_string()
+                                } else {
+                                    self.lane_item_name(state, track_index, lane_index, *line)
+                                };
+                                let text = format!("{:<9}", text);
+                                let color = if state.cursor_track.line == *line {
+                                    Color32::WHITE
+                                } else {
+                                    Color32::GRAY
+                                };
+                                let bg_color =
+                                    self.lane_item_bg_color(state, track_index, lane_index, *line);
+                                job.append(
+                                    &text,
+                                    0.0,
+                                    TextFormat {
+                                        font_id: font_id.clone(),
+                                        color,
+                                        background: bg_color,
+                                        ..Default::default()
+                                    },
+                                );
                             }
                             lane_start = 0;
-                            Ok(())
-                        });
-                        self.view_mixer(state, ui, track_index, &mut commands)?;
-                        self.view_modules(state, ui, track_index)?;
-                        Ok(())
-                    });
-                }
+                        }
+                        let label = Label::new(job).truncate().show_tooltip_when_elided(false);
+                        if self.height_line == 0.0 {
+                            let height_before = ui.available_height();
+                            ui.add(label);
+                            let height_after = ui.available_height();
+                            self.height_line = height_before - height_after;
+                        } else {
+                            ui.add(label);
+                        }
+                    }
+
+                    self.view_mixer_and_modules(
+                        state,
+                        ui,
+                        &track_range,
+                        lane_start,
+                        &mut commands,
+                    )?;
+                    Ok(())
+                });
+
+                // for track_index in track_range {
+                //     ui.vertical(|ui| -> Result<()> {
+                //         self.view_track_head(state, ui, track_index)?;
+                //         ui.horizontal(|ui| -> Result<()> {
+                //             for lane_index in lane_start..state.song.tracks[track_index].lanes.len()
+                //             {
+                //                 ui.vertical(|ui| -> Result<()> {
+                //                     for line in state.labeled_lines.iter().take(nlines) {
+                //                         let line_item = state.song.tracks[track_index].lanes
+                //                             [lane_index]
+                //                             .items
+                //                             .get(line);
+                //                         let color = match line_item {
+                //                             Some(LaneItem::Label(_)) => Color32::WHITE,
+                //                             _ => Color32::DARK_GRAY,
+                //                         };
+                //                         let bg_color = self.lane_item_bg_color(
+                //                             state,
+                //                             track_index,
+                //                             lane_index,
+                //                             *line,
+                //                         );
+                //                         let text = if track_index == 0
+                //                             && lane_index == 0
+                //                             && state.labeled_lines.last() == Some(line)
+                //                         {
+                //                             "(end)    ".to_string()
+                //                         } else {
+                //                             self.lane_item_name(
+                //                                 state,
+                //                                 track_index,
+                //                                 lane_index,
+                //                                 *line,
+                //                             )
+                //                         };
+                //                         LabelBuilder::new(ui, text)
+                //                             .color(color)
+                //                             .bg_color(bg_color)
+                //                             .build();
+                //                     }
+                //                     Ok(())
+                //                 });
+                //             }
+                //             lane_start = 0;
+                //             Ok(())
+                //         });
+                //         self.view_mixer(state, ui, track_index, &mut commands)?;
+                //         self.view_modules(state, ui, track_index)?;
+                //         Ok(())
+                //     });
+                // }
                 Ok(())
             });
             Ok(())
